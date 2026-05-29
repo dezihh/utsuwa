@@ -4,6 +4,7 @@ import {
 	getLocalProviderConnectionHint,
 	isLocalLLMProvider
 } from '$lib/services/providers/local-endpoints';
+import { normalizeChatBaseURL } from './base-url';
 
 interface ChatMessage {
 	role: 'system' | 'user' | 'assistant';
@@ -54,7 +55,7 @@ export async function streamChatDirect(
 
 	const providerBaseURL = isLocal
 		? getChatBaseUrl(provider, baseURL)
-		: baseURL || PROVIDER_BASE_URLS[provider];
+		: normalizeChatBaseURL(provider, baseURL || PROVIDER_BASE_URLS[provider]);
 	if (!providerBaseURL) {
 		onError(`Unknown provider: ${provider}`);
 		return;
@@ -93,9 +94,10 @@ export async function streamChatDirect(
 					stream: true
 				});
 
-	const url = provider === 'anthropic'
-		? `${providerBaseURL.replace(/\/+$/, '')}/messages`
-		: `${providerBaseURL.replace(/\/+$/, '')}/chat/completions`;
+	const url =
+		provider === 'anthropic'
+			? `${providerBaseURL.replace(/\/+$/, '')}/messages`
+			: `${providerBaseURL.replace(/\/+$/, '')}/chat/completions`;
 
 	try {
 		const response = await fetch(url, { method: 'POST', headers, body });

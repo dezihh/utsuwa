@@ -21,6 +21,7 @@
 	const llmSettings = $derived(modulesStore.getModuleSettings('consciousness'));
 	const llmProvider = $derived(getLLMProvider(llmSettings.activeProvider as string));
 	const staticLLMModels = $derived(llmProvider?.models ?? []);
+	const llmIsOllama = $derived(llmProvider?.id === 'ollama');
 
 	// Dynamic model fetching state for LLM
 	let llmIsLoading = $state(false);
@@ -29,7 +30,7 @@
 	let lastLocalLLMFetchKey = $state('');
 
 	// Use dynamic models if available, otherwise static
-	const llmModels = $derived(llmDynamicModels ?? staticLLMModels);
+	const llmModels = $derived(llmIsOllama ? llmDynamicModels ?? [] : llmDynamicModels ?? staticLLMModels);
 
 	// Check if API key is present for current LLM provider
 	const llmHasApiKey = $derived.by(() => {
@@ -76,18 +77,18 @@
 	});
 
 	// Fetch LLM models from provider API
-	async function fetchLLMModels() {
-		const targetProvider = llmProvider?.id;
+	async function fetchLLMModels(targetProvider = llmProvider?.id) {
 		if (!targetProvider) return;
 
 		const config = settingsStore.getProviderConfig(targetProvider);
+		const provider = getLLMProvider(targetProvider);
 
 		await fetchModels({
 			providerId: targetProvider,
 			apiKey: config.apiKey ?? '',
 			baseUrl: config.baseUrl,
-			isLocal: llmProvider?.isLocal,
-			getCurrentProviderId: () => llmProvider?.id,
+			isLocal: provider?.isLocal,
+			getCurrentProviderId: () => modulesStore.getModuleSettings('consciousness').activeProvider as string,
 			onStart: () => {
 				llmIsLoading = true;
 				llmFetchError = null;
@@ -103,7 +104,7 @@
 			},
 			onError: (error) => {
 				llmIsLoading = false;
-				llmFetchError = error ?? 'Could not fetch installed models';
+				llmFetchError = error;
 				llmDynamicModels = llmProvider?.isLocal ? [] : null;
 			},
 			onEmpty: () => {
@@ -125,13 +126,14 @@
 		if (!targetProvider) return;
 
 		const config = settingsStore.getProviderConfig(targetProvider);
+		const provider = getTTSProvider(targetProvider);
 
 		await fetchModels({
 			providerId: targetProvider,
 			apiKey: config.apiKey ?? '',
 			baseUrl: config.baseUrl,
-			isLocal: ttsProvider?.isLocal,
-			getCurrentProviderId: () => ttsProvider?.id,
+			isLocal: provider?.isLocal,
+			getCurrentProviderId: () => modulesStore.getModuleSettings('speech').activeProvider as string,
 			onStart: () => {
 				ttsIsLoading = true;
 				ttsFetchError = null;
@@ -144,9 +146,9 @@
 					modulesStore.setModuleSetting('speech', 'activeModel', models[0].id);
 				}
 			},
-			onError: () => {
+			onError: (error) => {
 				ttsIsLoading = false;
-				ttsFetchError = 'Using default list';
+				ttsFetchError = error;
 				ttsDynamicModels = null;
 			},
 			onEmpty: () => {
@@ -197,6 +199,9 @@
 		if (provider && !provider.isLocal && provider.models?.length) {
 			modulesStore.setModuleSetting('consciousness', 'activeModel', provider.models[0].id);
 		}
+		if (provider?.id === 'ollama') {
+			debouncedFetchLLMModels(providerId);
+		}
 		// Mark local providers as added immediately (they don't need API keys)
 		if (provider?.isLocal || !provider?.requiresApiKey) {
 			settingsStore.markProviderAdded(providerId);
@@ -226,8 +231,11 @@
 
 	function handleLLMBaseUrlChange(baseUrl: string) {
 		if (llmProvider) {
-			settingsStore.setProviderConfig(llmProvider.id, { baseUrl });
 			llmFetchError = null;
+			settingsStore.setProviderConfig(llmProvider.id, { baseUrl });
+			if (llmProvider.id === 'ollama') {
+				debouncedFetchLLMModels(llmProvider.id);
+			}
 		}
 	}
 
@@ -330,7 +338,7 @@
 			/>
 		{/if}
 
-		{#if llmSettings.activeProvider}
+		{#if llmSettings.activeProvider && llmProvider?.id !== 'ollama' && !llmProvider?.isLocal}
 			<ModelDropdown
 				models={llmModels}
 				value={llmSettings.activeModel as string}
@@ -343,22 +351,37 @@
 			/>
 		{/if}
 
-		{#if llmProvider?.isLocal && llmFetchError}
-			<p class="provider-note error">
-				<Icon name="alert-circle" size={14} />
-				{llmFetchError}
-			</p>
-		{/if}
-
 		{#if llmProvider?.isLocal}
+			{#if llmProvider.id === 'ollama'}
+				<ModelDropdown
+					models={llmModels}
+					value={llmSettings.activeModel as string}
+					onSelect={handleLLMModelChange}
+					placeholder="Select Ollama model..."
+					isLoading={llmIsLoading}
+					onRefresh={fetchLLMModels}
+				/>
+			{:else}
+				<input
+					type="text"
+					class="api-key-input"
+					placeholder="Model name (e.g., llama3.2:latest)"
+					value={llmSettings.activeModel as string ?? ''}
+					oninput={(e) => handleLLMModelChange(e.currentTarget.value)}
+				/>
+			{/if}
 			<input
 				type="text"
 				class="api-key-input"
+				class:error={!!llmFetchError}
 				placeholder={llmProvider.defaultBaseUrl || 'http://localhost:11434/v1/'}
 				value={settingsStore.getProviderConfig(llmProvider.id).baseUrl ?? ''}
 				oninput={(e) => handleLLMBaseUrlChange(e.currentTarget.value)}
 				onblur={fetchLLMModels}
 			/>
+			{#if llmFetchError}
+				<p class="provider-note error">{llmFetchError}</p>
+			{/if}
 			<p class="provider-note">
 				<Icon name="check-circle" size={14} />
 				Local provider - no API key needed

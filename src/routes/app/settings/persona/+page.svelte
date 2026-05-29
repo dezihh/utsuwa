@@ -104,9 +104,13 @@
 		const provider = getLLMProvider(providerId);
 		return provider?.models ?? [];
 	});
+	const llmIsOllama = $derived.by(() => {
+		const providerId = consciousnessSettings.activeProvider as string;
+		return providerId === 'ollama';
+	});
 
 	// Use dynamic models if available, otherwise static
-	const llmModels = $derived(llmDynamicModels ?? staticLLMModels);
+	const llmModels = $derived(llmIsOllama ? llmDynamicModels ?? [] : llmDynamicModels ?? staticLLMModels);
 
 	// Check if API key is present for current LLM provider
 	const llmHasApiKey = $derived.by(() => {
@@ -146,8 +150,7 @@
 	});
 
 	// Fetch LLM models from provider API
-	async function fetchLLMModels() {
-		const targetProvider = consciousnessSettings.activeProvider as string;
+	async function fetchLLMModels(targetProvider = consciousnessSettings.activeProvider as string) {
 		if (!targetProvider) return;
 		const provider = getLLMProvider(targetProvider);
 		if (!provider) return;
@@ -159,7 +162,7 @@
 			apiKey: config.apiKey ?? '',
 			baseUrl: config.baseUrl,
 			isLocal: provider.isLocal,
-			getCurrentProviderId: () => consciousnessSettings.activeProvider as string,
+			getCurrentProviderId: () => modulesStore.getModuleSettings('consciousness').activeProvider as string,
 			onStart: () => {
 				llmIsLoading = true;
 				llmFetchError = null;
@@ -176,7 +179,7 @@
 			},
 			onError: (error) => {
 				llmIsLoading = false;
-				llmFetchError = error ?? 'Could not fetch installed models';
+				llmFetchError = error;
 				llmDynamicModels = provider.isLocal ? [] : null;
 			},
 			onEmpty: () => {
@@ -221,9 +224,9 @@
 					modulesStore.setModuleSetting('speech', 'activeModel', models[0].id);
 				}
 			},
-			onError: () => {
+			onError: (error) => {
 				ttsIsLoading = false;
-				ttsFetchError = 'Using default list';
+				ttsFetchError = error;
 				ttsDynamicModels = null;
 			},
 			onEmpty: () => {
@@ -292,6 +295,9 @@
 		if (provider && !provider.isLocal && provider.models?.length) {
 			modulesStore.setModuleSetting('consciousness', 'activeModel', provider.models[0].id);
 		}
+		if (provider?.id === 'ollama') {
+			debouncedFetchLLMModels(providerId);
+		}
 		// Mark local providers as added immediately (they don't need API keys)
 		if (provider?.isLocal || !provider?.requiresApiKey) {
 			settingsStore.markProviderAdded(providerId);
@@ -300,11 +306,6 @@
 
 	function handleLLMModelChange(modelId: string) {
 		modulesStore.setModuleSetting('consciousness', 'activeModel', modelId);
-	}
-
-	function handleLLMBaseUrlChange(providerId: string, baseUrl: string) {
-		settingsStore.setProviderConfig(providerId, { baseUrl });
-		llmFetchError = null;
 	}
 
 	function handleTTSProviderChange(providerId: string) {
@@ -363,6 +364,19 @@
 		const config = settingsStore.getProviderConfig(providerId);
 		if (config.apiKey && provider && !provider.isLocal) {
 			debouncedFetchLLMModels();
+		}
+	}
+
+	function handleLLMBaseUrlChange(baseUrl: string) {
+		const providerId = consciousnessSettings.activeProvider as string;
+		if (!providerId) return;
+		const provider = getLLMProvider(providerId);
+		if (!provider) return;
+
+		llmFetchError = null;
+		settingsStore.setProviderConfig(providerId, { baseUrl });
+		if (provider.id === 'ollama') {
+			debouncedFetchLLMModels(providerId);
 		}
 	}
 
@@ -542,35 +556,61 @@
 
 								{#if consciousnessSettings.activeProvider}
 									{@const provider = getLLMProvider(consciousnessSettings.activeProvider as string)}
-									<ModelDropdown
-										models={llmModels}
-										value={consciousnessSettings.activeModel as string}
-										onSelect={handleLLMModelChange}
-										placeholder="Select model..."
-										isLoading={llmIsLoading}
-										onRefresh={llmHasApiKey ? fetchLLMModels : undefined}
-										disabled={!llmHasApiKey}
-										disabledMessage="Enter API key first"
-									/>
+								{#if provider?.id !== 'ollama' && !provider?.isLocal}
+										<ModelDropdown
+											models={llmModels}
+											value={consciousnessSettings.activeModel as string}
+											onSelect={handleLLMModelChange}
+											placeholder="Select model..."
+											isLoading={llmIsLoading}
+											onRefresh={llmHasApiKey ? fetchLLMModels : undefined}
+											disabled={!llmHasApiKey}
+											disabledMessage="Enter API key first"
+										/>
+									{/if}
 								{/if}
 
 								{#if consciousnessSettings.activeProvider}
 									{@const provider = getLLMProvider(consciousnessSettings.activeProvider as string)}
-									{#if provider?.isLocal}
+								{#if provider?.id === 'ollama'}
+										<ModelDropdown
+											models={llmModels}
+											value={consciousnessSettings.activeModel as string}
+											onSelect={handleLLMModelChange}
+											placeholder="Select Ollama model..."
+											isLoading={llmIsLoading}
+											onRefresh={fetchLLMModels}
+										/>
+										<div class="api-key-row">
+											<input
+												type="text"
+												class="api-key-input"
+												class:error={!!llmFetchError}
+												placeholder={provider.defaultBaseUrl || 'http://localhost:11434/v1/'}
+												value={settingsStore.getProviderConfig(provider.id).baseUrl ?? ''}
+												oninput={(e) => handleLLMBaseUrlChange(e.currentTarget.value)}
+											/>
+										</div>
 										{#if llmFetchError}
-											<p class="provider-note error">
-												<Icon name="alert-circle" size={14} />
-												{llmFetchError}
-											</p>
+											<p class="provider-note error">{llmFetchError}</p>
 										{/if}
+									{:else if provider?.isLocal}
+										<div class="api-key-row">
+											<input
+												type="text"
+												class="api-key-input"
+												placeholder="Model name (e.g., llama3.2:latest)"
+												value={consciousnessSettings.activeModel as string ?? ''}
+												onchange={(e) => handleLLMModelChange(e.currentTarget.value)}
+											/>
+										</div>
 										<div class="api-key-row">
 											<input
 												type="text"
 												class="api-key-input"
 												placeholder={provider.defaultBaseUrl || 'http://localhost:11434/v1/'}
 												value={settingsStore.getProviderConfig(provider.id).baseUrl ?? ''}
-												oninput={(e) => handleLLMBaseUrlChange(provider.id, e.currentTarget.value)}
-												onblur={fetchLLMModels}
+												oninput={(e) => handleLLMBaseUrlChange(e.currentTarget.value)}
 											/>
 										</div>
 									{/if}

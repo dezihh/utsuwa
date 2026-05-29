@@ -36,7 +36,7 @@ export interface FetchModelsOptions {
 	getCurrentProviderId: () => string | undefined;
 	onStart: () => void;
 	onSuccess: (models: ModelInfo[]) => void;
-	onError: (error?: string) => void;
+	onError: (error: string) => void;
 	onEmpty: () => void;
 	onStale: () => void;
 }

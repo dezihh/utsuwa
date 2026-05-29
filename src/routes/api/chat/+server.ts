@@ -2,6 +2,7 @@ import { streamText } from '@xsai/stream-text';
 import type { RequestHandler } from './$types';
 import type { LLMProvider } from '$lib/types';
 import { getChatBaseUrl } from '$lib/services/providers/local-endpoints';
+import { normalizeChatBaseURL } from '$lib/services/chat/base-url';
 
 // Provider base URLs
 const PROVIDER_BASE_URLS: Partial<Record<LLMProvider, string>> = {
@@ -56,6 +57,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			// Use default base URL for provider
 			providerBaseURL = providerBaseURL || PROVIDER_BASE_URLS[typedProvider];
 		}
+
+		providerBaseURL = normalizeChatBaseURL(typedProvider, providerBaseURL);
 
 		// Add system message (use provided systemPrompt or default)
 		const defaultSystemPrompt =

@@ -155,6 +155,15 @@ pnpm tauri dev
 
 All API keys are stored locally on your device and are never sent to any server except the respective API providers.
 
+#### Ollama URL Format
+
+When using Ollama, enter the **bare host URL** without `/v1`, for example:
+
+- `http://localhost:11434`
+- `http://127.0.0.1:11434`
+
+Utsuwa uses that URL to fetch the available model list, and it automatically adds the OpenAI-compatible `/v1` path for chat requests. If you include `/v1` in the Ollama base URL, model discovery will fail.
+
 #### Loading a VRM Model
 
 1. Go to **Settings > Avatar**
