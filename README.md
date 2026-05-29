@@ -164,6 +164,17 @@ When using Ollama, enter the **bare host URL** without `/v1`, for example:
 
 Utsuwa uses that URL to fetch the available model list, and it automatically adds the OpenAI-compatible `/v1` path for chat requests. If you include `/v1` in the Ollama base URL, model discovery will fail.
 
+The **Auth token (optional)** field is only needed if you run Ollama behind a proxy or custom auth layer. Leave it empty for a normal local Ollama install.
+
+#### llama.cpp URL Format
+
+When using llama.cpp, enter the **OpenAI-compatible base URL** for your server, for example:
+
+- `http://localhost:8080/v1`
+- `http://127.0.0.1:8080/v1`
+
+Utsuwa uses that URL directly for model discovery and chat requests. If your llama.cpp server is exposed behind a proxy or auth layer, you can fill in the **Auth token (optional)** field; otherwise, leave it empty.
+
 #### Loading a VRM Model
 
 1. Go to **Settings > Avatar**

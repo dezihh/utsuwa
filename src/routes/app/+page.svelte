@@ -279,13 +279,22 @@
 						messages: chatStore.messages.map((m) => ({ role: m.role, content: m.content })),
 						provider,
 						model: selectedModel,
-						apiKey: apiKey || 'not-needed',
+						apiKey: apiKey || undefined,
 						baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
 						systemPrompt
 					})
 				});
 
-				if (!response.ok) throw new Error('Failed to get response');
+				if (!response.ok) {
+					let errorMsg = 'Failed to get response';
+					try {
+						const body = await response.json();
+						if (body.error) errorMsg = body.error;
+					} catch {
+						// Ignore non-JSON errors.
+					}
+					throw new Error(errorMsg);
+				}
 
 				const reader = response.body?.getReader();
 				const decoder = new TextDecoder();

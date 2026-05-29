@@ -21,6 +21,95 @@ const PROVIDER_BASE_URLS: Partial<Record<LLMProvider, string>> = {
 // Providers that don't require API keys
 const LOCAL_PROVIDERS: LLMProvider[] = ['ollama', 'lmstudio', 'llamacpp'];
 
+async function streamOpenAICompatibleChat(
+	url: string,
+	model: string,
+	messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+	apiKey?: string
+): Promise<Response> {
+	const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+	if (apiKey) {
+		headers.Authorization = `Bearer ${apiKey}`;
+	}
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify({ model, messages, stream: true })
+	});
+
+	if (!response.ok) {
+		const errorData = await response.json().catch(() => ({}));
+		const msg =
+			(errorData as { error?: { message?: string } })?.error?.message ||
+			`Provider error (${response.status})`;
+		return new Response(JSON.stringify({ error: msg }), {
+			status: 502,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
+
+	const reader = response.body?.getReader();
+	if (!reader) {
+		return new Response(JSON.stringify({ error: 'No response body' }), {
+			status: 502,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
+
+	const encoder = new TextEncoder();
+	const decoder = new TextDecoder();
+	const stream = new ReadableStream({
+		async start(controller) {
+			let buffer = '';
+
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					buffer += decoder.decode(value, { stream: true });
+					const lines = buffer.split('\n');
+					buffer = lines.pop() || '';
+
+					for (const line of lines) {
+						const trimmed = line.trim();
+						if (!trimmed || trimmed === 'data: [DONE]') continue;
+						if (!trimmed.startsWith('data: ')) continue;
+
+						try {
+							const json = JSON.parse(trimmed.slice(6));
+							const text = json.choices?.[0]?.delta?.content;
+							if (text) {
+								controller.enqueue(encoder.encode(`0:${JSON.stringify(text)}\n`));
+							}
+						} catch {
+							// Ignore malformed chunks.
+						}
+					}
+				}
+
+				controller.close();
+			} catch (error) {
+				console.error('Stream error:', error);
+				const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+				controller.enqueue(encoder.encode(`e:${JSON.stringify({ error: errorMessage })}\n`));
+				controller.close();
+			} finally {
+				reader.releaseLock();
+			}
+		}
+	});
+
+	return new Response(stream, {
+		headers: {
+			'Content-Type': 'text/event-stream',
+			'Cache-Control': 'no-cache',
+			Connection: 'keep-alive'
+		}
+	});
+}
+
 export const POST: RequestHandler = async ({ request }) => {
 	const { messages, provider, model, apiKey, baseURL, systemPrompt } = await request.json();
 
@@ -71,6 +160,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			},
 			...messages
 		];
+
+		if (isLocalProvider) {
+			const chatURL = `${providerBaseURL.replace(/\/+$/, '')}/chat/completions`;
+			return await streamOpenAICompatibleChat(chatURL, model, messagesWithSystem, apiKey || undefined);
+		}
 
 		let result;
 		try {

@@ -21,7 +21,7 @@
 	const llmSettings = $derived(modulesStore.getModuleSettings('consciousness'));
 	const llmProvider = $derived(getLLMProvider(llmSettings.activeProvider as string));
 	const staticLLMModels = $derived(llmProvider?.models ?? []);
-	const llmIsOllama = $derived(llmProvider?.id === 'ollama');
+	const llmSupportsBrowsing = $derived(llmProvider?.id === 'ollama' || llmProvider?.id === 'llamacpp');
 
 	// Dynamic model fetching state for LLM
 	let llmIsLoading = $state(false);
@@ -30,7 +30,9 @@
 	let lastLocalLLMFetchKey = $state('');
 
 	// Use dynamic models if available, otherwise static
-	const llmModels = $derived(llmIsOllama ? llmDynamicModels ?? [] : llmDynamicModels ?? staticLLMModels);
+	const llmModels = $derived(
+		llmSupportsBrowsing ? llmDynamicModels ?? [] : llmDynamicModels ?? staticLLMModels
+	);
 
 	// Check if API key is present for current LLM provider
 	const llmHasApiKey = $derived.by(() => {
@@ -82,6 +84,7 @@
 
 		const config = settingsStore.getProviderConfig(targetProvider);
 		const provider = getLLMProvider(targetProvider);
+		const supportsBrowsing = provider?.id === 'ollama' || provider?.id === 'llamacpp';
 
 		await fetchModels({
 			providerId: targetProvider,
@@ -109,10 +112,8 @@
 			},
 			onEmpty: () => {
 				llmIsLoading = false;
-				llmFetchError = llmProvider?.isLocal
-					? 'No installed models found. Pull a model, then refresh.'
-					: null;
-				llmDynamicModels = llmProvider?.isLocal ? [] : null;
+				llmFetchError = supportsBrowsing ? 'No models found' : 'Using default list';
+				llmDynamicModels = supportsBrowsing ? [] : null;
 			},
 			onStale: () => {
 				llmIsLoading = false;
@@ -199,7 +200,7 @@
 		if (provider && !provider.isLocal && provider.models?.length) {
 			modulesStore.setModuleSetting('consciousness', 'activeModel', provider.models[0].id);
 		}
-		if (provider?.id === 'ollama') {
+		if (provider && (provider.id === 'ollama' || provider.id === 'llamacpp')) {
 			debouncedFetchLLMModels(providerId);
 		}
 		// Mark local providers as added immediately (they don't need API keys)
@@ -233,7 +234,7 @@
 		if (llmProvider) {
 			llmFetchError = null;
 			settingsStore.setProviderConfig(llmProvider.id, { baseUrl });
-			if (llmProvider.id === 'ollama') {
+			if (llmProvider.id === 'ollama' || llmProvider.id === 'llamacpp') {
 				debouncedFetchLLMModels(llmProvider.id);
 			}
 		}
@@ -338,7 +339,7 @@
 			/>
 		{/if}
 
-		{#if llmSettings.activeProvider && llmProvider?.id !== 'ollama' && !llmProvider?.isLocal}
+		{#if llmSettings.activeProvider && llmProvider?.id !== 'ollama' && llmProvider?.id !== 'llamacpp' && !llmProvider?.isLocal}
 			<ModelDropdown
 				models={llmModels}
 				value={llmSettings.activeModel as string}
@@ -352,12 +353,22 @@
 		{/if}
 
 		{#if llmProvider?.isLocal}
-			{#if llmProvider.id === 'ollama'}
+			<div class="api-key-row">
+				<input
+					type="password"
+					class="api-key-input"
+					placeholder="Auth token (optional)"
+					value={settingsStore.getProviderConfig(llmProvider.id).apiKey ?? ''}
+					oninput={(e) => handleLLMApiKeyChange(e.currentTarget.value)}
+					onblur={handleLLMApiKeyBlur}
+				/>
+			</div>
+			{#if llmSupportsBrowsing}
 				<ModelDropdown
 					models={llmModels}
 					value={llmSettings.activeModel as string}
 					onSelect={handleLLMModelChange}
-					placeholder="Select Ollama model..."
+					placeholder={`Select ${llmProvider.name} model...`}
 					isLoading={llmIsLoading}
 					onRefresh={fetchLLMModels}
 				/>
