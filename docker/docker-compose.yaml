@@ -1,0 +1,19 @@
+services:
+  utsuwa:
+    image: node:22-bookworm-slim
+    container_name: utsuwa
+    network_mode: host
+    working_dir: /app
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm dev --host 0.0.0.0"
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+      PNPM_HOME: /pnpm
+    volumes:
+      - ..:/app
+      - utsuwa-node-modules:/app/node_modules
+      - pnpm-store:/pnpm
+
+volumes:
+  utsuwa-node-modules:
+  pnpm-store:

@@ -5,6 +5,7 @@ node_modules
 .vercel
 .netlify
 .wrangler
+/.pnpm-store
 /.svelte-kit
 /build
 
