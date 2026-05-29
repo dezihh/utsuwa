@@ -197,6 +197,7 @@ utsuwa/
 │       ├── blog/           # Blog routes
 │       ├── docs/           # Documentation site routes
 │       └── overlay/        # Desktop overlay route
+├── docker/                 # Setup as Docker Container
 ├── src-tauri/               # Tauri desktop app (Rust)
 ├── static/
 │   └── models/             # Place default VRM models here
