@@ -15,10 +15,11 @@ const PROVIDER_BASE_URLS: Partial<Record<LLMProvider, string>> = {
 	// Local
 	ollama: 'http://localhost:11434/v1/',
 	lmstudio: 'http://localhost:1234/v1/',
+	llamacpp: 'http://localhost:8080/v1/',
 };
 
 // Providers that don't require API keys
-const LOCAL_PROVIDERS: LLMProvider[] = ['ollama', 'lmstudio'];
+const LOCAL_PROVIDERS: LLMProvider[] = ['ollama', 'lmstudio', 'llamacpp'];
 
 export const POST: RequestHandler = async ({ request }) => {
 	const { messages, provider, model, apiKey, baseURL, systemPrompt } = await request.json();

@@ -22,7 +22,7 @@
 - **3D Speech Bubbles**: Chat responses appear as bubbles that track the model's head in 3D space
 - **Chat Interface**: Bottom-centered input bar with streaming responses
 - **Voice Input**: Speech-to-text via Groq (Whisper) or Web Speech API with real-time audio visualization
-- **LLM Integration**: Support for 7 LLM providers including OpenAI, Anthropic, Google, xAI, DeepSeek, Ollama, and LM Studio
+- **LLM Integration**: Support for 8 LLM providers including OpenAI, Anthropic, Google, xAI, DeepSeek, Ollama, LM Studio, and llama.cpp
 - **Local Model Discovery**: Ollama and LM Studio discover installed local models directly from your device
 - **Text-to-Speech**: Support for ElevenLabs and OpenAI TTS
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
@@ -72,12 +72,12 @@ The desktop app uses the same codebase as the web version — your save files ar
 
 ## Supported Providers
 
-### LLM Providers (7)
+### LLM Providers (8)
 
 | Category | Providers |
 |----------|-----------|
 | **Cloud** | OpenAI, Anthropic, Google Gemini, DeepSeek, xAI (Grok) |
-| **Local** | Ollama, LM Studio |
+| **Local** | Ollama, LM Studio, llama.cpp |
 
 ### TTS Providers (2)
 
@@ -147,7 +147,7 @@ pnpm tauri dev
 2. Navigate to **Settings > Character** to configure your chat provider:
    - Enable Chat (LLM)
    - Select a cloud provider and enter your API key
-   - Or select a local server like Ollama or LM Studio and choose an installed model from the discovered model dropdown
+   - Or select a local server like Ollama, LM Studio, or llama.cpp and choose an installed model
 3. Configure text-to-speech in the same settings area (optional):
    - Select a TTS provider
    - Enter your API key

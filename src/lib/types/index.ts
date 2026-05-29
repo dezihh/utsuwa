@@ -19,7 +19,8 @@ export type LLMProvider =
 	| 'xai'
 	// Local
 	| 'ollama'
-	| 'lmstudio';
+	| 'lmstudio'
+	| 'llamacpp';
 
 export interface LLMConfig {
 	provider: LLMProvider;

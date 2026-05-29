@@ -4,6 +4,7 @@ import {
 	getModelsBaseUrl,
 	isLocalLLMProvider
 } from './local-endpoints';
+import { normalizeOpenAICompatibleBaseURL } from '$lib/services/chat/base-url';
 
 interface ModelInfo {
 	id: string;
@@ -15,6 +16,7 @@ const DEFAULT_BASE_URLS: Record<string, string> = {
 	anthropic: 'https://api.anthropic.com/v1',
 	ollama: 'http://localhost:11434',
 	lmstudio: 'http://localhost:1234/v1',
+	llamacpp: 'http://localhost:8080/v1',
 	deepseek: 'https://api.deepseek.com',
 	xai: 'https://api.x.ai/v1',
 	google: 'https://generativelanguage.googleapis.com/v1beta',
@@ -109,7 +111,16 @@ export async function fetchModelsDirect(
 				break;
 			}
 			case 'lmstudio': {
-				const res = await fetch(`${cleanBaseUrl}/models`);
+				const openAICompatibleBaseUrl = normalizeOpenAICompatibleBaseURL(cleanBaseUrl) ?? cleanBaseUrl;
+				const res = await fetch(`${openAICompatibleBaseUrl}/models`);
+				if (!res.ok) throw new Error(`Failed to fetch models: ${res.statusText}`);
+				const data = await res.json();
+				models = data.data.map((m: { id: string }) => ({ id: m.id, name: m.id }));
+				break;
+			}
+			case 'llamacpp': {
+				const openAICompatibleBaseUrl = normalizeOpenAICompatibleBaseURL(cleanBaseUrl) ?? cleanBaseUrl;
+				const res = await fetch(`${openAICompatibleBaseUrl}/models`);
 				if (!res.ok) throw new Error(`Failed to fetch models: ${res.statusText}`);
 				const data = await res.json();
 				models = data.data.map((m: { id: string }) => ({ id: m.id, name: m.id }));

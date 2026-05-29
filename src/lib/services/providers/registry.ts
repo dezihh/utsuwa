@@ -15,7 +15,7 @@ export interface ProviderMetadata {
 }
 
 // ============================================
-// LLM PROVIDERS (7 total)
+// LLM PROVIDERS (8 total)
 // ============================================
 
 export const LLM_PROVIDERS: ProviderMetadata[] = [
@@ -87,6 +87,17 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 		requiresApiKey: false,
 		isLocal: true,
 		defaultBaseUrl: 'http://localhost:1234/v1/',
+		models: []
+	},
+	{
+		id: 'llamacpp',
+		name: 'llama.cpp',
+		description: 'OpenAI-compatible local LLM server',
+		category: 'llm',
+		icon: '🦙',
+		requiresApiKey: false,
+		isLocal: true,
+		defaultBaseUrl: 'http://localhost:8080/v1/',
 		models: []
 	},
 ];

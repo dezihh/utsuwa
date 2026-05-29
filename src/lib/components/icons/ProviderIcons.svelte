@@ -123,6 +123,12 @@
 			color: '#0EA5E9'
 		},
 
+		// llama.cpp - custom icon
+		llamacpp: {
+			body: '<path fill="currentColor" d="M4 5h16v2H4V5zm0 4h12v2H4V9zm0 4h16v2H4v-2zm0 4h12v2H4v-2z"/>',
+			color: '#22C55E'
+		},
+
 		// vLLM - custom icon (not in simple-icons)
 		vllm: {
 			body: '<path fill="currentColor" d="M2 4l5 16h2l3-10 3 10h2l5-16h-2.5l-3.5 12-3-10h-2l-3 10-3.5-12H2z"/>',

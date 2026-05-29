@@ -28,7 +28,8 @@ const PROVIDER_BASE_URLS: Partial<Record<LLMProvider, string>> = {
 	deepseek: 'https://api.deepseek.com/',
 	xai: 'https://api.x.ai/v1/',
 	ollama: 'http://localhost:11434/v1/',
-	lmstudio: 'http://localhost:1234/v1/'
+	lmstudio: 'http://localhost:1234/v1/',
+	llamacpp: 'http://localhost:8080/v1/'
 };
 
 function getCurrentSiteOrigin(): string | undefined {

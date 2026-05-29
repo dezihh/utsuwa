@@ -12,9 +12,20 @@ export function normalizeChatBaseURL(provider: LLMProvider, baseURL?: string): s
 	if (!baseURL) return baseURL;
 
 	const cleanBaseURL = ensureTrailingSlash(baseURL);
-	if (provider === 'ollama' || provider === 'lmstudio') {
+	if (provider === 'ollama') {
+		return cleanBaseURL.endsWith('/v1') ? cleanBaseURL : `${cleanBaseURL}/v1`;
+	}
+
+	if (provider === 'lmstudio' || provider === 'llamacpp') {
 		return cleanBaseURL.endsWith('/v1') ? cleanBaseURL : `${cleanBaseURL}/v1`;
 	}
 
 	return cleanBaseURL;
+}
+
+export function normalizeOpenAICompatibleBaseURL(baseURL?: string): string | undefined {
+	if (!baseURL) return baseURL;
+
+	const cleanBaseURL = ensureTrailingSlash(baseURL);
+	return cleanBaseURL.endsWith('/v1') ? cleanBaseURL : `${cleanBaseURL}/v1`;
 }

@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import type { LLMProvider } from '$lib/types';
-import { getModelsBaseUrl } from '$lib/services/providers/local-endpoints';
+import { normalizeOpenAICompatibleBaseURL } from '$lib/services/chat/base-url';
 
 interface ModelInfo {
 	id: string;
@@ -19,6 +19,7 @@ const DEFAULT_BASE_URLS: Record<string, string> = {
 	anthropic: 'https://api.anthropic.com/v1',
 	ollama: 'http://localhost:11434',
 	lmstudio: 'http://localhost:1234/v1',
+	llamacpp: 'http://localhost:8080/v1',
 	deepseek: 'https://api.deepseek.com',
 	xai: 'https://api.x.ai/v1',
 	google: 'https://generativelanguage.googleapis.com/v1beta',
@@ -39,7 +40,7 @@ const MODEL_FILTERS: Record<string, RegExp> = {
 
 function filterModels(providerId: string, models: ModelInfo[]): ModelInfo[] {
 	const filter = MODEL_FILTERS[providerId];
-	if (!filter) return models; // No filter = keep all (Ollama, LM Studio)
+	if (!filter) return models; // No filter = keep all (Ollama, LM Studio, llama.cpp)
 	return models.filter((m) => filter.test(m.id));
 }
 
@@ -198,10 +199,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			baseUrl || DEFAULT_BASE_URLS[providerId as LLMProvider] || '';
 
 		// Remove trailing slash for consistency
-		const cleanBaseUrl =
-			providerId === 'ollama' || providerId === 'lmstudio'
-				? getModelsBaseUrl(providerId, effectiveBaseUrl)
-				: effectiveBaseUrl.replace(/\/+$/, '');
+		const cleanBaseUrl = effectiveBaseUrl.replace(/\/+$/, '');
+		const openAICompatibleBaseUrl = normalizeOpenAICompatibleBaseURL(cleanBaseUrl);
 
 		let models: ModelInfo[] = [];
 
@@ -218,7 +217,10 @@ export const POST: RequestHandler = async ({ request }) => {
 				models = await fetchOllamaModels(cleanBaseUrl);
 				break;
 			case 'lmstudio':
-				models = await fetchLMStudioModels(cleanBaseUrl);
+				models = await fetchLMStudioModels(openAICompatibleBaseUrl ?? cleanBaseUrl);
+				break;
+			case 'llamacpp':
+				models = await fetchLMStudioModels(openAICompatibleBaseUrl ?? cleanBaseUrl);
 				break;
 			case 'deepseek':
 				if (!apiKey) throw new Error('API key required for DeepSeek');
