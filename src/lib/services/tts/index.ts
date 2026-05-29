@@ -5,6 +5,7 @@ export interface TTSOptions {
 	provider: TTSProvider;
 	apiKey?: string;
 	voiceId?: string;
+	rvcVoiceId?: string;
 	baseUrl?: string;
 	speed?: number;
 	pitch?: number;
@@ -36,18 +37,21 @@ export function getSharedAudioContext(): AudioContext {
 // Provider base URLs
 export const TTS_BASE_URLS: Partial<Record<TTSProvider, string>> = {
 	elevenlabs: 'https://api.elevenlabs.io/v1/',
-	'openai-tts': 'https://api.openai.com/v1/'
+	'openai-tts': 'https://api.openai.com/v1/',
+	alltalk: 'http://localhost:7851/api/'
 };
 
 // Default voices per provider
 export const DEFAULT_VOICES: Partial<Record<TTSProvider, string>> = {
 	elevenlabs: 'EXAVITQu4vr4xnSDxMaL', // Bella
-	'openai-tts': 'alloy'
+	'openai-tts': 'alloy',
+	alltalk: ''
 };
 
 // Import individual providers
 import { ElevenLabsTTS } from './elevenlabs';
 import { OpenAITTS } from './openai-tts';
+import { AllTalkTTS } from './alltalk';
 
 // Provider factory
 let currentProvider: ITTSProvider | null = null;
@@ -61,6 +65,7 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 		currentOptions.provider === options.provider &&
 		currentOptions.apiKey === options.apiKey &&
 		currentOptions.voiceId === options.voiceId &&
+		currentOptions.rvcVoiceId === options.rvcVoiceId &&
 		currentOptions.baseUrl === options.baseUrl
 	) {
 		return currentProvider;
@@ -74,6 +79,10 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 
 		case 'openai-tts':
 			currentProvider = new OpenAITTS(options);
+			break;
+
+		case 'alltalk':
+			currentProvider = new AllTalkTTS(options);
 			break;
 
 		default:

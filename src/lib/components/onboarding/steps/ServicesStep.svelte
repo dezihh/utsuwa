@@ -9,6 +9,7 @@
 		debounce,
 		type ModelInfo
 	} from '$lib/services/providers/use-model-fetch';
+	import { fetchAllTalkData, type AllTalkOption } from '$lib/services/providers/alltalk';
 
 	interface Props {
 		onNext: () => void;
@@ -52,6 +53,12 @@
 	let ttsIsLoading = $state(false);
 	let ttsFetchError = $state<string | null>(null);
 	let ttsDynamicModels = $state<ModelInfo[] | null>(null);
+	let alltalkIsLoading = $state(false);
+	let alltalkFetchError = $state<string | null>(null);
+	let alltalkReady = $state(false);
+	let alltalkVoices = $state<AllTalkOption[]>([]);
+	let alltalkRvcVoices = $state<AllTalkOption[]>([]);
+	let lastAllTalkFetchSignature = '';
 
 	// Use dynamic models if available, otherwise static
 	const ttsModels = $derived(ttsDynamicModels ?? staticTTSModels);
@@ -63,6 +70,20 @@
 		const config = settingsStore.getProviderConfig(ttsProvider.id);
 		return !!config.apiKey;
 	});
+
+	function withSelectedOption(options: AllTalkOption[], selected: string, fallbackLabel: string): AllTalkOption[] {
+		if (!selected) return options;
+		if (options.some((option) => option.id === selected)) return options;
+		return [{ id: selected, name: fallbackLabel }, ...options];
+	}
+
+	const alltalkVoiceOptions = $derived.by(() =>
+		withSelectedOption(alltalkVoices, ttsSettings.activeVoiceId as string, 'Current voice')
+	);
+
+	const alltalkRvcVoiceOptions = $derived.by(() =>
+		withSelectedOption(alltalkRvcVoices, ttsSettings.activeRvcVoiceId as string, 'Current RVC voice')
+	);
 
 	// Validation
 	const isLLMConfigured = $derived.by(() => {
@@ -162,9 +183,59 @@
 		});
 	}
 
+	async function fetchAllTalkSettings() {
+		if (ttsProvider?.id !== 'alltalk') return;
+
+		const config = settingsStore.getProviderConfig('alltalk');
+
+		alltalkIsLoading = true;
+		alltalkFetchError = null;
+
+		const result = await fetchAllTalkData(config.baseUrl, config.apiKey);
+		if (ttsProvider?.id !== 'alltalk') {
+			alltalkIsLoading = false;
+			return;
+		}
+
+		alltalkIsLoading = false;
+		alltalkReady = result.ready;
+		alltalkVoices = result.voices;
+		alltalkRvcVoices = result.rvcVoices;
+		alltalkFetchError = result.error ?? null;
+
+		if (!result.error) {
+			if (!ttsSettings.activeVoiceId && result.defaultVoiceId) {
+				modulesStore.setModuleSetting('speech', 'activeVoiceId', result.defaultVoiceId);
+			} else if (!ttsSettings.activeVoiceId && result.voices[0]?.id) {
+				modulesStore.setModuleSetting('speech', 'activeVoiceId', result.voices[0].id);
+			}
+			if (!ttsSettings.activeRvcVoiceId && result.defaultRvcVoiceId) {
+				modulesStore.setModuleSetting('speech', 'activeRvcVoiceId', result.defaultRvcVoiceId);
+			} else if (!ttsSettings.activeRvcVoiceId && result.rvcVoices[0]?.id) {
+				modulesStore.setModuleSetting('speech', 'activeRvcVoiceId', result.rvcVoices[0].id);
+			}
+		}
+	}
+
 	// Debounced fetch to avoid rapid API calls
 	const debouncedFetchLLMModels = debounce(fetchLLMModels, 300);
 	const debouncedFetchTTSModels = debounce(fetchTTSModels, 300);
+	const debouncedFetchAllTalkSettings = debounce(fetchAllTalkSettings, 300);
+
+	$effect(() => {
+		const targetProvider = ttsSettings.activeProvider as string;
+		if (targetProvider !== 'alltalk') {
+			lastAllTalkFetchSignature = '';
+			return;
+		}
+
+		const config = settingsStore.getProviderConfig('alltalk');
+		const signature = `${targetProvider}::${config.baseUrl ?? ''}::${config.apiKey ?? ''}`;
+		if (signature === lastAllTalkFetchSignature) return;
+
+		lastAllTalkFetchSignature = signature;
+		debouncedFetchAllTalkSettings();
+	});
 
 	$effect(() => {
 		if (!llmProvider?.isLocal) {
@@ -258,6 +329,9 @@
 		if (provider?.models?.length) {
 			modulesStore.setModuleSetting('speech', 'activeModel', provider.models[0].id);
 		}
+		if (providerId === 'alltalk') {
+			// effect handles AllTalk refresh
+		}
 		// Mark local providers as added immediately (they don't need API keys)
 		if (provider?.isLocal || !provider?.requiresApiKey) {
 			settingsStore.markProviderAdded(providerId);
@@ -272,6 +346,9 @@
 		if (ttsProvider) {
 			ttsFetchError = null; // Clear error when user types
 			settingsStore.setProviderConfig(ttsProvider.id, { apiKey });
+			if (ttsProvider.id === 'alltalk') {
+				debouncedFetchAllTalkSettings();
+			}
 			if (apiKey) {
 				settingsStore.markProviderAdded(ttsProvider.id);
 			}
@@ -288,7 +365,18 @@
 	function handleTTSBaseUrlChange(baseUrl: string) {
 		if (ttsProvider) {
 			settingsStore.setProviderConfig(ttsProvider.id, { baseUrl });
+			if (ttsProvider.id === 'alltalk') {
+				debouncedFetchAllTalkSettings();
+			}
 		}
+	}
+
+	function handleAllTalkVoiceChange(voiceId: string) {
+		modulesStore.setModuleSetting('speech', 'activeVoiceId', voiceId);
+	}
+
+	function handleAllTalkRvcVoiceChange(voiceId: string) {
+		modulesStore.setModuleSetting('speech', 'activeRvcVoiceId', voiceId);
 	}
 
 	function handleNext() {
@@ -433,7 +521,19 @@
 				/>
 			{/if}
 
-			{#if ttsSettings.activeProvider && !ttsProvider?.isLocal}
+			{#if ttsProvider?.id === 'alltalk'}
+				<input
+					type="password"
+					class="api-key-input"
+					class:error={alltalkFetchError !== null}
+					placeholder="Auth token (optional)"
+					value={settingsStore.getProviderConfig(ttsProvider.id).apiKey ?? ''}
+					oninput={(e) => handleTTSApiKeyChange(e.currentTarget.value)}
+					onblur={handleTTSApiKeyBlur}
+				/>
+			{/if}
+
+			{#if ttsSettings.activeProvider && ttsProvider?.id !== 'alltalk' && !ttsProvider?.isLocal}
 				<ModelDropdown
 					models={ttsModels}
 					value={ttsSettings.activeModel as string}
@@ -446,6 +546,49 @@
 				/>
 			{/if}
 
+			{#if ttsProvider?.id === 'alltalk'}
+				<select
+					class="api-key-input"
+					value={ttsSettings.activeVoiceId as string}
+					onchange={(e) => handleAllTalkVoiceChange(e.currentTarget.value)}
+					disabled={alltalkIsLoading}
+				>
+					<option value="">Select a voice...</option>
+					{#each alltalkVoiceOptions as voice}
+						<option value={voice.id}>{voice.name}</option>
+					{/each}
+				</select>
+				{#if alltalkRvcVoiceOptions.length > 0}
+					<select
+						class="api-key-input"
+						value={ttsSettings.activeRvcVoiceId as string}
+						onchange={(e) => handleAllTalkRvcVoiceChange(e.currentTarget.value)}
+						disabled={alltalkIsLoading}
+					>
+						<option value="">Select an RVC voice...</option>
+						{#each alltalkRvcVoiceOptions as voice}
+							<option value={voice.id}>{voice.name}</option>
+						{/each}
+					</select>
+				{/if}
+				<input
+					type="text"
+					class="api-key-input"
+					class:error={!!alltalkFetchError}
+					placeholder={getTTSProvider('alltalk')?.defaultBaseUrl || 'http://localhost:7851/api/'}
+					value={settingsStore.getProviderConfig('alltalk').baseUrl ?? ''}
+					oninput={(e) => handleTTSBaseUrlChange(e.currentTarget.value)}
+				/>
+				{#if alltalkFetchError}
+					<p class="provider-note error">{alltalkFetchError}</p>
+				{:else}
+					<p class="provider-note">
+						<Icon name={alltalkReady ? 'check-circle' : 'alert-circle'} size={14} />
+						{alltalkReady ? 'AllTalk is ready' : 'AllTalk status unknown'}
+					</p>
+				{/if}
+			{/if}
+
 			{#if ttsSettings.activeProvider === 'elevenlabs'}
 				<input
 					type="text"
@@ -456,7 +599,7 @@
 				/>
 			{/if}
 
-			{#if ttsProvider?.isLocal}
+			{#if ttsProvider?.isLocal && ttsProvider.id !== 'alltalk'}
 				<input
 					type="text"
 					class="api-key-input"
@@ -466,7 +609,7 @@
 				/>
 			{/if}
 
-			{#if ttsProvider?.isLocal}
+			{#if ttsProvider?.isLocal && ttsProvider.id !== 'alltalk'}
 				<input
 					type="text"
 					class="api-key-input"
@@ -687,12 +830,30 @@
 			inset 0 1px 2px rgba(0, 0, 0, 0.04);
 	}
 
+	select.api-key-input {
+		appearance: none;
+		-webkit-appearance: none;
+		background-clip: padding-box;
+		cursor: pointer;
+		padding-right: 2rem;
+	}
+
+	select.api-key-input option {
+		color: var(--text-primary);
+		background: var(--bg-secondary);
+	}
+
 	:global(.dark) .api-key-input {
 		background: linear-gradient(180deg, #1a1a1a 0%, #222222 100%);
 		border-color: rgba(255, 255, 255, 0.1);
 		box-shadow:
 			inset 0 2px 4px rgba(0, 0, 0, 0.3),
 			inset 0 1px 2px rgba(0, 0, 0, 0.2);
+	}
+
+	:global(.dark) select.api-key-input option {
+		background: var(--bg-secondary);
+		color: var(--text-primary);
 	}
 
 	.api-key-input::placeholder {

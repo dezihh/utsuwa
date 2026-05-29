@@ -103,7 +103,7 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 ];
 
 // ============================================
-// TTS PROVIDERS (2 total)
+// TTS PROVIDERS (3 total)
 // ============================================
 
 export const TTS_PROVIDERS: ProviderMetadata[] = [
@@ -154,6 +154,17 @@ export const TTS_PROVIDERS: ProviderMetadata[] = [
 			{ id: 'marin', name: 'Marin' },
 			{ id: 'cedar', name: 'Cedar' }
 		]
+	},
+	{
+		id: 'alltalk',
+		name: 'AllTalk',
+		description: 'Local TTS with voices and RVC support',
+		category: 'tts',
+		icon: '🎧',
+		requiresApiKey: false,
+		isLocal: true,
+		defaultBaseUrl: 'http://localhost:7851/api/',
+		voices: []
 	},
 ];
 

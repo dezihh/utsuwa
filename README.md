@@ -24,7 +24,7 @@
 - **Voice Input**: Speech-to-text via Groq (Whisper) or Web Speech API with real-time audio visualization
 - **LLM Integration**: Support for 8 LLM providers including OpenAI, Anthropic, Google, xAI, DeepSeek, Ollama, LM Studio, and llama.cpp
 - **Local Model Discovery**: Ollama and LM Studio discover installed local models directly from your device
-- **Text-to-Speech**: Support for ElevenLabs and OpenAI TTS
+- **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, and AllTalk
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
 - **Animations**: VRMA-based idle and talking animations with automatic blinking
 - **Character Customization**: Customize your companion's name, personality, and system prompt
@@ -79,11 +79,23 @@ The desktop app uses the same codebase as the web version — your save files ar
 | **Cloud** | OpenAI, Anthropic, Google Gemini, DeepSeek, xAI (Grok) |
 | **Local** | Ollama, LM Studio, llama.cpp |
 
-### TTS Providers (2)
+### TTS Providers (3)
 
 | Category | Providers |
 |----------|-----------|
 | **Cloud** | ElevenLabs, OpenAI TTS |
+| **Local** | AllTalk |
+
+#### AllTalk TTS
+
+AllTalk is configured under **Settings > TTS Providers** and connects to your existing AllTalk instance instead of starting a second one.
+
+- Set the **API base URL** to your local AllTalk server, for example `http://localhost:7851/api/`
+- Pick a **voice** from the voice dropdown
+- Optionally pick an **RVC voice** if your setup provides one
+- Leave **Auth token** empty for a normal local install; only fill it in when AllTalk sits behind a proxy or custom auth layer
+
+AllTalk determines the spoken language from the selected voice, so no separate language field is required in Utsuwa.
 
 ### STT Providers (2)
 
@@ -150,7 +162,8 @@ pnpm tauri dev
    - Or select a local server like Ollama, LM Studio, or llama.cpp and choose an installed model
 3. Configure text-to-speech in the same settings area (optional):
    - Select a TTS provider
-   - Enter your API key
+   - For AllTalk, enter the local API base URL, then choose the voice and optional RVC voice
+   - Enter your API key or optional auth token if your setup needs one
    - Configure voice settings
 
 All API keys are stored locally on your device and are never sent to any server except the respective API providers.

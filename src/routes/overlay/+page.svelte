@@ -338,6 +338,7 @@
 					provider: ttsProvider,
 					apiKey: ttsConfig.apiKey,
 					voiceId: speechSettings.activeVoiceId as string || ttsConfig.voiceId,
+					rvcVoiceId: speechSettings.activeRvcVoiceId as string || ttsConfig.rvcVoiceId,
 					baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
 					speed: speechSettings.speed as number ?? 1
 				});

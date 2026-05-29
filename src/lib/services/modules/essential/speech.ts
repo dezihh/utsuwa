@@ -43,6 +43,13 @@ export const speechModule: ModuleDefinition = {
 				placeholder: 'Select a voice'
 			},
 			{
+				key: 'activeRvcVoiceId',
+				type: 'text',
+				label: 'RVC Voice ID',
+				description: 'Optional RVC/voice conversion identifier',
+				placeholder: 'Select an RVC voice'
+			},
+			{
 				key: 'speed',
 				type: 'number',
 				label: 'Speed',

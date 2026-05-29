@@ -1,4 +1,5 @@
 import { getTTSProvider, type TTSOptions } from '$lib/services/tts';
+import { getTTSProvider as getTTSMetadata } from '$lib/services/providers/registry';
 
 function createTTSStore() {
 	let isSpeaking = $state(false);
@@ -7,8 +8,10 @@ function createTTSStore() {
 	let queue = $state<string[]>([]);
 
 	async function speak(text: string, options: TTSOptions) {
-		// All TTS providers require API keys
-		if (!options.apiKey) {
+		const provider = getTTSMetadata(options.provider);
+
+		// Only providers that require API keys should be blocked here.
+		if (provider?.requiresApiKey && !options.apiKey) {
 			console.warn('TTS not configured - missing API key');
 			return;
 		}

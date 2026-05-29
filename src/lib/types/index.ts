@@ -30,12 +30,14 @@ export interface LLMConfig {
 }
 
 // TTS Provider IDs
-export type TTSProvider = 'elevenlabs' | 'openai-tts';
+export type TTSProvider = 'elevenlabs' | 'openai-tts' | 'alltalk';
 
 export interface TTSConfig {
 	provider: TTSProvider;
 	apiKey?: string;
 	voiceId?: string;
+	rvcVoiceId?: string;
+	language?: string;
 	baseUrl?: string;
 	// Voice settings
 	speed?: number;
@@ -49,6 +51,8 @@ export interface ProviderConfig {
 	baseUrl?: string;
 	modelId?: string;
 	voiceId?: string;
+	rvcVoiceId?: string;
+	language?: string;
 	speed?: number;
 	pitch?: number;
 	volume?: number;
