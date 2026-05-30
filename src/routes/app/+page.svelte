@@ -64,6 +64,8 @@
 	// Speech bubble state
 	let latestResponse = $state('');
 	let isTyping = $state(false);
+	// Sidebar TTS sync: grows sentence-by-sentence as audio plays
+	let spokenSoFar = $state('');
 
 	// Chat sidebar state
 	let sidebarOpen = $state(displayStore.chatDisplayMode !== 'bubble');
@@ -247,6 +249,7 @@
 		chatStore.setError(null);
 		isTyping = true;
 		latestResponse = '';
+		spokenSoFar = '';
 
 		characterStore.updateStreak();
 		characterStore.updateDaysKnown();
@@ -356,6 +359,7 @@
 				// then bubble and lip-sync update sentence by sentence
 				isTyping = true;
 				latestResponse = '';
+				spokenSoFar = '';
 				vrmStore.startTalking(cleanedResponse);
 
 				const ttsProvider = speechSettings.activeProvider as TTSProvider;
@@ -377,9 +381,15 @@
 						onSentenceStart: (sentence) => {
 							isTyping = false;
 							latestResponse = sentence;
+							// Sidebar accumulates all spoken sentences so far
+							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
 						}
 					}
-				);
+				).then(() => {
+					// TTS finished – sidebar reverts to full chatStore message
+					spokenSoFar = '';
+					latestResponse = '';
+				});
 			} else {
 				// Without TTS: show full response immediately
 				latestResponse = cleanedResponse;
@@ -483,7 +493,12 @@
 		{/if}
 
 		<!-- Chat History Sidebar -->
-		<ChatSidebar open={sidebarOpen && showSidebarBtn} onClose={() => sidebarOpen = false} />
+		<ChatSidebar
+			open={sidebarOpen && showSidebarBtn}
+			onClose={() => sidebarOpen = false}
+			speakingText={spokenSoFar}
+			{isTyping}
+		/>
 
 		<!-- Bottom Chat Bar -->
 		<BottomChatBar onSend={handleSend} disabled={chatStore.isLoading} />

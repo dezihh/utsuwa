@@ -7,15 +7,19 @@
 	interface Props {
 		open: boolean;
 		onClose?: () => void;
+		/** Current sentence being spoken by TTS – replaces last assistant message content while active */
+		speakingText?: string;
+		isTyping?: boolean;
 	}
 
-	let { open, onClose }: Props = $props();
+	let { open, onClose, speakingText = '', isTyping = false }: Props = $props();
 
 	let messagesEl: HTMLDivElement | null = null;
 
-	// Auto-scroll to bottom when new messages arrive
+	// Auto-scroll whenever messages change OR when new TTS sentence arrives
 	$effect(() => {
-		const _ = chatStore.messages.length;
+		const _msgs = chatStore.messages.length;
+		const _sentence = speakingText;
 		if (open && messagesEl) {
 			tick().then(() => {
 				if (messagesEl) {
@@ -24,6 +28,11 @@
 			});
 		}
 	});
+
+	// The last assistant message id – used to show TTS sentence instead of full content
+	const lastAssistantId = $derived(
+		[...chatStore.messages].reverse().find((m) => m.role === 'assistant')?.id ?? null
+	);
 
 	function togglePosition() {
 		displayStore.setSidebarPosition(displayStore.sidebarPosition === 'right' ? 'left' : 'right');
@@ -56,9 +65,17 @@
 			<p class="empty-hint">No messages yet.</p>
 		{:else}
 			{#each chatStore.messages as msg (msg.id)}
+				{@const isLastAssistant = msg.id === lastAssistantId && msg.role === 'assistant'}
+				{@const displayText = isLastAssistant && (speakingText || isTyping)
+					? speakingText
+					: msg.content}
 				<div class="message" class:user={msg.role === 'user'} class:assistant={msg.role === 'assistant'}>
-					<div class="bubble">
-						<p>{msg.content}</p>
+					<div class="bubble" class:speaking={isLastAssistant && (speakingText || isTyping)}>
+						{#if isLastAssistant && isTyping && !speakingText}
+							<span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>
+						{:else}
+							<p>{displayText}</p>
+						{/if}
 					</div>
 				</div>
 			{/each}
@@ -248,5 +265,39 @@
 		font-size: 0.8125rem;
 		color: var(--text-secondary, #999);
 		margin-top: 2rem;
+	}
+
+	.bubble.speaking {
+		border-color: rgba(1, 196, 255, 0.35);
+		box-shadow: 0 2px 8px rgba(1, 196, 255, 0.15);
+	}
+
+	:global(.dark) .bubble.speaking {
+		border-color: rgba(1, 196, 255, 0.25);
+	}
+
+	.typing-dots {
+		display: inline-flex;
+		gap: 3px;
+		align-items: center;
+		height: 1.2em;
+	}
+
+	.typing-dots span {
+		display: inline-block;
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		background: currentColor;
+		opacity: 0.5;
+		animation: dot-bounce 1.2s ease-in-out infinite;
+	}
+
+	.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+	.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+	@keyframes dot-bounce {
+		0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+		40% { transform: translateY(-4px); opacity: 1; }
 	}
 </style>
