@@ -1,11 +1,16 @@
 import { getTTSProvider, type TTSOptions } from '$lib/services/tts';
 import { getTTSProvider as getTTSMetadata } from '$lib/services/providers/registry';
 
+interface QueueItem {
+	text: string;
+	onStart?: (text: string) => void;
+}
+
 function createTTSStore() {
 	let isSpeaking = $state(false);
 	let currentAnalyser = $state<AnalyserNode | null>(null);
 	let currentSource = $state<AudioBufferSourceNode | null>(null);
-	let queue = $state<string[]>([]);
+	let queue = $state<QueueItem[]>([]);
 
 	async function speak(text: string, options: TTSOptions) {
 		const provider = getTTSMetadata(options.provider);
@@ -16,10 +21,36 @@ function createTTSStore() {
 			return;
 		}
 
-		// Add to queue
-		queue = [...queue, text];
+		queue = [...queue, { text }];
 
-		// If already speaking, the queue will be processed
+		if (isSpeaking) return;
+
+		await processQueue(options);
+	}
+
+	/**
+	 * Enqueues multiple sentences and fires onSentenceStart exactly when
+	 * each sentence's audio begins playing, enabling synchronized speech bubbles.
+	 */
+	async function speakSentences(
+		sentences: string[],
+		options: TTSOptions,
+		callbacks?: { onSentenceStart?: (sentence: string, index: number) => void }
+	) {
+		const provider = getTTSMetadata(options.provider);
+
+		if (provider?.requiresApiKey && !options.apiKey) {
+			console.warn('TTS not configured - missing API key');
+			return;
+		}
+
+		const items: QueueItem[] = sentences.map((text, i) => ({
+			text,
+			onStart: callbacks?.onSentenceStart ? () => callbacks.onSentenceStart!(text, i) : undefined
+		}));
+
+		queue = [...queue, ...items];
+
 		if (isSpeaking) return;
 
 		await processQueue(options);
@@ -33,12 +64,15 @@ function createTTSStore() {
 		}
 
 		isSpeaking = true;
-		const text = queue[0];
+		const item = queue[0];
 		queue = queue.slice(1);
 
 		try {
 			const tts = getTTSProvider(options);
-			const { source, analyser } = await tts.speak(text);
+			const { source, analyser } = await tts.speak(item.text);
+
+			// Audio has started — fire the callback so bubble/animation sync to this sentence
+			item.onStart?.(item.text);
 
 			currentSource = source;
 			currentAnalyser = analyser;
@@ -85,6 +119,7 @@ function createTTSStore() {
 			return currentAnalyser;
 		},
 		speak,
+		speakSentences,
 		stop,
 		getAnalyserData
 	};

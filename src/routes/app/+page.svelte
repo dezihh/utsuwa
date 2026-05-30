@@ -42,6 +42,7 @@
 	import { initEmbeddingModel, subscribeToEmbeddingState, type EmbeddingState } from '$lib/services/embeddings';
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
 	import { allEvents } from '$lib/data/events';
+	import { splitIntoSentences } from '$lib/utils/sentences';
 
 	let canvasRef: HTMLCanvasElement | null = null;
 
@@ -321,29 +322,47 @@
 			isTyping = false;
 			const cleanedResponse = await processCompanionResponse(content, fullContent);
 			chatStore.updateLastMessage(cleanedResponse);
-			latestResponse = cleanedResponse;
-
-			// Trigger talking animation based on response length
-			if (cleanedResponse) {
-				vrmStore.startTalking(cleanedResponse);
-			}
 
 			// TTS - speak if module is enabled
 			const speechState = modulesStore.getModuleState('speech');
 			const speechSettings = modulesStore.getModuleSettings('speech');
-			if (speechState?.enabled && cleanedResponse) {
+			const ttsEnabled = speechState?.enabled && !!cleanedResponse;
+
+			if (ttsEnabled) {
+				// With TTS: typing indicator stays until first sentence audio begins,
+				// then bubble and lip-sync update sentence by sentence
+				isTyping = true;
+				latestResponse = '';
+				vrmStore.startTalking(cleanedResponse);
+
 				const ttsProvider = speechSettings.activeProvider as TTSProvider;
 				const ttsConfig = settingsStore.getProviderConfig(ttsProvider);
 				const ttsMeta = getTTSProvider(ttsProvider);
+				const sentences = splitIntoSentences(cleanedResponse);
 
-				ttsStore.speak(cleanedResponse, {
-					provider: ttsProvider,
-					apiKey: ttsConfig.apiKey,
-					voiceId: speechSettings.activeVoiceId as string || ttsConfig.voiceId,
-					rvcVoiceId: speechSettings.activeRvcVoiceId as string || ttsConfig.rvcVoiceId,
-					baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
-					speed: speechSettings.speed as number ?? 1
-				});
+				ttsStore.speakSentences(
+					sentences,
+					{
+						provider: ttsProvider,
+						apiKey: ttsConfig.apiKey,
+						voiceId: speechSettings.activeVoiceId as string || ttsConfig.voiceId,
+						rvcVoiceId: speechSettings.activeRvcVoiceId as string || ttsConfig.rvcVoiceId,
+						baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
+						speed: speechSettings.speed as number ?? 1
+					},
+					{
+						onSentenceStart: (sentence) => {
+							isTyping = false;
+							latestResponse = sentence;
+						}
+					}
+				);
+			} else {
+				// Without TTS: show full response immediately
+				latestResponse = cleanedResponse;
+				if (cleanedResponse) {
+					vrmStore.startTalking(cleanedResponse);
+				}
 			}
 		} catch (err) {
 			chatStore.setError(err instanceof Error ? err.message : 'Unknown error');
