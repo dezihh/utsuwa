@@ -20,9 +20,10 @@ export async function fetchProviderModels(
 	apiKey: string,
 	baseUrl?: string
 ): Promise<FetchModelsResult> {
-	// Local providers must be fetched from the user's device, not the deployed server.
-	// Tauri production builds also don't have server routes.
-	if (isTauri() || isLocalLLMProvider(providerId)) {
+	// Tauri production builds don't have server routes — fetch directly.
+	// For web deployments, local providers go through the server route so that
+	// server-side code (network_mode: host) can reach localhost services.
+	if (isTauri()) {
 		return fetchModelsDirect(providerId, apiKey, baseUrl);
 	}
 

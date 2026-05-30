@@ -15,7 +15,7 @@ const PROVIDER_BASE_URLS: Partial<Record<LLMProvider, string>> = {
 	// Local
 	ollama: 'http://localhost:11434/v1/',
 	lmstudio: 'http://localhost:1234/v1/',
-	llamacpp: 'http://localhost:8080/v1/',
+	llamacpp: 'http://localhost:11435/v1/',
 };
 
 // Providers that don't require API keys

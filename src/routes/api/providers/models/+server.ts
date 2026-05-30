@@ -19,7 +19,7 @@ const DEFAULT_BASE_URLS: Record<string, string> = {
 	anthropic: 'https://api.anthropic.com/v1',
 	ollama: 'http://localhost:11434',
 	lmstudio: 'http://localhost:1234/v1',
-	llamacpp: 'http://localhost:8080/v1',
+	llamacpp: 'http://localhost:11435/v1',
 	deepseek: 'https://api.deepseek.com',
 	xai: 'https://api.x.ai/v1',
 	google: 'https://generativelanguage.googleapis.com/v1beta',
@@ -107,8 +107,10 @@ async function fetchOllamaModels(baseUrl: string): Promise<ModelInfo[]> {
 	}));
 }
 
-async function fetchLMStudioModels(baseUrl: string): Promise<ModelInfo[]> {
-	const response = await fetch(`${baseUrl}/models`);
+async function fetchLMStudioModels(baseUrl: string, apiKey?: string): Promise<ModelInfo[]> {
+	const headers: Record<string, string> = {};
+	if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+	const response = await fetch(`${baseUrl}/models`, { headers });
 	if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
 	const data = await response.json();
 	return data.data.map((m: { id: string }) => ({
@@ -220,7 +222,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				models = await fetchLMStudioModels(openAICompatibleBaseUrl ?? cleanBaseUrl);
 				break;
 			case 'llamacpp':
-				models = await fetchLMStudioModels(openAICompatibleBaseUrl ?? cleanBaseUrl);
+				models = await fetchLMStudioModels(openAICompatibleBaseUrl ?? cleanBaseUrl, apiKey);
 				break;
 			case 'deepseek':
 				if (!apiKey) throw new Error('API key required for DeepSeek');

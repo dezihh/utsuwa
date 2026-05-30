@@ -3,7 +3,7 @@ const LOCAL_LLM_PROVIDERS = new Set(['ollama', 'lmstudio', 'llamacpp']);
 const DEFAULT_BASE_URLS: Record<string, string> = {
 	ollama: 'http://localhost:11434',
 	lmstudio: 'http://localhost:1234/v1',
-	llamacpp: 'http://localhost:8080/v1'
+	llamacpp: 'http://localhost:11435/v1'
 };
 
 const OLLAMA_ORIGINS_DOC_URL =
