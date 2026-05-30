@@ -10,7 +10,10 @@
 		isDuplexActive?: boolean;
 		duplexPhase?: DuplexPhase;
 		duplexAudioLevel?: number;
+		duplexNoiseDetected?: boolean;
+		duplexSensitivity?: number;
 		onToggleDuplex?: () => void;
+		onAdjustSensitivity?: (delta: number) => void;
 	}
 
 	let {
@@ -19,7 +22,10 @@
 		isDuplexActive = false,
 		duplexPhase = 'idle',
 		duplexAudioLevel = 0,
-		onToggleDuplex
+		duplexNoiseDetected = false,
+		duplexSensitivity = 1.0,
+		onToggleDuplex,
+		onAdjustSensitivity
 	}: Props = $props();
 	let inputValue = $state('');
 	let textareaRef: HTMLTextAreaElement;
@@ -144,7 +150,33 @@
 				{:else}
 					<div class="duplex-status">
 						<span class="duplex-phase-dot" class:pulse={duplexPhase === 'listening' || duplexPhase === 'thinking' || duplexPhase === 'speaking'}></span>
-						<span class="duplex-phase-label">{duplexPhaseLabel[duplexPhase]}</span>
+						{#if duplexNoiseDetected}
+							<span class="duplex-noise-toast">🔊 Background noise</span>
+						{:else}
+							<span class="duplex-phase-label">{duplexPhaseLabel[duplexPhase]}</span>
+						{/if}
+					</div>
+				{/if}
+				<!-- Sensitivity controls: always visible in duplex mode -->
+				{#if onAdjustSensitivity && duplexPhase !== 'recording'}
+					<div class="sensitivity-controls">
+						<button
+							type="button"
+							class="sens-btn"
+							onclick={() => onAdjustSensitivity(-0.2)}
+							title="More sensitive (detect quieter speech)"
+							aria-label="Increase sensitivity"
+						>+</button>
+						<span class="sens-label" title="Sensitivity: {Math.round((1/duplexSensitivity)*100)}%">
+							{Math.round((1 / duplexSensitivity) * 100)}%
+						</span>
+						<button
+							type="button"
+							class="sens-btn"
+							onclick={() => onAdjustSensitivity(0.2)}
+							title="Less sensitive (ignore background noise)"
+							aria-label="Decrease sensitivity"
+						>−</button>
 					</div>
 				{/if}
 			{:else if isTranscribing}
@@ -760,6 +792,65 @@
 		font-size: 0.875rem;
 		color: var(--text-secondary);
 		font-style: italic;
+	}
+
+	.duplex-noise-toast {
+		font-size: 0.8rem;
+		color: #f59e0b;
+		font-style: italic;
+		animation: noise-fade 2s ease forwards;
+	}
+
+	@keyframes noise-fade {
+		0% { opacity: 1; }
+		70% { opacity: 1; }
+		100% { opacity: 0; }
+	}
+
+	/* Sensitivity controls */
+	.sensitivity-controls {
+		display: flex;
+		align-items: center;
+		gap: 3px;
+		flex-shrink: 0;
+		margin-left: auto;
+		padding-right: 0.15rem;
+	}
+
+	.sens-btn {
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		border: 1px solid rgba(0,0,0,0.12);
+		background: rgba(255,255,255,0.6);
+		color: var(--text-secondary);
+		font-size: 0.85rem;
+		line-height: 1;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		transition: background 0.15s, color 0.15s;
+	}
+
+	:global(.dark) .sens-btn {
+		background: rgba(255,255,255,0.08);
+		border-color: rgba(255,255,255,0.12);
+	}
+
+	.sens-btn:hover {
+		background: #10b981;
+		color: white;
+		border-color: transparent;
+	}
+
+	.sens-label {
+		font-size: 0.65rem;
+		color: var(--text-tertiary);
+		min-width: 28px;
+		text-align: center;
+		cursor: default;
 	}
 
 	/* Small headset toggle button next to send */

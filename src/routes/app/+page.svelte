@@ -519,7 +519,10 @@
 			isDuplexActive={duplexStore.isDuplexActive}
 			duplexPhase={duplexStore.duplexPhase}
 			duplexAudioLevel={duplexStore.duplexAudioLevel}
+			duplexNoiseDetected={duplexStore.noiseDetected}
+			duplexSensitivity={duplexStore.sensitivity}
 			onToggleDuplex={toggleDuplex}
+			onAdjustSensitivity={(delta) => duplexStore.adjustSensitivity(delta)}
 		/>
 
 		<!-- Error toast for chat errors -->

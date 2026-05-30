@@ -24,6 +24,8 @@
 	let isDuplexActive = $state(false);
 	let duplexPhase = $state<DuplexPhase>('idle');
 	let duplexAudioLevel = $state(0);
+	let noiseDetected = $state(false);
+	let sensitivity = $state(1.0); // 1.0 = default; lower = more sensitive
 
 	// ── Callbacks set on startDuplex() ──────────────────────────────────────────
 	let onTranscript: ((text: string) => void) | null = null;
@@ -33,6 +35,9 @@
 	/** True while TTS audio is playing (so we know when to interrupt). */
 	let ttsActive = false;
 
+	/** Auto-dismiss the noise toast after 2s */
+	let noiseToastTimer: ReturnType<typeof setTimeout> | null = null;
+
 	/** Watchdog: if stuck in thinking/transcribing, auto-return to listening. */
 	let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
 	const WATCHDOG_MS = 30_000;
@@ -40,6 +45,15 @@
 	// ── Helpers ──────────────────────────────────────────────────────────────────
 	function setPhase(p: DuplexPhase) {
 		duplexPhase = p;
+	}
+
+	function triggerNoiseToast() {
+		noiseDetected = true;
+		if (noiseToastTimer) clearTimeout(noiseToastTimer);
+		noiseToastTimer = setTimeout(() => {
+			noiseDetected = false;
+			noiseToastTimer = null;
+		}, 2000);
 	}
 
 	function armWatchdog() {
@@ -86,6 +100,8 @@
 			const text = data.text?.trim();
 
 			if (!text) {
+				// Whisper transcribed silence / noise → show toast
+				triggerNoiseToast();
 				setPhase('listening');
 				return;
 			}
@@ -129,14 +145,14 @@
 					if (ttsActive) {
 						onInterrupt?.();
 						ttsActive = false;
-						// VAD will continue and produce a segment naturally
 					}
 				},
 				onSegmentReady: (blob, mimeType) => {
-					// Only transcribe if we're in an appropriate phase.
-					// During 'thinking' the LLM is still running — discard to avoid overlap.
 					if (!isDuplexActive || duplexPhase === 'thinking') return;
 					transcribeSegment(blob, mimeType);
+				},
+				onNoiseDetected: () => {
+					triggerNoiseToast();
 				},
 				onError: (msg) => {
 					console.error('[Duplex] VAD error:', msg);
@@ -144,18 +160,28 @@
 				}
 			},
 			{
-				speechThreshold: 0.025,
+				speechThreshold: (() => {
+					const cfg = settingsStore.getProviderConfig('whisper-local');
+					return typeof cfg.vadThreshold === 'number' ? cfg.vadThreshold : 0.015;
+				})(),
 				silenceDurationMs: 1500,
-				minSpeechDurationMs: 400,
+				minSpeechDurationMs: 500,
 				preBufferMs: 300
 			}
 		);
 
 		if (started) {
 			isDuplexActive = true;
+			// Apply any previously stored sensitivity
+			vadService.setSensitivity(sensitivity);
 			setPhase('listening');
 		}
 		return started;
+	}
+
+	export function adjustSensitivity(delta: number) {
+		sensitivity = Math.max(0.3, Math.min(4.0, sensitivity + delta));
+		vadService.setSensitivity(sensitivity);
 	}
 
 	export function stopDuplex() {
@@ -188,17 +214,14 @@
 
 	// ── Store export ─────────────────────────────────────────────────────────────
 	export const duplexStore = {
-		get isDuplexActive() {
-			return isDuplexActive;
-		},
-		get duplexPhase() {
-			return duplexPhase;
-		},
-		get duplexAudioLevel() {
-			return duplexAudioLevel;
-		},
+		get isDuplexActive() { return isDuplexActive; },
+		get duplexPhase() { return duplexPhase; },
+		get duplexAudioLevel() { return duplexAudioLevel; },
+		get noiseDetected() { return noiseDetected; },
+		get sensitivity() { return sensitivity; },
 		startDuplex,
 		stopDuplex,
 		onTTSStarted,
-		onTTSDone
+		onTTSDone,
+		adjustSensitivity
 	};

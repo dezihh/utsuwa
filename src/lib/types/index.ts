@@ -60,6 +60,8 @@ export interface ProviderConfig {
 	activeProvider?: string;
 	cachedModels?: Array<{ id: string; name: string }>;
 	modelsFetchedAt?: number;
+	/** VAD sensitivity threshold (0.005 = very sensitive … 0.05 = low). whisper-local only. */
+	vadThreshold?: number;
 }
 
 // VRM types
