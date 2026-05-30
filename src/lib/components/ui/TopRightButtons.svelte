@@ -6,9 +6,12 @@
 
 	interface Props {
 		onInfoClick: () => void;
+		sidebarOpen?: boolean;
+		onToggleSidebar?: () => void;
+		showSidebarBtn?: boolean;
 	}
 
-	let { onInfoClick }: Props = $props();
+	let { onInfoClick, sidebarOpen = false, onToggleSidebar, showSidebarBtn = false }: Props = $props();
 	let showOverlayBtn = $state(false);
 
 	onMount(() => {
@@ -34,6 +37,17 @@
 	{#if showOverlayBtn}
 		<button class="icon-btn overlay-btn" onclick={launchOverlay} aria-label="Launch overlay" title="Launch Overlay Mode">
 			<Icon name="monitor" size={20} />
+		</button>
+	{/if}
+	{#if showSidebarBtn}
+		<button
+			class="icon-btn"
+			class:active={sidebarOpen}
+			onclick={onToggleSidebar}
+			aria-label="Toggle chat history"
+			title="Chat History"
+		>
+			<Icon name="message-square" size={20} />
 		</button>
 	{/if}
 	<button class="icon-btn" onclick={onInfoClick} aria-label="App info">
@@ -131,6 +145,21 @@
 		box-shadow:
 			0 1px 4px rgba(0, 0, 0, 0.3),
 			inset 0 2px 4px rgba(0, 0, 0, 0.2);
+	}
+
+	/* Active state (e.g. sidebar open) */
+	.icon-btn.active {
+		background: linear-gradient(180deg, #66d9ff 0%, #01B2FF 100%);
+		color: white;
+		border-color: rgba(0, 0, 0, 0.1);
+		box-shadow:
+			0 3px 10px rgba(1, 178, 255, 0.35),
+			0 1px 3px rgba(0, 0, 0, 0.1),
+			inset 0 1px 0 rgba(255, 255, 255, 0.3);
+	}
+
+	:global(.dark) .icon-btn.active {
+		background: linear-gradient(180deg, #01B2FF 0%, #0099dd 100%);
 	}
 
 	/* Overlay button - accent color */

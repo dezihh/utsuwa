@@ -5,6 +5,7 @@
 	import { TopRightButtons, TopLeftButtons, InfoModal } from '$lib/components/ui';
 	import BottomChatBar from '$lib/components/chat/BottomChatBar.svelte';
 	import SpeechBubble from '$lib/components/chat/SpeechBubble.svelte';
+	import ChatSidebar from '$lib/components/chat/ChatSidebar.svelte';
 	import { EventScene } from '$lib/components/events';
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import MemoryGraphModal from '$lib/components/memory/MemoryGraphModal.svelte';
@@ -13,6 +14,7 @@
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { modulesStore } from '$lib/stores/modules.svelte';
 	import { ttsStore } from '$lib/stores/tts.svelte';
+	import { displayStore } from '$lib/stores/display.svelte';
 	import { characterStore } from '$lib/stores/character.svelte';
 	import { personaStore } from '$lib/stores/persona.svelte';
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
@@ -62,6 +64,15 @@
 	// Speech bubble state
 	let latestResponse = $state('');
 	let isTyping = $state(false);
+
+	// Chat sidebar state
+	let sidebarOpen = $state(displayStore.chatDisplayMode !== 'bubble');
+	const showBubble = $derived(
+		displayStore.chatDisplayMode === 'bubble' || displayStore.chatDisplayMode === 'both'
+	);
+	const showSidebarBtn = $derived(
+		displayStore.chatDisplayMode === 'sidebar' || displayStore.chatDisplayMode === 'both'
+	);
 
 	// Track memory hydration
 	let isMemoryReady = $state(false);
@@ -409,7 +420,12 @@
 
 <div class="app-container">
 	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} />
-	<TopRightButtons onInfoClick={() => showInfoModal = true} />
+	<TopRightButtons
+		onInfoClick={() => showInfoModal = true}
+		{showSidebarBtn}
+		sidebarOpen={sidebarOpen}
+		onToggleSidebar={() => sidebarOpen = !sidebarOpen}
+	/>
 	{#if showInfoModal}
 		<InfoModal onClose={() => showInfoModal = false} />
 	{/if}
@@ -445,11 +461,16 @@
 		<FloatingStatIndicators />
 
 		<!-- Speech Bubble (shows latest response, click to dismiss) -->
-		<SpeechBubble
-			message={latestResponse}
-			isTyping={isTyping}
-			onHide={handleBubbleHide}
-		/>
+		{#if showBubble}
+			<SpeechBubble
+				message={latestResponse}
+				isTyping={isTyping}
+				onHide={handleBubbleHide}
+			/>
+		{/if}
+
+		<!-- Chat History Sidebar -->
+		<ChatSidebar open={sidebarOpen && showSidebarBtn} onClose={() => sidebarOpen = false} />
 
 		<!-- Bottom Chat Bar -->
 		<BottomChatBar onSend={handleSend} disabled={chatStore.isLoading} />

@@ -115,6 +115,43 @@
 				</div>
 			</div>
 		</section>
+
+		<!-- Chat Display Mode -->
+		<section class="section">
+			<h3>Chat Display</h3>
+			<div class="setting-row">
+				<div class="setting-info">
+					<span class="setting-label">Mode</span>
+					<span class="setting-desc">How the companion's responses are shown</span>
+				</div>
+				<div class="mode-selector">
+					<button
+						class="mode-option"
+						class:active={displayStore.chatDisplayMode === 'bubble'}
+						onclick={() => displayStore.setChatDisplayMode('bubble')}
+					>
+						<Icon name="message-circle" size={16} />
+						<span>Bubble</span>
+					</button>
+					<button
+						class="mode-option"
+						class:active={displayStore.chatDisplayMode === 'sidebar'}
+						onclick={() => displayStore.setChatDisplayMode('sidebar')}
+					>
+						<Icon name="message-square" size={16} />
+						<span>Sidebar</span>
+					</button>
+					<button
+						class="mode-option"
+						class:active={displayStore.chatDisplayMode === 'both'}
+						onclick={() => displayStore.setChatDisplayMode('both')}
+					>
+						<Icon name="layout" size={16} />
+						<span>Both</span>
+					</button>
+				</div>
+			</div>
+		</section>
 	</div>
 </div>
 

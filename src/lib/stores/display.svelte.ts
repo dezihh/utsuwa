@@ -3,8 +3,11 @@ import { browser } from '$app/environment';
 const STORAGE_KEY = 'utsuwa-display';
 const DEFAULT_CAMERA_DISTANCE = 2.0;
 
+export type ChatDisplayMode = 'bubble' | 'sidebar' | 'both';
+
 function createDisplayStore() {
 	let cameraDistance = $state(DEFAULT_CAMERA_DISTANCE);
+	let chatDisplayMode = $state<ChatDisplayMode>('bubble');
 
 	if (browser) {
 		const saved = localStorage.getItem(STORAGE_KEY);
@@ -12,6 +15,7 @@ function createDisplayStore() {
 			try {
 				const parsed = JSON.parse(saved);
 				cameraDistance = parsed.cameraDistance ?? DEFAULT_CAMERA_DISTANCE;
+				chatDisplayMode = parsed.chatDisplayMode ?? 'bubble';
 			} catch (e) {
 				console.error('Failed to load display settings:', e);
 			}
@@ -20,7 +24,7 @@ function createDisplayStore() {
 
 	function save() {
 		if (browser) {
-			localStorage.setItem(STORAGE_KEY, JSON.stringify({ cameraDistance }));
+			localStorage.setItem(STORAGE_KEY, JSON.stringify({ cameraDistance, chatDisplayMode }));
 		}
 	}
 
@@ -29,11 +33,20 @@ function createDisplayStore() {
 		save();
 	}
 
+	function setChatDisplayMode(mode: ChatDisplayMode) {
+		chatDisplayMode = mode;
+		save();
+	}
+
 	return {
 		get cameraDistance() {
 			return cameraDistance;
 		},
-		setCameraDistance
+		get chatDisplayMode() {
+			return chatDisplayMode;
+		},
+		setCameraDistance,
+		setChatDisplayMode
 	};
 }
 
