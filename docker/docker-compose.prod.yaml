@@ -1,0 +1,17 @@
+# Production deployment for Utsuwa
+# Build context is the project root (../)
+#
+# Start:   docker compose -f docker-compose.prod.yaml up -d --build
+# Rebuild: docker compose -f docker-compose.prod.yaml up -d --build --force-recreate
+
+services:
+  utsuwa-prod:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prod
+    container_name: utsuwa-prod
+    network_mode: host
+    environment:
+      PORT: "3001"
+      NODE_ENV: production
+    restart: unless-stopped

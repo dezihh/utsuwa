@@ -1,4 +1,5 @@
 import adapterAuto from '@sveltejs/adapter-auto';
+import adapterNode from '@sveltejs/adapter-node';
 import adapterStatic from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { mdsvex } from 'mdsvex';
@@ -6,6 +7,7 @@ import rehypeSlug from 'rehype-slug';
 import { createHighlighter } from 'shiki/bundle/web';
 
 const isTauri = !!process.env.TAURI_ENV_PLATFORM;
+const isProd = process.env.NODE_ENV === 'production';
 
 const highlighter = await createHighlighter({
 	themes: ['github-light', 'github-dark'],
@@ -36,7 +38,9 @@ const config = {
 	kit: {
 		adapter: isTauri
 			? adapterStatic({ fallback: 'index.html' })
-			: adapterAuto()
+			: isProd
+				? adapterNode()
+				: adapterAuto()
 	}
 };
 
