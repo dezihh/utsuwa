@@ -273,7 +273,11 @@
 			let fullContent = '';
 			const selectedModel = model || providerMeta?.models?.[0]?.id || '';
 
-			const shouldUseDirectChat = isTauri() || !!providerMeta?.isLocal;
+			// Local providers go through the SvelteKit server route so that
+			// server-side code (running with network_mode: host) can reach
+			// localhost services. Direct chat is only used in Tauri builds
+			// where no server route is available.
+			const shouldUseDirectChat = isTauri();
 
 			if (shouldUseDirectChat) {
 				await new Promise<void>((resolve, reject) => {
