@@ -1,8 +1,9 @@
-const LOCAL_LLM_PROVIDERS = new Set(['ollama', 'lmstudio']);
+const LOCAL_LLM_PROVIDERS = new Set(['ollama', 'lmstudio', 'llamacpp']);
 
 const DEFAULT_BASE_URLS: Record<string, string> = {
 	ollama: 'http://localhost:11434',
-	lmstudio: 'http://localhost:1234/v1'
+	lmstudio: 'http://localhost:1234/v1',
+	llamacpp: 'http://localhost:8080/v1'
 };
 
 const OLLAMA_ORIGINS_DOC_URL =
@@ -42,7 +43,7 @@ export function getModelsBaseUrl(providerId: string, baseUrl?: string): string {
 export function getChatBaseUrl(providerId: string, baseUrl?: string): string {
 	const cleanUrl = trimTrailingSlashes(baseUrl || DEFAULT_BASE_URLS[providerId] || '');
 
-	if (providerId === 'ollama' || providerId === 'lmstudio') {
+	if (providerId === 'ollama' || providerId === 'lmstudio' || providerId === 'llamacpp') {
 		return ensureOpenAIPath(cleanUrl);
 	}
 
@@ -65,6 +66,10 @@ export function getLocalProviderConnectionHint(
 
 	if (providerId === 'lmstudio') {
 		return `Could not reach LM Studio at ${chatBaseUrl}. Open LM Studio, go to the Developer or Server tab, load a model, and click Start Server.`;
+	}
+
+	if (providerId === 'llamacpp') {
+		return `Could not reach llama.cpp at ${chatBaseUrl}. Make sure the server is running with: llama-server --model <model.gguf> --port 8080`;
 	}
 
 	return `Could not reach local provider at ${chatBaseUrl}. Make sure the local server is running and reachable from this device.`;
