@@ -21,6 +21,7 @@
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
 	import { getLLMProvider, getTTSProvider } from '$lib/services/providers/registry';
 	import { streamChatDirect } from '$lib/services/chat/client-chat';
+	import { mcpStore } from '$lib/stores/mcp.svelte';
 	import { isTauri } from '$lib/services/platform';
 	import type { TTSProvider } from '$lib/types';
 	import type { StateUpdates } from '$lib/types/character';
@@ -300,17 +301,26 @@
 					);
 				});
 			} else {
-				const response = await fetch('/api/chat', {
+				// Use MCP agentic loop when MCP tools are available
+				const mcpEnabled = mcpStore.hasActiveTools && !isTauri();
+				const chatEndpoint = mcpEnabled ? '/api/mcp/chat' : '/api/chat';
+				const chatBody: Record<string, unknown> = {
+					messages: chatStore.messages.map((m) => ({ role: m.role, content: m.content })),
+					provider,
+					model: selectedModel,
+					apiKey: apiKey || undefined,
+					baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
+					systemPrompt
+				};
+				if (mcpEnabled) {
+					chatBody.tools = mcpStore.tools;
+					chatBody.servers = mcpStore.enabledServers;
+				}
+
+				const response = await fetch(chatEndpoint, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						messages: chatStore.messages.map((m) => ({ role: m.role, content: m.content })),
-						provider,
-						model: selectedModel,
-						apiKey: apiKey || undefined,
-						baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
-						systemPrompt
-					})
+					body: JSON.stringify(chatBody)
 				});
 
 				if (!response.ok) {
