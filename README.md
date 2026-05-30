@@ -132,6 +132,26 @@ Choose a background for your 3D companion scene under **Settings > Display > Bac
 - **HDRI / EXR**: Enter a `.hdr` or `.exr` URL (e.g. from [Poly Haven](https://polyhaven.com/hdris)) for realistic environment-based lighting — the image illuminates the VRM character with accurate PBR reflections
 - Settings are persisted locally and restored on next launch
 
+### MCP Tool Integration
+
+Connect [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers to give your companion access to external tools such as file access, web search, code execution, database queries, and more.
+
+Configure servers under **Settings > MCP Tools**:
+
+| Transport | How it works |
+|-----------|-------------|
+| **HTTP / SSE** | Connects to a running MCP server via URL (Streamable HTTP or SSE) |
+| **stdio** | Spawns a local process (e.g. `npx -y @modelcontextprotocol/server-filesystem /path`) |
+
+Once a server is enabled, its tools are listed immediately. During chat, if any tools are active, messages are automatically routed through an agentic loop:
+
+1. The LLM receives the tool list in OpenAI function-calling format
+2. If it decides to use a tool, the call is executed server-side
+3. The result is fed back to the LLM — up to 5 rounds
+4. The final answer (and a collapsible summary of tool calls) is streamed back to you
+
+All MCP communication happens server-side through the SvelteKit proxy — no CORS issues, no browser restrictions.
+
 ## Getting Started
 
 > [!NOTE]
@@ -301,6 +321,7 @@ pnpm tauri build  # Build desktop app installer
 - [x] Dockable chat sidebar (collapsible conversation history panel)
 - [x] Scene backgrounds (9 presets + custom image upload + HDR/EXR environment maps)
 - [x] Desktop application with transparent overlay mode (macOS only, Windows/Linux planned)
+- [x] MCP server integration (HTTP/SSE + stdio transports, agentic tool loop, no CORS restrictions)
 
 ### In Progress / Planned
 
