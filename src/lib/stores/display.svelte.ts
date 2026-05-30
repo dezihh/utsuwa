@@ -4,10 +4,12 @@ const STORAGE_KEY = 'utsuwa-display';
 const DEFAULT_CAMERA_DISTANCE = 2.0;
 
 export type ChatDisplayMode = 'bubble' | 'sidebar' | 'both';
+export type SidebarPosition = 'left' | 'right';
 
 function createDisplayStore() {
 	let cameraDistance = $state(DEFAULT_CAMERA_DISTANCE);
 	let chatDisplayMode = $state<ChatDisplayMode>('bubble');
+	let sidebarPosition = $state<SidebarPosition>('right');
 
 	if (browser) {
 		const saved = localStorage.getItem(STORAGE_KEY);
@@ -16,6 +18,7 @@ function createDisplayStore() {
 				const parsed = JSON.parse(saved);
 				cameraDistance = parsed.cameraDistance ?? DEFAULT_CAMERA_DISTANCE;
 				chatDisplayMode = parsed.chatDisplayMode ?? 'bubble';
+				sidebarPosition = parsed.sidebarPosition ?? 'right';
 			} catch (e) {
 				console.error('Failed to load display settings:', e);
 			}
@@ -24,7 +27,10 @@ function createDisplayStore() {
 
 	function save() {
 		if (browser) {
-			localStorage.setItem(STORAGE_KEY, JSON.stringify({ cameraDistance, chatDisplayMode }));
+			localStorage.setItem(
+				STORAGE_KEY,
+				JSON.stringify({ cameraDistance, chatDisplayMode, sidebarPosition })
+			);
 		}
 	}
 
@@ -38,6 +44,11 @@ function createDisplayStore() {
 		save();
 	}
 
+	function setSidebarPosition(pos: SidebarPosition) {
+		sidebarPosition = pos;
+		save();
+	}
+
 	return {
 		get cameraDistance() {
 			return cameraDistance;
@@ -45,8 +56,12 @@ function createDisplayStore() {
 		get chatDisplayMode() {
 			return chatDisplayMode;
 		},
+		get sidebarPosition() {
+			return sidebarPosition;
+		},
 		setCameraDistance,
-		setChatDisplayMode
+		setChatDisplayMode,
+		setSidebarPosition
 	};
 }
 

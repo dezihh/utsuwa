@@ -73,6 +73,14 @@
 	const showSidebarBtn = $derived(
 		displayStore.chatDisplayMode === 'sidebar' || displayStore.chatDisplayMode === 'both'
 	);
+	const SIDEBAR_WIDTH = 320;
+	const sidebarEffective = $derived(sidebarOpen && showSidebarBtn);
+	const leftOffset = $derived(
+		sidebarEffective && displayStore.sidebarPosition === 'left' ? SIDEBAR_WIDTH : 0
+	);
+	const rightOffset = $derived(
+		sidebarEffective && displayStore.sidebarPosition === 'right' ? SIDEBAR_WIDTH : 0
+	);
 
 	// Track memory hydration
 	let isMemoryReady = $state(false);
@@ -419,12 +427,13 @@
 </script>
 
 <div class="app-container">
-	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} />
+	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} {leftOffset} />
 	<TopRightButtons
 		onInfoClick={() => showInfoModal = true}
 		{showSidebarBtn}
 		sidebarOpen={sidebarOpen}
 		onToggleSidebar={() => sidebarOpen = !sidebarOpen}
+		{rightOffset}
 	/>
 	{#if showInfoModal}
 		<InfoModal onClose={() => showInfoModal = false} />

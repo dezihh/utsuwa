@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { chatStore } from '$lib/stores/chat.svelte';
+	import { displayStore } from '$lib/stores/display.svelte';
+	import { Icon } from '$lib/components/ui';
 	import { tick } from 'svelte';
 
 	interface Props {
@@ -22,43 +24,52 @@
 			});
 		}
 	});
+
+	function togglePosition() {
+		displayStore.setSidebarPosition(displayStore.sidebarPosition === 'right' ? 'left' : 'right');
+	}
 </script>
 
-<div class="sidebar-overlay" class:open>
-	<div class="sidebar" class:open>
-		<div class="sidebar-header">
-			<span class="sidebar-title">Chat History</span>
-			<button class="close-btn" onclick={onClose} aria-label="Close chat history">✕</button>
-		</div>
+<div
+	class="sidebar"
+	class:open
+	class:left={displayStore.sidebarPosition === 'left'}
+	class:right={displayStore.sidebarPosition === 'right'}
+>
+	<div class="sidebar-header">
+		{#if displayStore.sidebarPosition === 'right'}
+			<button class="dock-btn" onclick={togglePosition} aria-label="Dock sidebar to left" title="Dock left">
+				<Icon name="chevron-left" size={16} />
+			</button>
+		{/if}
+		<span class="sidebar-title">Chat History</span>
+		{#if displayStore.sidebarPosition === 'left'}
+			<button class="dock-btn" onclick={togglePosition} aria-label="Dock sidebar to right" title="Dock right">
+				<Icon name="chevron-right" size={16} />
+			</button>
+		{/if}
+		<button class="close-btn" onclick={onClose} aria-label="Close chat history">✕</button>
+	</div>
 
-		<div class="messages" bind:this={messagesEl}>
-			{#if chatStore.messages.length === 0}
-				<p class="empty-hint">No messages yet.</p>
-			{:else}
-				{#each chatStore.messages as msg (msg.id)}
-					<div class="message" class:user={msg.role === 'user'} class:assistant={msg.role === 'assistant'}>
-						<div class="bubble">
-							<p>{msg.content}</p>
-						</div>
+	<div class="messages" bind:this={messagesEl}>
+		{#if chatStore.messages.length === 0}
+			<p class="empty-hint">No messages yet.</p>
+		{:else}
+			{#each chatStore.messages as msg (msg.id)}
+				<div class="message" class:user={msg.role === 'user'} class:assistant={msg.role === 'assistant'}>
+					<div class="bubble">
+						<p>{msg.content}</p>
 					</div>
-				{/each}
-			{/if}
-		</div>
+				</div>
+			{/each}
+		{/if}
 	</div>
 </div>
 
 <style>
-	.sidebar-overlay {
-		position: fixed;
-		inset: 0;
-		z-index: 45;
-		pointer-events: none;
-	}
-
 	.sidebar {
 		position: fixed;
 		top: 0;
-		right: 0;
 		bottom: 0;
 		width: 320px;
 		max-width: 85vw;
@@ -67,11 +78,23 @@
 		background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(245,245,245,0.92) 100%);
 		backdrop-filter: blur(20px);
 		-webkit-backdrop-filter: blur(20px);
+		z-index: 45;
+		pointer-events: none;
+		transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.sidebar.right {
+		right: 0;
 		border-left: 1px solid rgba(0, 0, 0, 0.08);
 		box-shadow: -4px 0 24px rgba(0, 0, 0, 0.1), -1px 0 6px rgba(0, 0, 0, 0.06);
 		transform: translateX(100%);
-		transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-		pointer-events: none;
+	}
+
+	.sidebar.left {
+		left: 0;
+		border-right: 1px solid rgba(0, 0, 0, 0.08);
+		box-shadow: 4px 0 24px rgba(0, 0, 0, 0.1), 1px 0 6px rgba(0, 0, 0, 0.06);
+		transform: translateX(-100%);
 	}
 
 	.sidebar.open {
@@ -81,15 +104,23 @@
 
 	:global(.dark) .sidebar {
 		background: linear-gradient(180deg, rgba(30,30,30,0.95) 0%, rgba(22,22,22,0.95) 100%);
+	}
+
+	:global(.dark) .sidebar.right {
 		border-left-color: rgba(255, 255, 255, 0.08);
 		box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4), -1px 0 6px rgba(0, 0, 0, 0.3);
+	}
+
+	:global(.dark) .sidebar.left {
+		border-right-color: rgba(255, 255, 255, 0.08);
+		box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4), 1px 0 6px rgba(0, 0, 0, 0.3);
 	}
 
 	.sidebar-header {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		padding: 1rem 1rem 0.75rem;
+		gap: 0.25rem;
+		padding: 1rem 0.75rem 0.75rem;
 		border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 		flex-shrink: 0;
 	}
@@ -99,6 +130,7 @@
 	}
 
 	.sidebar-title {
+		flex: 1;
 		font-size: 0.875rem;
 		font-weight: 600;
 		color: var(--text-primary, #1a1a1a);
@@ -109,6 +141,7 @@
 		color: #fafafa;
 	}
 
+	.dock-btn,
 	.close-btn {
 		width: 28px;
 		height: 28px;
@@ -122,13 +155,16 @@
 		cursor: pointer;
 		font-size: 0.8rem;
 		transition: background 0.15s, color 0.15s;
+		flex-shrink: 0;
 	}
 
+	.dock-btn:hover,
 	.close-btn:hover {
 		background: rgba(0, 0, 0, 0.08);
 		color: var(--text-primary, #1a1a1a);
 	}
 
+	:global(.dark) .dock-btn:hover,
 	:global(.dark) .close-btn:hover {
 		background: rgba(255, 255, 255, 0.1);
 		color: #fafafa;

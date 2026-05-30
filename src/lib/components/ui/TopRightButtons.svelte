@@ -9,9 +9,10 @@
 		sidebarOpen?: boolean;
 		onToggleSidebar?: () => void;
 		showSidebarBtn?: boolean;
+		rightOffset?: number;
 	}
 
-	let { onInfoClick, sidebarOpen = false, onToggleSidebar, showSidebarBtn = false }: Props = $props();
+	let { onInfoClick, sidebarOpen = false, onToggleSidebar, showSidebarBtn = false, rightOffset = 0 }: Props = $props();
 	let showOverlayBtn = $state(false);
 
 	onMount(() => {
@@ -33,7 +34,7 @@
 	}
 </script>
 
-<div class="top-right-buttons">
+<div class="top-right-buttons" style="right: calc(1rem + {rightOffset}px)">
 	{#if showOverlayBtn}
 		<button class="icon-btn overlay-btn" onclick={launchOverlay} aria-label="Launch overlay" title="Launch Overlay Mode">
 			<Icon name="monitor" size={20} />
@@ -62,10 +63,11 @@
 	.top-right-buttons {
 		position: fixed;
 		top: 1rem;
-		right: 1rem;
-		z-index: 40;
+		right: 1rem; /* overridden by inline style when sidebar open */
+		z-index: 46;
 		display: flex;
 		gap: 0.5rem;
+		transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
 	.icon-btn {

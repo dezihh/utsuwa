@@ -4,16 +4,17 @@
 
 	interface Props {
 		onOpenMemoryGraph?: () => void;
+		leftOffset?: number;
 	}
 
-	let { onOpenMemoryGraph }: Props = $props();
+	let { onOpenMemoryGraph, leftOffset = 0 }: Props = $props();
 
 	function takeScreenshot() {
 		screenshotStore.take();
 	}
 </script>
 
-<div class="top-left-buttons">
+<div class="top-left-buttons" style="left: calc(1rem + {leftOffset}px)">
 	<button class="icon-btn" onclick={takeScreenshot} aria-label="Take screenshot">
 		<Icon name="camera" size={20} />
 	</button>
@@ -28,10 +29,11 @@
 	.top-left-buttons {
 		position: fixed;
 		top: 1rem;
-		left: 1rem;
-		z-index: 40;
+		left: 1rem; /* overridden by inline style when sidebar open */
+		z-index: 46;
 		display: flex;
 		gap: 0.5rem;
+		transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
 	.icon-btn {
