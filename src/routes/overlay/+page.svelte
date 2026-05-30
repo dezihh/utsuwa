@@ -250,10 +250,10 @@
 			let fullContent = '';
 			const selectedModel = model || providerMeta?.models?.[0]?.id || '';
 
-			const shouldUseDirectChat = isTauri() || !!providerMeta?.isLocal;
+			const shouldUseDirectChat = isTauri();
 
 			if (shouldUseDirectChat) {
-				// Tauri and local providers call provider APIs directly.
+				// Tauri builds call provider APIs directly (no server route available).
 				await new Promise<void>((resolve, reject) => {
 					streamChatDirect(
 						{
