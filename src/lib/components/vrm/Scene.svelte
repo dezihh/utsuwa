@@ -3,13 +3,18 @@
 	// https://github.com/pixiv/three-vrm/blob/dev/packages/three-vrm/examples/humanoidAnimation/main.js
 	import { T, useThrelte, useTask } from '@threlte/core';
 	import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-	import { HemisphereLight, DirectionalLight, ShaderMaterial, Color, BackSide, SRGBColorSpace, ACESFilmicToneMapping, HalfFloatType } from 'three';
+	import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+	import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+	import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
+	import { HemisphereLight, DirectionalLight, ShaderMaterial, Color, BackSide, SRGBColorSpace, ACESFilmicToneMapping, HalfFloatType, PMREMGenerator, CanvasTexture, TextureLoader } from 'three';
+	import type { Texture } from 'three';
 import { EffectComposer, RenderPass, EffectPass, BloomEffect } from 'postprocessing';
 	import VrmModel from './VrmModel.svelte';
 	import OverlayRaycastHandler from '$lib/components/overlay/OverlayRaycastHandler.svelte';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 	import { displayStore } from '$lib/stores/display.svelte';
 	import { screenshotStore } from '$lib/stores/screenshot.svelte';
+	import { backgroundStore } from '$lib/stores/background.svelte';
 	import { onMount } from 'svelte';
 
 	// Dot grid shader for background sphere
@@ -59,6 +64,118 @@ import { EffectComposer, RenderPass, EffectPass, BloomEffect } from 'postprocess
 	let hemiLight = $state<HemisphereLight | undefined>(undefined);
 	let dirLight = $state<DirectionalLight | undefined>(undefined);
 
+	// ── Background system ────────────────────────────────────────────────────────
+
+	/** Whether to show the dot-grid sphere (only for dotgrid preset) */
+	const showDotGrid = $derived(backgroundStore.activePresetId === 'dot-grid');
+
+	/** Currently loaded background texture — disposed when preset changes */
+	let currentBgTexture: Texture | null = null;
+	let bgImageLoadAbort: AbortController | null = null;
+
+	/** Create a vertical linear-gradient canvas texture */
+	function createGradientTexture(colors: string[]): CanvasTexture {
+		const canvas = document.createElement('canvas');
+		canvas.width = 4;
+		canvas.height = 512;
+		const ctx = canvas.getContext('2d')!;
+		const grad = ctx.createLinearGradient(0, 0, 0, 512);
+		colors.forEach((c, i) => grad.addColorStop(i / Math.max(colors.length - 1, 1), c));
+		ctx.fillStyle = grad;
+		ctx.fillRect(0, 0, 4, 512);
+		const tex = new CanvasTexture(canvas);
+		tex.colorSpace = SRGBColorSpace;
+		return tex;
+	}
+
+	function disposeBgTexture() {
+		currentBgTexture?.dispose();
+		currentBgTexture = null;
+	}
+
+	/** Apply the active background preset to scene.background (sync presets only) */
+	function applyBackgroundSync() {
+		if (!scene || overlay) return;
+		const preset = backgroundStore.activePreset;
+		const dark = isDarkMode;
+
+		disposeBgTexture();
+
+		if (preset.type === 'dotgrid') {
+			scene.background = new Color(dark ? SCENE_COLORS.dark.background : SCENE_COLORS.light.background);
+		} else if (preset.type === 'solid') {
+			scene.background = new Color(preset.color ?? '#ffffff');
+		} else if (preset.type === 'gradient' && preset.colors) {
+			const tex = createGradientTexture(preset.colors);
+			currentBgTexture = tex;
+			scene.background = tex;
+		}
+		// 'image' is handled async below
+	}
+
+	/** Load a background image/HDRI URL and apply it */
+	async function loadBackgroundImage(url: string) {
+		bgImageLoadAbort?.abort();
+		const ac = new AbortController();
+		bgImageLoadAbort = ac;
+
+		try {
+			const isDataUrl = url.startsWith('data:');
+
+			// Extract embedded filename hint (added by handleFileInput for HDR/EXR uploads)
+			const filenameMatch = url.match(/filename=([^;]+);/);
+			const embeddedName = filenameMatch?.[1]?.toLowerCase() ?? '';
+
+			const isHdr = /\.hdr$/i.test(url) || embeddedName.endsWith('.hdr');
+			const isExr = /\.exr$/i.test(url) || embeddedName.endsWith('.exr');
+
+			let tex: Texture;
+			if ((isHdr || isExr) && renderer) {
+				const pmrem = new PMREMGenerator(renderer);
+				pmrem.compileEquirectangularShader();
+				let raw: Texture;
+				if (isExr) {
+					if (isDataUrl) {
+						// EXRLoader can't handle data: URLs — convert to Blob URL
+						const base64 = url.replace(/data:[^;]*;(?:filename=[^;]+;)?base64,/, '');
+						const binary = atob(base64);
+						const buf = new ArrayBuffer(binary.length);
+						const view = new Uint8Array(buf);
+						for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
+						const blob = new Blob([buf], { type: 'application/octet-stream' });
+						const blobUrl = URL.createObjectURL(blob);
+						try {
+							raw = await new EXRLoader().loadAsync(blobUrl) as unknown as Texture;
+						} finally {
+							URL.revokeObjectURL(blobUrl);
+						}
+					} else {
+						raw = await new EXRLoader().loadAsync(url) as unknown as Texture;
+					}
+				} else {
+					raw = await new RGBELoader().loadAsync(url);
+				}
+				if (ac.signal.aborted) { raw.dispose(); pmrem.dispose(); return; }
+				tex = pmrem.fromEquirectangular(raw).texture;
+				raw.dispose();
+				pmrem.dispose();
+			} else {
+				tex = await new TextureLoader().loadAsync(url);
+				if (ac.signal.aborted) { tex.dispose(); return; }
+				tex.colorSpace = SRGBColorSpace;
+			}
+			if (scene && !ac.signal.aborted) {
+				disposeBgTexture();
+				currentBgTexture = tex;
+				scene.background = tex;
+			} else {
+				tex.dispose();
+			}
+		} catch {
+			if (!ac.signal.aborted && scene) scene.background = new Color('#1c1c1e');
+		}
+	}
+
 	// Set HSL colors when lights are ready
 	$effect(() => {
 		if (hemiLight) {
@@ -70,6 +187,28 @@ import { EffectComposer, RenderPass, EffectPass, BloomEffect } from 'postprocess
 	$effect(() => {
 		if (dirLight) {
 			dirLight.color.setHSL(0.1, 1, 0.95); // Warm white
+		}
+	});
+
+	// Re-apply background whenever the preset or dark-mode changes
+	$effect(() => {
+		const preset = backgroundStore.activePreset;
+		const dark = isDarkMode; // reactive dependency
+
+		if (!scene || overlay) return;
+
+		bgImageLoadAbort?.abort();
+
+		if (preset.type === 'image') {
+			const url = backgroundStore.customUrl;
+			if (url) {
+				loadBackgroundImage(url);
+			} else {
+				disposeBgTexture();
+				scene.background = new Color('#1c1c1e');
+			}
+		} else {
+			applyBackgroundSync();
 		}
 	});
 
@@ -193,6 +332,15 @@ import { EffectComposer, RenderPass, EffectPass, BloomEffect } from 'postprocess
 			}
 		}
 
+		// Setup RoomEnvironment for PBR lighting (only non-overlay)
+		if (!overlay && renderer && scene) {
+			const pmrem = new PMREMGenerator(renderer);
+			const roomEnv = new RoomEnvironment();
+			scene.environment = pmrem.fromScene(roomEnv).texture;
+			roomEnv.dispose();
+			pmrem.dispose();
+		}
+
 		return () => {
 			if (composerTimeout) clearTimeout(composerTimeout);
 			window.removeEventListener('resize', checkDesktop);
@@ -274,13 +422,14 @@ import { EffectComposer, RenderPass, EffectPass, BloomEffect } from 'postprocess
 
 <!-- Scene Background (hidden in overlay mode for transparency) -->
 {#if !overlay}
-	<T.Color attach="background" args={[backgroundColor()]} />
-
-	<!-- Dot Grid Background Sphere (skybox-style) -->
-	<T.Mesh position={[0, 0, 0]}>
-		<T.SphereGeometry args={[15, 64, 32]} />
-		<T is={dotGridMaterial} />
-	</T.Mesh>
+	<!-- Background is controlled reactively by backgroundStore $effect above -->
+	<!-- Dot Grid Background Sphere — only shown for the dot-grid preset -->
+	{#if showDotGrid}
+		<T.Mesh position={[0, 0, 0]}>
+			<T.SphereGeometry args={[15, 64, 32]} />
+			<T is={dotGridMaterial} />
+		</T.Mesh>
+	{/if}
 {/if}
 
 <!-- Hemisphere lighting matching Three.js example -->

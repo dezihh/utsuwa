@@ -2,6 +2,7 @@
 	import { browser } from '$app/environment';
 	import { Icon } from '$lib/components/ui';
 	import { displayStore } from '$lib/stores/display.svelte';
+	import { backgroundStore, BACKGROUND_PRESETS } from '$lib/stores/background.svelte';
 
 	type ColorMode = 'system' | 'light' | 'dark';
 	let colorMode = $state<ColorMode>('system');
@@ -46,7 +47,54 @@
 	}
 
 	// System theme change listener lives in +layout.svelte (always mounted)
-</script>
+
+	// ── Custom background upload ─────────────────────────────────────────────
+	let dragOver = $state(false);
+
+	function handleFileInput(file: File) {
+		const name = file.name.toLowerCase();
+		const isHdr = name.endsWith('.hdr');
+		const isExr = name.endsWith('.exr');
+
+		// For HDR/EXR: read as ArrayBuffer and store as data URL with filename hint
+		if (isHdr || isExr) {
+			const reader = new FileReader();
+			reader.onload = (e) => {
+				const result = e.target?.result as string;
+				if (result) {
+					// Embed filename in the data URL comment so Scene knows the format
+					const tagged = result.replace('base64,', `filename=${file.name};base64,`);
+					backgroundStore.setPreset('custom');
+					backgroundStore.setCustomUrl(tagged);
+				}
+			};
+			reader.readAsDataURL(file);
+			return;
+		}
+
+		if (!file.type.startsWith('image/')) return;
+		const reader = new FileReader();
+		reader.onload = (e) => {
+			const result = e.target?.result as string;
+			if (result) {
+				backgroundStore.setPreset('custom');
+				backgroundStore.setCustomUrl(result);
+			}
+		};
+		reader.readAsDataURL(file);
+	}
+
+	function onFileChange(e: Event) {
+		const file = (e.target as HTMLInputElement).files?.[0];
+		if (file) handleFileInput(file);
+	}
+
+	function onDrop(e: DragEvent) {
+		e.preventDefault();
+		dragOver = false;
+		const file = e.dataTransfer?.files?.[0];
+		if (file) handleFileInput(file);
+	}</script>
 
 <div class="page">
 	<header class="page-header">
@@ -151,6 +199,69 @@
 					</button>
 				</div>
 			</div>
+		</section>
+
+		<!-- Background Picker -->
+		<section class="section">
+			<h3>Background</h3>
+			<div class="bg-grid">
+				{#each BACKGROUND_PRESETS as preset}
+					<button
+						class="bg-swatch"
+						class:active={backgroundStore.activePresetId === preset.id}
+						class:custom-swatch={preset.id === 'custom'}
+						title={preset.label}
+						onclick={() => backgroundStore.setPreset(preset.id)}
+						style={preset.id !== 'custom' ? `background: ${preset.preview};` : ''}
+					>
+						{#if preset.id === 'custom'}
+							<span class="custom-swatch-icon">🖼️</span>
+							<span class="custom-swatch-text">Custom</span>
+						{:else}
+							<span class="bg-swatch-label">{preset.emoji}</span>
+						{/if}
+					</button>
+				{/each}
+			</div>
+			<p class="bg-active-label">{BACKGROUND_PRESETS.find(p => p.id === backgroundStore.activePresetId)?.label ?? ''}</p>
+			{#if backgroundStore.activePresetId === 'custom'}
+				<div
+					class="bg-dropzone"
+					class:drag-over={dragOver}
+					role="region"
+					aria-label="Bild-Upload"
+					ondragover={(e) => { e.preventDefault(); dragOver = true; }}
+					ondragleave={() => dragOver = false}
+					ondrop={onDrop}
+				>
+					{#if backgroundStore.customUrl}
+						<div class="bg-preview-row">
+						{#if backgroundStore.customUrl.includes('filename=') }
+							<div class="bg-thumb bg-thumb-hdr">🌅 HDR/EXR</div>
+						{:else}
+							<img class="bg-thumb" src={backgroundStore.customUrl} alt="Vorschau" />
+						{/if}
+							<button class="bg-clear-btn" onclick={() => backgroundStore.setCustomUrl('')}>✕ Entfernen</button>
+						</div>
+					{:else}
+						<label class="bg-upload-label">
+							<input type="file" accept="image/*" class="bg-file-input" onchange={onFileChange} />
+							<span class="bg-upload-icon">📁</span>
+							<span class="bg-upload-text">Datei auswählen oder hierher ziehen</span>
+							<span class="bg-upload-hint">PNG, JPG, WEBP, GIF — oder HDR/EXR per URL</span>
+						</label>
+					{/if}
+					<div class="bg-url-row">
+						<input
+							class="bg-url-input"
+							type="url"
+							placeholder="…oder URL eingeben (https://…)"
+							value={backgroundStore.customUrl.startsWith('data:') ? '' : backgroundStore.customUrl}
+							oninput={(e) => backgroundStore.setCustomUrl((e.target as HTMLInputElement).value)}
+						/>
+					</div>
+				</div>
+			{/if}
 		</section>
 	</div>
 </div>
@@ -408,6 +519,175 @@
 		.zoom-slider {
 			flex: 1;
 		}
+	}
+
+	/* Background Picker */
+	.bg-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+	}
+
+	.bg-swatch {
+		aspect-ratio: 1;
+		border-radius: 8px;
+		border: 2px solid transparent;
+		cursor: pointer;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 4px;
+		transition: border-color 0.15s, transform 0.1s;
+		outline: none;
+	}
+
+	.bg-swatch:hover {
+		transform: scale(1.07);
+	}
+
+	.bg-swatch.active {
+		border-color: var(--color-primary, #6c63ff);
+		box-shadow: 0 0 0 2px var(--color-primary, #6c63ff);
+	}
+
+	.bg-swatch-label {
+		font-size: 1rem;
+		line-height: 1;
+		filter: drop-shadow(0 1px 1px rgba(0,0,0,0.4));
+	}
+
+	.bg-active-label {
+		font-size: 0.75rem;
+		color: var(--color-text-secondary, #888);
+		margin-top: 0.35rem;
+		text-align: center;
+	}
+
+	.bg-url-input {
+		width: 100%;
+		padding: 0.4rem 0.6rem;
+		border: 1px solid var(--color-border, #ccc);
+		border-radius: 6px;
+		font-size: 0.85rem;
+		background: var(--color-surface, #fff);
+		color: var(--color-text, #000);
+	}
+
+	.custom-swatch {
+		background: var(--bg-secondary, #f0f0f0) !important;
+		border: 2px dashed var(--color-border, #aaa) !important;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.custom-swatch-icon {
+		font-size: 1.1rem;
+		line-height: 1;
+	}
+
+	.custom-swatch-text {
+		font-size: 0.55rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		color: var(--text-secondary, #666);
+		line-height: 1;
+	}
+
+	.custom-swatch.active {
+		border-style: solid !important;
+	}
+
+	.bg-dropzone {
+		margin-top: 0.6rem;
+		border: 2px dashed var(--color-border, #bbb);
+		border-radius: 10px;
+		padding: 0.8rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		transition: border-color 0.15s, background 0.15s;
+	}
+
+	.bg-dropzone.drag-over {
+		border-color: var(--color-primary, #6c63ff);
+		background: color-mix(in srgb, var(--color-primary, #6c63ff) 8%, transparent);
+	}
+
+	.bg-upload-label {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.3rem;
+		cursor: pointer;
+		padding: 0.6rem;
+	}
+
+	.bg-file-input {
+		display: none;
+	}
+
+	.bg-upload-icon {
+		font-size: 1.6rem;
+	}
+
+	.bg-upload-text {
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--text-primary, #333);
+	}
+
+	.bg-upload-hint {
+		font-size: 0.72rem;
+		color: var(--text-tertiary, #999);
+	}
+
+	.bg-preview-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.bg-thumb {
+		width: 64px;
+		height: 40px;
+		object-fit: cover;
+		border-radius: 6px;
+		border: 1px solid var(--color-border, #ddd);
+	}
+
+	.bg-thumb-hdr {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.72rem;
+		font-weight: 600;
+		background: linear-gradient(135deg, #1a1a2e, #0f3460);
+		color: #fff;
+		width: 64px;
+		height: 40px;
+	}
+
+	.bg-clear-btn {
+		font-size: 0.78rem;
+		color: var(--text-secondary, #888);
+		background: none;
+		border: 1px solid var(--color-border, #ccc);
+		border-radius: 5px;
+		padding: 0.2rem 0.5rem;
+		cursor: pointer;
+	}
+
+	.bg-clear-btn:hover {
+		color: #e55;
+		border-color: #e55;
+	}
+
+	.bg-url-row {
+		display: flex;
+		gap: 0.4rem;
 	}
 
 </style>

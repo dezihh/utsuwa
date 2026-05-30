@@ -20,8 +20,10 @@
 - **VRM Model Viewer**: Load and display VRM 3D avatar models with orbit controls
 - **Model-Centric UI**: Full-screen 3D model with unobtrusive overlay controls
 - **3D Speech Bubbles**: Chat responses appear as bubbles that track the model's head in 3D space
-- **Chat Interface**: Bottom-centered input bar with streaming responses
-- **Voice Input**: Speech-to-text via Groq (Whisper) or Web Speech API with real-time audio visualization
+- **Chat Interface**: Bottom-centered input bar with streaming responses and sentence-by-sentence TTS delivery
+- **Dockable Chat Sidebar**: Collapsible sidebar showing full conversation history alongside the 3D view
+- **Voice Input**: Speech-to-text via Groq (Whisper), local Whisper server, or Web Speech API with real-time audio visualization
+- **Duplex / VOX Mode**: Hands-free conversation — the companion listens continuously, detects speech automatically using voice activity detection (VAD), transcribes, responds, and returns to listening. Includes noise rejection, background-noise toast notifications, and live sensitivity controls.
 - **LLM Integration**: Support for 8 LLM providers including OpenAI, Anthropic, Google, xAI, DeepSeek, Ollama, LM Studio, and llama.cpp
 - **Local Model Discovery**: Ollama and LM Studio discover installed local models directly from your device
 - **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, and AllTalk
@@ -31,6 +33,7 @@
 - **Companion System**: Multi-axis relationship tracking with mood, events, and semantic memory
 - **Semantic Memory**: Local AI-powered memory search using Transformers.js - finds memories by meaning, not just keywords
 - **Memory Graph**: Interactive visualization showing how memories connect semantically
+- **Scene Backgrounds**: 9 built-in presets (gradients, solid colors, studio grid) plus custom image upload (PNG/JPG/WEBP) and HDRI/EXR environment maps for realistic PBR lighting
 - **Data Export/Import**: Download your data as a save file, restore anytime
 - **Theming**: Light and dark mode support with system preference detection
 - **Desktop App** *(beta, macOS only)*: Native desktop app with transparent overlay mode — your companion floats on your desktop
@@ -97,14 +100,37 @@ AllTalk is configured under **Settings > TTS Providers** and connects to your ex
 
 AllTalk determines the spoken language from the selected voice, so no separate language field is required in Utsuwa.
 
-### STT Providers (2)
+### STT Providers (3)
 
 | Category | Providers |
 |----------|-----------|
 | **Cloud** | Groq (Whisper) |
+| **Local** | Whisper (local HTTP server) |
 | **Browser** | Web Speech API (no API key required) |
 
-Voice input is accessed via the microphone button in the chat bar. Groq STT uses Whisper for accurate transcription on any platform (including desktop). Web Speech API works without an API key in Chrome, Edge, and Safari. If a Groq API key is configured, it takes priority automatically.
+Voice input is accessed via the microphone button in the chat bar. Groq STT uses Whisper for accurate transcription on any platform (including desktop). **Local Whisper** connects to a self-hosted whisper.cpp or faster-whisper server — configure the base URL under **Settings > STT Providers**. Web Speech API works without an API key in Chrome, Edge, and Safari. If a Groq API key is configured, it takes priority automatically.
+
+### Duplex / VOX Mode
+
+Hands-free, continuous conversation without pressing any buttons:
+
+1. Click the **headset icon** (🎧) in the chat bar to enter duplex mode
+2. The companion listens for speech using Voice Activity Detection (VAD)
+3. When speech is detected, it records, transcribes (via your configured STT provider), generates a response, and speaks it aloud (via your configured TTS provider)
+4. It then returns to listening — fully automatic loop
+5. Background noise is automatically filtered; a toast notification appears when ambient noise is detected
+6. Use the **+/−** buttons next to the headset icon to adjust mic sensitivity in real time
+
+Duplex mode requires both an STT provider and a TTS provider to be configured.
+
+### Scene Backgrounds
+
+Choose a background for your 3D companion scene under **Settings > Display > Background**:
+
+- **9 built-in presets**: Studio Grid (dot pattern), White, Dark Studio, Blush, Dusk, Midnight, Forest, Aurora
+- **Custom Image**: Upload a PNG/JPG/WEBP file via drag & drop or file picker
+- **HDRI / EXR**: Enter a `.hdr` or `.exr` URL (e.g. from [Poly Haven](https://polyhaven.com/hdris)) for realistic environment-based lighting — the image illuminates the VRM character with accurate PBR reflections
+- Settings are persisted locally and restored on next launch
 
 ## Getting Started
 
@@ -256,9 +282,11 @@ pnpm tauri build  # Build desktop app installer
 
 - [x] VRM model loading and display with orbit controls
 - [x] 3D speech bubbles tracking model head position
-- [x] Multi-provider LLM support (7 providers)
-- [x] Multi-provider TTS support (2 providers)
+- [x] Multi-provider LLM support (8 providers)
+- [x] Multi-provider TTS support (3 providers: ElevenLabs, OpenAI TTS, AllTalk)
+- [x] Multi-provider STT support (3 providers: Groq Whisper, local Whisper server, Web Speech API)
 - [x] Audio-driven lip-sync
+- [x] Sentence-by-sentence TTS streaming (responses spoken as they arrive, not after full generation)
 - [x] VRMA-based animations (idle, talking, blinking)
 - [x] Companion system with multi-axis relationships
 - [x] 8-stage relationship progression (Stranger → Soulmate)
@@ -268,13 +296,16 @@ pnpm tauri build  # Build desktop app installer
 - [x] Local-first IndexedDB storage with export/import
 - [x] Theme system with light/dark modes
 - [x] Voice input via Groq STT (Whisper) and Web Speech API
+- [x] Local Whisper STT server support
+- [x] Duplex / VOX mode (hands-free continuous conversation with VAD)
+- [x] Dockable chat sidebar (collapsible conversation history panel)
+- [x] Scene backgrounds (9 presets + custom image upload + HDR/EXR environment maps)
 - [x] Desktop application with transparent overlay mode (macOS only, Windows/Linux planned)
 
 ### In Progress / Planned
 
 - [ ] **File, Image, and Video Uploads** - Add support for attaching files, images, and videos for multimodal LLM workflows and providers that can use richer context or web-aware tools
 - [ ] **OpenAI-Compatible Models** - Add a configurable option for OpenAI-compatible model endpoints beyond the currently listed providers
-- [ ] **Multi-provider STT** - Support for additional speech-to-text providers beyond Groq and Web Speech API
 - [ ] **Live2D Support** - Alternative to VRM for 2D animated avatars
 - [ ] **Windows and Linux Desktop Apps** - Expand desktop builds beyond the current macOS beta
 
