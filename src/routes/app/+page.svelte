@@ -14,6 +14,7 @@
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { modulesStore } from '$lib/stores/modules.svelte';
 	import { ttsStore } from '$lib/stores/tts.svelte';
+	import { duplexStore, startDuplex, stopDuplex, onTTSStarted, onTTSDone } from '$lib/stores/duplex.svelte';
 	import { displayStore } from '$lib/stores/display.svelte';
 	import { characterStore } from '$lib/stores/character.svelte';
 	import { personaStore } from '$lib/stores/persona.svelte';
@@ -389,19 +390,30 @@
 					// TTS finished – sidebar reverts to full chatStore message
 					spokenSoFar = '';
 					latestResponse = '';
+					onTTSDone();
 				});
+				onTTSStarted();
 			} else {
 				// Without TTS: show full response immediately
 				latestResponse = cleanedResponse;
 				if (cleanedResponse) {
 					vrmStore.startTalking(cleanedResponse);
 				}
+				onTTSDone();
 			}
 		} catch (err) {
 			chatStore.setError(err instanceof Error ? err.message : 'Unknown error');
 			isTyping = false;
 		} finally {
 			chatStore.setLoading(false);
+		}
+	}
+
+	async function toggleDuplex() {
+		if (duplexStore.isDuplexActive) {
+			stopDuplex();
+		} else {
+			await startDuplex({ onTranscript: handleSend, onInterrupt: () => ttsStore.stop() });
 		}
 	}
 
@@ -501,7 +513,14 @@
 		/>
 
 		<!-- Bottom Chat Bar -->
-		<BottomChatBar onSend={handleSend} disabled={chatStore.isLoading} />
+		<BottomChatBar
+			onSend={handleSend}
+			disabled={chatStore.isLoading}
+			isDuplexActive={duplexStore.isDuplexActive}
+			duplexPhase={duplexStore.duplexPhase}
+			duplexAudioLevel={duplexStore.duplexAudioLevel}
+			onToggleDuplex={toggleDuplex}
+		/>
 
 		<!-- Error toast for chat errors -->
 		{#if chatStore.error}

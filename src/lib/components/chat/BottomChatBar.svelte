@@ -2,13 +2,25 @@
 	import { Icon } from '$lib/components/ui';
 	import { sttStore } from '$lib/stores/stt.svelte';
 	import AudioVisualizer from './AudioVisualizer.svelte';
+	import type { DuplexPhase } from '$lib/stores/duplex.svelte';
 
 	interface Props {
 		onSend: (content: string) => void;
 		disabled?: boolean;
+		isDuplexActive?: boolean;
+		duplexPhase?: DuplexPhase;
+		duplexAudioLevel?: number;
+		onToggleDuplex?: () => void;
 	}
 
-	let { onSend, disabled = false }: Props = $props();
+	let {
+		onSend,
+		disabled = false,
+		isDuplexActive = false,
+		duplexPhase = 'idle',
+		duplexAudioLevel = 0,
+		onToggleDuplex
+	}: Props = $props();
 	let inputValue = $state('');
 	let textareaRef: HTMLTextAreaElement;
 
@@ -83,6 +95,15 @@
 			}
 		}
 	}
+
+	const duplexPhaseLabel: Record<DuplexPhase, string> = {
+		idle: '',
+		listening: 'Listening...',
+		recording: 'Recording...',
+		transcribing: 'Transcribing...',
+		thinking: 'Thinking...',
+		speaking: 'Speaking...'
+	};
 </script>
 
 {#if sttError}
@@ -97,14 +118,37 @@
 
 <div class="bottom-chat-bar">
 	<form class="chat-form" onsubmit={handleSubmit}>
-		<div class="input-wrapper" class:recording={isListening} class:transcribing={isTranscribing} class:focused={hasContent}>
-			{#if isTranscribing}
+		<div
+			class="input-wrapper"
+			class:recording={isListening || duplexPhase === 'recording'}
+			class:transcribing={isTranscribing || duplexPhase === 'transcribing'}
+			class:duplex-active={isDuplexActive}
+			class:focused={hasContent && !isDuplexActive}
+		>
+			{#if isDuplexActive}
+				<!-- Duplex mode: show phase status -->
 				<button
 					type="button"
-					class="mic-btn recording"
-					disabled
-					aria-label="Transcribing"
+					class="mic-btn duplex-btn"
+					class:duplex-listening={duplexPhase === 'listening'}
+					class:duplex-recording={duplexPhase === 'recording'}
+					class:duplex-speaking={duplexPhase === 'speaking'}
+					onclick={onToggleDuplex}
+					aria-label="Stop duplex mode"
+					title="Stop voice conversation"
 				>
+					<Icon name="headset" size={18} />
+				</button>
+				{#if duplexPhase === 'recording'}
+					<AudioVisualizer audioLevel={duplexAudioLevel} transcript="" />
+				{:else}
+					<div class="duplex-status">
+						<span class="duplex-phase-dot" class:pulse={duplexPhase === 'listening' || duplexPhase === 'thinking' || duplexPhase === 'speaking'}></span>
+						<span class="duplex-phase-label">{duplexPhaseLabel[duplexPhase]}</span>
+					</div>
+				{/if}
+			{:else if isTranscribing}
+				<button type="button" class="mic-btn recording" disabled aria-label="Transcribing">
 					<Icon name="loader" size={20} />
 				</button>
 				<div class="transcribing-label">Transcribing...</div>
@@ -152,6 +196,19 @@
 				</span>
 				<span class="btn-shine"></span>
 			</button>
+			<!-- Duplex toggle button (always visible when STT provider is whisper-local) -->
+			{#if onToggleDuplex}
+				<button
+					type="button"
+					class="duplex-toggle-btn"
+					class:active={isDuplexActive}
+					onclick={onToggleDuplex}
+					aria-label={isDuplexActive ? 'Stop voice conversation' : 'Start voice conversation (duplex)'}
+					title={isDuplexActive ? 'Stop voice conversation' : 'Voice conversation mode'}
+				>
+					<Icon name="headset" size={16} />
+				</button>
+			{/if}
 		</div>
 	</form>
 </div>
@@ -617,5 +674,133 @@
 			width: fit-content;
 			max-width: calc(100vw - 1.5rem);
 		}
+	}
+
+	/* ── Duplex mode styles ─────────────────────────────────────────────────── */
+
+	.input-wrapper.duplex-active {
+		border-color: rgba(16, 185, 129, 0.4);
+		box-shadow:
+			0 0 0 1px rgba(16, 185, 129, 0.2),
+			0 0 0 4px rgba(16, 185, 129, 0.08),
+			0 4px 20px rgba(0, 0, 0, 0.08),
+			0 0 30px rgba(16, 185, 129, 0.12),
+			inset 0 1px 0 rgba(255, 255, 255, 1);
+	}
+
+	:global(.dark) .input-wrapper.duplex-active {
+		box-shadow:
+			0 0 0 1px rgba(16, 185, 129, 0.3),
+			0 0 0 4px rgba(16, 185, 129, 0.1),
+			0 4px 20px rgba(0, 0, 0, 0.3),
+			0 0 30px rgba(16, 185, 129, 0.15),
+			inset 0 1px 0 rgba(255, 255, 255, 0.08);
+	}
+
+	.mic-btn.duplex-btn {
+		background: linear-gradient(180deg, #6ee7b7 0%, #34d399 40%, #10b981 100%);
+		color: white;
+		border-color: rgba(0, 0, 0, 0.1);
+		box-shadow:
+			0 4px 12px rgba(16, 185, 129, 0.4),
+			inset 0 1px 0 rgba(255, 255, 255, 0.35);
+	}
+
+	.mic-btn.duplex-btn.duplex-listening {
+		animation: duplex-breathe 2.5s ease-in-out infinite;
+	}
+
+	.mic-btn.duplex-btn.duplex-recording {
+		background: linear-gradient(180deg, #66d9ff 0%, #01B2FF 70%, #0099dd 100%);
+		box-shadow:
+			0 4px 16px rgba(1, 178, 255, 0.5),
+			inset 0 1px 0 rgba(255, 255, 255, 0.4);
+		animation: recording-pulse 1.5s ease-in-out infinite;
+	}
+
+	.mic-btn.duplex-btn.duplex-speaking {
+		background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+		box-shadow:
+			0 4px 12px rgba(245, 158, 11, 0.45),
+			inset 0 1px 0 rgba(255, 255, 255, 0.35);
+		animation: duplex-breathe 1s ease-in-out infinite;
+	}
+
+	@keyframes duplex-breathe {
+		0%, 100% { opacity: 1; transform: scale(1); }
+		50% { opacity: 0.85; transform: scale(0.97); }
+	}
+
+	.duplex-status {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0 0.25rem;
+	}
+
+	.duplex-phase-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: #10b981;
+		flex-shrink: 0;
+	}
+
+	.duplex-phase-dot.pulse {
+		animation: dot-pulse 1.5s ease-in-out infinite;
+	}
+
+	@keyframes dot-pulse {
+		0%, 100% { opacity: 1; transform: scale(1); }
+		50% { opacity: 0.5; transform: scale(0.75); }
+	}
+
+	.duplex-phase-label {
+		font-size: 0.875rem;
+		color: var(--text-secondary);
+		font-style: italic;
+	}
+
+	/* Small headset toggle button next to send */
+	.duplex-toggle-btn {
+		width: 32px;
+		height: 32px;
+		border: none;
+		border-radius: 50%;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s ease;
+		flex-shrink: 0;
+		background: linear-gradient(180deg, #f0f0f2 0%, #e4e4e6 100%);
+		color: var(--text-tertiary);
+		border: 1px solid rgba(0, 0, 0, 0.07);
+		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+	}
+
+	:global(.dark) .duplex-toggle-btn {
+		background: linear-gradient(180deg, #2e2e32 0%, #262628 100%);
+		border-color: rgba(255, 255, 255, 0.08);
+		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+	}
+
+	.duplex-toggle-btn:hover {
+		color: #10b981;
+		transform: translateY(-1px);
+		box-shadow: 0 3px 8px rgba(16, 185, 129, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+	}
+
+	.duplex-toggle-btn.active {
+		background: linear-gradient(180deg, #6ee7b7 0%, #34d399 40%, #10b981 100%);
+		color: white;
+		border-color: rgba(0, 0, 0, 0.1);
+		box-shadow: 0 3px 10px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+	}
+
+	.duplex-toggle-btn.active:hover {
+		background: linear-gradient(180deg, #86efac 0%, #4ade80 40%, #22c55e 100%);
+		transform: translateY(-1px);
 	}
 </style>
