@@ -56,6 +56,8 @@ export interface ProviderConfig {
 	speed?: number;
 	pitch?: number;
 	volume?: number;
+	/** For meta-configs (e.g. 'stt-config'): the selected provider id */
+	activeProvider?: string;
 	cachedModels?: Array<{ id: string; name: string }>;
 	modelsFetchedAt?: number;
 }

@@ -4,15 +4,17 @@
 	import {
 		LLM_PROVIDERS,
 		TTS_PROVIDERS,
+		STT_PROVIDERS,
 		getLLMProvider,
 		getTTSProvider,
+		getSTTProvider,
 		type ProviderMetadata
 	} from '$lib/services/providers/registry';
 	import ProviderIcon from '$lib/components/icons/ProviderIcons.svelte';
 	import { Icon } from '$lib/components/ui';
 
 	interface Props {
-		type: 'llm' | 'tts';
+		type: 'llm' | 'tts' | 'stt';
 		value: string | null | undefined;
 		onSelect: (providerId: string) => void;
 		placeholder?: string;
@@ -20,8 +22,8 @@
 
 	let { type, value, onSelect, placeholder = 'Select provider...' }: Props = $props();
 
-	const providers = $derived(type === 'llm' ? LLM_PROVIDERS : TTS_PROVIDERS);
-	const getProvider = $derived(type === 'llm' ? getLLMProvider : getTTSProvider);
+	const providers = $derived(type === 'llm' ? LLM_PROVIDERS : type === 'tts' ? TTS_PROVIDERS : STT_PROVIDERS);
+	const getProvider = $derived(type === 'llm' ? getLLMProvider : type === 'tts' ? getTTSProvider : getSTTProvider);
 	const selectedProvider = $derived(value ? getProvider(value) : null);
 
 	// Group providers by category for LLM
@@ -40,7 +42,12 @@
 		{ id: 'generic', label: 'Generic', providers: ['openai-compatible-tts', 'player2-tts'] }
 	];
 
-	const categories = $derived(type === 'llm' ? llmCategories : ttsCategories);
+	// Group providers by category for STT
+	const sttCategories = [
+		{ id: 'all', label: 'Voice Input', providers: ['web-speech', 'whisper-local', 'groq-stt'] }
+	];
+
+	const categories = $derived(type === 'llm' ? llmCategories : type === 'tts' ? ttsCategories : sttCategories);
 
 	function isConfigured(providerId: string): boolean {
 		const provider = getProvider(providerId);

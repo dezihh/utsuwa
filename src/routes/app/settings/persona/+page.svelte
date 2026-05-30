@@ -909,19 +909,46 @@
 								<Icon name="mic" size={14} />
 								<span>Voice Input (STT)</span>
 							</div>
-							<p class="stt-hint">Higher quality voice input via Groq's Whisper API. Required on desktop, optional in browser (falls back to Web Speech API).</p>
-							<div class="api-key-row">
-								<input
-									type="password"
-									class="api-key-input"
-									placeholder="Groq API Key"
-									value={settingsStore.getProviderConfig('groq-stt').apiKey ?? ''}
-									oninput={(e) => {
-										settingsStore.setProviderConfig('groq-stt', { apiKey: e.currentTarget.value });
-										settingsStore.markProviderAdded('groq-stt');
-									}}
-								/>
-							</div>
+
+							<ProviderDropdown
+								type="stt"
+								value={settingsStore.getProviderConfig('stt-config').activeProvider ?? null}
+								onSelect={(id) => settingsStore.setProviderConfig('stt-config', { activeProvider: id })}
+								placeholder="Select STT provider..."
+							/>
+
+							{#if settingsStore.getProviderConfig('stt-config').activeProvider === 'groq-stt'}
+								<p class="stt-hint">Cloud-based Whisper via Groq. Requires an API key.</p>
+								<div class="api-key-row">
+									<input
+										type="password"
+										class="api-key-input"
+										placeholder="Groq API Key"
+										value={settingsStore.getProviderConfig('groq-stt').apiKey ?? ''}
+										oninput={(e) => {
+											settingsStore.setProviderConfig('groq-stt', { apiKey: e.currentTarget.value });
+											settingsStore.markProviderAdded('groq-stt');
+										}}
+									/>
+								</div>
+							{:else if settingsStore.getProviderConfig('stt-config').activeProvider === 'whisper-local'}
+								<p class="stt-hint">Local faster-whisper server (Docker). No API key required. Adjust URL only if not using default port 8000.</p>
+								<div class="api-key-row">
+									<input
+										type="text"
+										class="api-key-input"
+										placeholder="http://localhost:8000/v1"
+										value={settingsStore.getProviderConfig('whisper-local').baseUrl ?? ''}
+										oninput={(e) => {
+											settingsStore.setProviderConfig('whisper-local', { baseUrl: e.currentTarget.value });
+										}}
+									/>
+								</div>
+							{:else if settingsStore.getProviderConfig('stt-config').activeProvider === 'web-speech'}
+								<p class="stt-hint">Browser built-in speech recognition. Works in Chrome/Edge without any API key. Not available in Tauri desktop builds.</p>
+							{:else}
+								<p class="stt-hint">Select a voice input provider above. Local Whisper uses your Docker service on port 8000 — no API key needed.</p>
+							{/if}
 						</div>
 					</div>
 				{/if}
@@ -2701,7 +2728,7 @@
 	.stt-hint {
 		font-size: 0.75rem;
 		color: var(--text-tertiary);
-		margin: 0;
+		margin: 0.25rem 0 0;
 		line-height: 1.4;
 	}
 

@@ -214,6 +214,12 @@
 			body: '<path fill="currentColor" d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3zm7 10a7 7 0 01-14 0H3a9 9 0 0018 0h-2zm-7 7a7 7 0 01-7-7H3a9 9 0 009 9v-2z"/>'
 		},
 
+		// Local Whisper STT
+		'whisper-local': {
+			body: '<path fill="currentColor" d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3zm-1 13.93V18h-2v2h6v-2h-2v-2.07A8 8 0 0020 8h-2a6 6 0 01-12 0H4a8 8 0 007 7.93zM9 5a3 3 0 016 0v7a3 3 0 01-6 0V5z"/>',
+			color: '#0EA5E9'
+		},
+
 		// Index TTS - custom icon
 		'index-tts': {
 			body: '<path fill="currentColor" d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h16v2H4v-2zm0 4h10v2H4v-2zm0 4h16v2H4v-2z"/>',

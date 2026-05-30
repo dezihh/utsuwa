@@ -174,9 +174,26 @@ export const TTS_PROVIDERS: ProviderMetadata[] = [
 
 export const STT_PROVIDERS: ProviderMetadata[] = [
 	{
+		id: 'web-speech',
+		name: 'Browser (Web Speech)',
+		description: 'Free in-browser speech recognition. Works in Chrome/Edge; not available in Tauri.',
+		category: 'stt',
+		icon: '🌐',
+		requiresApiKey: false
+	},
+	{
+		id: 'whisper-local',
+		name: 'Local Whisper',
+		description: 'Local faster-whisper server (Docker). High quality, no API key required.',
+		category: 'stt',
+		icon: '🎙️',
+		requiresApiKey: false,
+		defaultBaseUrl: 'http://localhost:8000/v1'
+	},
+	{
 		id: 'groq-stt',
-		name: 'Groq',
-		description: 'Fast speech-to-text via Whisper',
+		name: 'Groq (Cloud)',
+		description: "Fast cloud-based speech recognition via Groq's Whisper API.",
 		category: 'stt',
 		icon: '🎤',
 		requiresApiKey: true,
@@ -191,4 +208,8 @@ export function getLLMProvider(id: string): ProviderMetadata | undefined {
 
 export function getTTSProvider(id: string): ProviderMetadata | undefined {
 	return TTS_PROVIDERS.find((p) => p.id === id);
+}
+
+export function getSTTProvider(id: string): ProviderMetadata | undefined {
+	return STT_PROVIDERS.find((p) => p.id === id);
 }
