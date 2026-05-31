@@ -77,27 +77,67 @@
 		setPhase('transcribing');
 		armWatchdog();
 
-		const config = settingsStore.getProviderConfig('whisper-local');
-		const baseUrl = (config.baseUrl as string | undefined) || 'http://localhost:8000/v1';
 		const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('ogg') ? 'ogg' : 'm4a';
 
-		const formData = new FormData();
-		formData.append('file', blob, `duplex.${ext}`);
-		formData.append('model', 'Systran/faster-whisper-large-v3');
-		formData.append('baseUrl', baseUrl);
+		// Resolve active STT provider (mirrors stt.svelte.ts priority logic)
+		const sttConfigProvider = settingsStore.getProviderConfig('stt-config').activeProvider as string | undefined;
+		const groqKey = settingsStore.getProviderConfig('groq-stt').apiKey;
+		const whisperConfig = settingsStore.getProviderConfig('whisper-local');
+
+		let activeProvider: 'whisper-local' | 'groq-stt';
+		if (sttConfigProvider === 'whisper-local') {
+			activeProvider = 'whisper-local';
+		} else if (sttConfigProvider === 'groq-stt' && groqKey) {
+			activeProvider = 'groq-stt';
+		} else if (groqKey) {
+			// Legacy auto-detect
+			activeProvider = 'groq-stt';
+		} else {
+			activeProvider = 'whisper-local';
+		}
 
 		try {
-			const res = await fetch('/api/stt', { method: 'POST', body: formData });
-			clearWatchdog();
+			let text: string | undefined;
 
-			if (!res.ok) {
-				console.error('[Duplex] STT error', res.status);
-				setPhase('listening');
-				return;
+			if (activeProvider === 'groq-stt' && groqKey) {
+				// Direct Groq API call (browser can reach it)
+				const groqBaseUrl = (settingsStore.getProviderConfig('groq-stt').baseUrl as string | undefined)?.replace(/\/$/, '') ?? 'https://api.groq.com/openai/v1';
+				const formData = new FormData();
+				formData.append('file', blob, `duplex.${ext}`);
+				formData.append('model', 'whisper-large-v3-turbo');
+				formData.append('response_format', 'json');
+
+				const res = await fetch(`${groqBaseUrl}/audio/transcriptions`, {
+					method: 'POST',
+					headers: { Authorization: `Bearer ${groqKey}` },
+					body: formData
+				});
+				clearWatchdog();
+				if (!res.ok) {
+					console.error('[Duplex] Groq STT error', res.status, await res.text());
+					setPhase('listening');
+					return;
+				}
+				const data = (await res.json()) as { text?: string };
+				text = data.text?.trim();
+			} else {
+				// Whisper-local via server proxy
+				const baseUrl = (whisperConfig.baseUrl as string | undefined) || 'http://localhost:8000/v1';
+				const formData = new FormData();
+				formData.append('file', blob, `duplex.${ext}`);
+				formData.append('model', (whisperConfig as { model?: string }).model || 'Systran/faster-whisper-large-v3');
+				formData.append('baseUrl', baseUrl);
+
+				const res = await fetch('/api/stt', { method: 'POST', body: formData });
+				clearWatchdog();
+				if (!res.ok) {
+					console.error('[Duplex] Whisper STT error', res.status);
+					setPhase('listening');
+					return;
+				}
+				const data = (await res.json()) as { text?: string };
+				text = data.text?.trim();
 			}
-
-			const data = (await res.json()) as { text?: string };
-			const text = data.text?.trim();
 
 			if (!text) {
 				// Whisper transcribed silence / noise → show toast
