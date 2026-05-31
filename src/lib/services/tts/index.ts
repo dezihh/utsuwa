@@ -34,6 +34,20 @@ export function getSharedAudioContext(): AudioContext {
 	return sharedAudioContext;
 }
 
+/**
+ * Unlock the AudioContext for iOS/iPadOS Safari.
+ * Must be called from a user gesture handler (tap/click).
+ * Safe to call multiple times — no-op after first unlock.
+ */
+export function unlockAudioContext(): void {
+	const ctx = getSharedAudioContext();
+	if (ctx.state === 'suspended') {
+		ctx.resume().catch(() => {
+			// Silently ignore — may already be running
+		});
+	}
+}
+
 // Provider base URLs
 export const TTS_BASE_URLS: Partial<Record<TTSProvider, string>> = {
 	elevenlabs: 'https://api.elevenlabs.io/v1/',

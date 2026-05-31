@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Icon } from '$lib/components/ui';
 	import { sttStore } from '$lib/stores/stt.svelte';
+	import { unlockAudioContext } from '$lib/services/tts/index';
 	import AudioVisualizer from './AudioVisualizer.svelte';
 	import type { DuplexPhase } from '$lib/stores/duplex.svelte';
 
@@ -41,6 +42,7 @@
 
 	function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
+		unlockAudioContext();
 		if (inputValue.trim() && !disabled) {
 			onSend(inputValue.trim());
 			inputValue = '';
@@ -53,6 +55,7 @@
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
+			unlockAudioContext();
 			if (inputValue.trim() && !disabled) {
 				onSend(inputValue.trim());
 				inputValue = '';
@@ -89,6 +92,7 @@
 	}
 
 	function handleSendClick() {
+		unlockAudioContext();
 		if (isListening && displayTranscript.trim()) {
 			const text = displayTranscript.trim();
 			sttStore.cancel();
