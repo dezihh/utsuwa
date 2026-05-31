@@ -92,6 +92,9 @@ export const BACKGROUND_PRESETS: BackgroundPreset[] = [
 ];
 
 const STORAGE_KEY = 'utsuwa-bg-v1';
+/** localforage instance for background images too large for localStorage */
+const BG_FORAGE_NAME = 'utsuwa-bg';
+const BG_CUSTOM_URL_KEY = 'custom-url';
 
 function loadSaved(): { presetId: string; customUrl: string } {
 	if (typeof window === 'undefined') return { presetId: 'dot-grid', customUrl: '' };
@@ -109,16 +112,31 @@ const saved = loadSaved();
 let activePresetId = $state(saved.presetId);
 let customUrl = $state(saved.customUrl);
 
+// If there's a localforage fallback for a large background image, load it asynchronously
+if (typeof window !== 'undefined' && !customUrl && activePresetId === 'custom') {
+	import('localforage').then(({ default: lf }) => {
+		const store = lf.createInstance({ name: BG_FORAGE_NAME, storeName: 'assets' });
+		store.getItem<string>(BG_CUSTOM_URL_KEY).then((url) => {
+			if (url) customUrl = url;
+		});
+	});
+}
+
 function persist() {
 	if (typeof window !== 'undefined') {
 		try {
-			// data: URLs can be large — store separately to avoid JSON size issues
-			const urlToStore = customUrl.startsWith('data:') ? customUrl : customUrl;
-			localStorage.setItem(STORAGE_KEY, JSON.stringify({ presetId: activePresetId, customUrl: urlToStore }));
-		} catch (e) {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify({ presetId: activePresetId, customUrl }));
+		} catch {
 			// If localStorage is full (e.g. large base64 image), store without the image
 			try {
 				localStorage.setItem(STORAGE_KEY, JSON.stringify({ presetId: activePresetId, customUrl: '' }));
+				// Save image to localforage as fallback
+				if (customUrl.startsWith('data:')) {
+					import('localforage').then(({ default: lf }) => {
+						const store = lf.createInstance({ name: BG_FORAGE_NAME, storeName: 'assets' });
+						store.setItem(BG_CUSTOM_URL_KEY, customUrl);
+					});
+				}
 			} catch {}
 		}
 	}

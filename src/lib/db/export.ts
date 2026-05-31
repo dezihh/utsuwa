@@ -2,6 +2,7 @@ import { browser } from '$app/environment';
 import localforage from 'localforage';
 import { db } from '$lib/db';
 import { characterStore } from '$lib/stores/character.svelte';
+import { backgroundStore } from '$lib/stores/background.svelte';
 import type {
 	CharacterState,
 	MoodState,
@@ -25,6 +26,16 @@ const SETTINGS_KEYS = [
 const vrmStorage = browser
 	? localforage.createInstance({ name: 'utsuwa-vrm', storeName: 'models' })
 	: null;
+
+// Localforage instance for large background images that don't fit in localStorage
+const bgStorage = browser
+	? localforage.createInstance({ name: 'utsuwa-bg', storeName: 'assets' })
+	: null;
+
+/** localStorage key used by backgroundStore */
+const BG_STORAGE_KEY = 'utsuwa-bg-v1';
+/** localforage key for background images too large for localStorage */
+const BG_CUSTOM_URL_KEY = 'custom-url';
 
 export interface ExportedVrmModel {
 	id: string;
@@ -141,6 +152,14 @@ async function collectSettings(): Promise<ExportedSettings> {
 		for (const key of SETTINGS_KEYS) {
 			const val = localStorage.getItem(key);
 			if (val !== null) localStorage_[key] = val;
+		}
+
+		// Always export background from in-memory store — the customUrl data: URL may be
+		// too large for localStorage so persist() silently drops it; the store keeps it in RAM.
+		const bgCustomUrl = backgroundStore.customUrl;
+		const bgPresetId = backgroundStore.activePresetId;
+		if (bgPresetId || bgCustomUrl) {
+			localStorage_[BG_STORAGE_KEY] = JSON.stringify({ presetId: bgPresetId, customUrl: bgCustomUrl });
 		}
 
 		// All utsuwa-module-* keys
@@ -372,7 +391,25 @@ async function restoreSettings(settings: ExportedSettings, mode: 'merge' | 'repl
 	// Restore fixed localStorage keys
 	for (const [key, value] of Object.entries(settings.localStorage)) {
 		if (mode === 'merge' && localStorage.getItem(key) !== null) continue;
-		localStorage.setItem(key, value);
+		if (key === BG_STORAGE_KEY) {
+			// Background may contain a large data: URL — handle gracefully
+			try {
+				localStorage.setItem(key, value);
+			} catch {
+				// localStorage quota exceeded: save customUrl to localforage, store preset only
+				try {
+					const parsed = JSON.parse(value) as { presetId?: string; customUrl?: string };
+					if (parsed.customUrl && bgStorage) {
+						await bgStorage.setItem(BG_CUSTOM_URL_KEY, parsed.customUrl);
+					}
+					localStorage.setItem(key, JSON.stringify({ presetId: parsed.presetId ?? 'dot-grid', customUrl: '' }));
+				} catch {
+					// ignore
+				}
+			}
+		} else {
+			localStorage.setItem(key, value);
+		}
 	}
 
 	// Restore module settings
@@ -522,5 +559,10 @@ export async function clearAllData(): Promise<void> {
 	// Clear VRM storage
 	if (vrmStorage) {
 		await vrmStorage.clear();
+	}
+
+	// Clear large background image fallback from localforage
+	if (bgStorage) {
+		await bgStorage.clear();
 	}
 }
