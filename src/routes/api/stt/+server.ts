@@ -1,8 +1,15 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-const DEFAULT_WHISPER_BASE_URL = 'http://localhost:8000/v1';
+const DEFAULT_WHISPER_BASE_URL = 'http://127.0.0.1:8000/v1';
 const DEFAULT_MODEL = 'Systran/faster-whisper-large-v3';
+
+function normalizeBaseUrl(value: FormDataEntryValue | null): string {
+	if (typeof value !== 'string') return DEFAULT_WHISPER_BASE_URL;
+
+	const trimmed = value.trim().replace(/\/$/, '');
+	return trimmed || DEFAULT_WHISPER_BASE_URL;
+}
 
 export const POST: RequestHandler = async ({ request }) => {
 	let formData: FormData;
@@ -17,15 +24,23 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'No audio file provided' }, { status: 400 });
 	}
 
-	const baseUrl = (formData.get('baseUrl') as string | null)?.replace(/\/$/, '') ?? DEFAULT_WHISPER_BASE_URL;
-	const model = (formData.get('model') as string | null) ?? DEFAULT_MODEL;
+	const baseUrl = normalizeBaseUrl(formData.get('baseUrl'));
+	const model = ((formData.get('model') as string | null) ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
 
 	const whisperForm = new FormData();
 	whisperForm.append('file', audioFile);
 	whisperForm.append('model', model);
 	whisperForm.append('response_format', 'json');
 
-	const endpoint = `${baseUrl}/audio/transcriptions`;
+	let endpoint: string;
+	try {
+		endpoint = new URL('audio/transcriptions', `${baseUrl}/`).toString();
+	} catch {
+		return json(
+			{ error: `Invalid Whisper base URL: ${baseUrl}` },
+			{ status: 400 }
+		);
+	}
 
 	let response: Response;
 	try {

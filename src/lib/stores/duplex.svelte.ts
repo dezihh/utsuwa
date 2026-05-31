@@ -122,7 +122,7 @@
 				text = data.text?.trim();
 			} else {
 				// Whisper-local via server proxy
-				const baseUrl = (whisperConfig.baseUrl as string | undefined) || 'http://localhost:8000/v1';
+				const baseUrl = ((whisperConfig.baseUrl as string | undefined)?.trim() || 'http://127.0.0.1:8000/v1').replace(/\/$/, '');
 				const formData = new FormData();
 				formData.append('file', blob, `duplex.${ext}`);
 				formData.append('model', (whisperConfig as { model?: string }).model || 'Systran/faster-whisper-large-v3');

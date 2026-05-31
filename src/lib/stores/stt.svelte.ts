@@ -45,7 +45,7 @@ function createSttStore() {
 		if (provider === 'whisper-local') {
 			const config = settingsStore.getProviderConfig('whisper-local');
 			whisperLocalSttService.configure({
-				baseUrl: config.baseUrl || 'http://localhost:8000/v1'
+				baseUrl: config.baseUrl?.trim() || 'http://127.0.0.1:8000/v1'
 			});
 
 			const started = await whisperLocalSttService.startListening({
