@@ -151,6 +151,8 @@ class VadService {
 		this.capturing = false;
 		this.calibrating = false;
 		this.calibrationSamples = [];
+		this.calibratedBase = this.speechThreshold;
+		this.effectiveThreshold = this.speechThreshold;
 		this.stopAmplitudeTick();
 		this.stopMediaRecorder(false);
 		this.releaseStream();
@@ -248,10 +250,15 @@ class VadService {
 					// Compute 90th-percentile of ambient samples as noise floor
 					const sorted = [...this.calibrationSamples].sort((a, b) => a - b);
 					const p90 = sorted[Math.floor(sorted.length * 0.9)] ?? 0;
-					// Base threshold = noise_floor × 3, but never below the user-set minimum
-					this.calibratedBase = Math.max(this.speechThreshold, p90 * 3);
+					// Base threshold = noise_floor × 3, but clamped between user-set minimum and a
+					// reasonable max (0.08) so speech can always be detected even in noisy rooms.
+					const MAX_CALIBRATED_BASE = 0.08;
+					this.calibratedBase = Math.min(
+						MAX_CALIBRATED_BASE,
+						Math.max(this.speechThreshold, p90 * 3)
+					);
 					this.effectiveThreshold = this.calibratedBase * this.sensitivityMultiplier;
-					console.debug(`[VAD] Calibrated: noise floor p90=${p90.toFixed(4)}, base=${this.calibratedBase.toFixed(4)}, effective=${this.effectiveThreshold.toFixed(4)}`);
+					console.debug(`[VAD] Calibrated: noise floor p90=${p90.toFixed(4)}, base=${this.calibratedBase.toFixed(4)}, effective=${this.effectiveThreshold.toFixed(4)} (cap=${MAX_CALIBRATED_BASE})`);
 					this.calibrationSamples = [];
 				}
 				this.animFrameId = requestAnimationFrame(tick);

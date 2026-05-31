@@ -188,6 +188,7 @@
 					}
 				},
 				onSegmentReady: (blob, mimeType) => {
+					console.debug(`[Duplex] Segment ready: ${blob.size} bytes, phase=${duplexPhase}, active=${isDuplexActive}`);
 					if (!isDuplexActive || duplexPhase === 'thinking') return;
 					transcribeSegment(blob, mimeType);
 				},
