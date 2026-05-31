@@ -224,7 +224,7 @@
 	.content {
 		flex: 1;
 		padding: 2rem;
-		overflow: hidden;
+		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
 		position: relative;
@@ -368,6 +368,7 @@
 			padding: 0.75rem;
 			flex: 1;
 			min-height: 0;
+			overflow-y: auto;
 			padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0));
 		}
 
