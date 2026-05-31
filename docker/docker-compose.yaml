@@ -9,6 +9,8 @@ services:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"
       PNPM_HOME: /pnpm
+      UTSUWA_PROFILE_SYNC_ENABLED: "true"
+      UTSUWA_DATA_DIR: "/tmp/utsuwa-data"
     volumes:
       - ..:/app
       - utsuwa-node-modules:/app/node_modules

@@ -113,7 +113,7 @@ let activePresetId = $state(saved.presetId);
 let customUrl = $state(saved.customUrl);
 
 // If there's a localforage fallback for a large background image, load it asynchronously
-if (typeof window !== 'undefined' && !customUrl && activePresetId === 'custom') {
+if (typeof window !== 'undefined' && !saved.customUrl && saved.presetId === 'custom') {
 	import('localforage').then(({ default: lf }) => {
 		const store = lf.createInstance({ name: BG_FORAGE_NAME, storeName: 'assets' });
 		store.getItem<string>(BG_CUSTOM_URL_KEY).then((url) => {
