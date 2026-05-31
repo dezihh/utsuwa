@@ -12,6 +12,16 @@
 		type SaveFilePreview,
 		type LegacySaveFile
 	} from '$lib/db/export';
+	import {
+		getSyncStatus,
+		pushProfile,
+		pullProfile,
+		rememberPin,
+		getSessionPin,
+		clearSessionPin,
+		type SyncStatus
+	} from '$lib/services/profile-sync';
+	import { onMount } from 'svelte';
 
 	let isExporting = $state(false);
 	let isImporting = $state(false);
@@ -25,6 +35,61 @@
 	let importSuccess = $state<{ imported: number; skipped: number } | null>(null);
 
 	let fileInput: HTMLInputElement;
+
+	// Cloud sync state
+	let syncStatus = $state<SyncStatus | null>(null);
+	let syncPin = $state('');
+	let syncNewPin = $state('');
+	let syncError = $state<string | null>(null);
+	let syncSuccess = $state<string | null>(null);
+	let isSyncing = $state(false);
+	let showPinSetup = $state(false);
+	let showSyncPull = $state(false);
+
+	onMount(async () => {
+		syncStatus = await getSyncStatus();
+		if (syncStatus.enabled) {
+			syncPin = getSessionPin();
+		}
+	});
+
+	async function handlePush() {
+		syncError = null;
+		syncSuccess = null;
+		isSyncing = true;
+		try {
+			const result = await pushProfile(syncPin, showPinSetup ? syncNewPin : undefined);
+			if (!result.ok) {
+				syncError = result.error ?? 'Save failed';
+			} else {
+				rememberPin(syncPin);
+				syncSuccess = 'Profile saved to server';
+				showPinSetup = false;
+				syncNewPin = '';
+				syncStatus = await getSyncStatus();
+			}
+		} finally {
+			isSyncing = false;
+		}
+	}
+
+	async function handlePull() {
+		syncError = null;
+		syncSuccess = null;
+		isSyncing = true;
+		try {
+			const result = await pullProfile(syncPin, 'replace');
+			if (!result.ok) {
+				syncError = result.error ?? 'Load failed';
+			} else {
+				rememberPin(syncPin);
+				syncSuccess = `Loaded ${result.imported} records — reloading…`;
+				setTimeout(() => window.location.reload(), 1500);
+			}
+		} finally {
+			isSyncing = false;
+		}
+	}
 
 	async function handleExport() {
 		isExporting = true;
@@ -165,7 +230,7 @@
 			</div>
 			<p class="action-description">
 				Download all your data as a JSON file. Includes character states, memories, conversation
-				history, and milestones.
+				history, milestones, settings, and VRM models.
 			</p>
 			<Button onclick={handleExport} disabled={isExporting}>
 				{#snippet children()}
@@ -234,6 +299,15 @@
 								{importPreview.counts.facts} facts, {importPreview.counts.conversationTurns} messages
 							</span>
 						</div>
+						{#if importPreview.hasSettings}
+							<div class="preview-row">
+								<span class="label">Settings:</span>
+								<span class="value">
+									✓ Included
+									{#if importPreview.counts.vrmModels}({importPreview.counts.vrmModels} VRM model{importPreview.counts.vrmModels !== 1 ? 's' : ''}){/if}
+								</span>
+							</div>
+						{/if}
 					</div>
 
 					<div class="import-mode">
@@ -306,6 +380,95 @@
 				</Button>
 			{/if}
 		</div>
+
+		<!-- Cloud Sync (only shown when server-side sync is enabled) -->
+		{#if syncStatus?.enabled}
+			<div class="action-card sync-card">
+				<div class="action-header">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<polyline points="23 4 23 10 17 10"></polyline>
+						<polyline points="1 20 1 14 7 14"></polyline>
+						<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+					</svg>
+					<h3>Cloud Sync</h3>
+				</div>
+				<p class="action-description">
+					Save your profile to this server and restore it on any device in the network.
+					{#if !syncStatus.pinSet}
+						<strong>No PIN set yet</strong> — set one below to protect your profile.
+					{/if}
+				</p>
+
+				{#if syncError}
+					<div class="error-message">
+						<Icon name="warning" size={16} />
+						{syncError}
+					</div>
+				{/if}
+
+				{#if syncSuccess}
+					<div class="success-message">
+						<Icon name="check" size={16} />
+						{syncSuccess}
+					</div>
+				{/if}
+
+				<div class="sync-pin-row">
+					<input
+						type="password"
+						placeholder={syncStatus.pinSet ? 'Enter PIN' : 'Set new PIN'}
+						bind:value={syncPin}
+						class="pin-input"
+					/>
+					{#if syncStatus.pinSet}
+						<button class="change-pin-link" onclick={() => (showPinSetup = !showPinSetup)}>
+							{showPinSetup ? 'Cancel' : 'Change PIN'}
+						</button>
+					{/if}
+				</div>
+
+				{#if showPinSetup || !syncStatus.pinSet}
+					<input
+						type="password"
+						placeholder="New PIN"
+						bind:value={syncNewPin}
+						class="pin-input"
+						style="margin-top: 0.5rem;"
+					/>
+				{/if}
+
+				<div class="sync-actions">
+					<Button onclick={handlePush} disabled={isSyncing || !syncPin}>
+						{#snippet children()}
+							{#if isSyncing}
+								Saving…
+							{:else}
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+									<polyline points="23 4 23 10 17 10"></polyline>
+									<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
+								</svg>
+								Save to Server
+							{/if}
+						{/snippet}
+					</Button>
+					{#if syncStatus.profileExists}
+						<Button variant="secondary" onclick={handlePull} disabled={isSyncing || !syncPin}>
+							{#snippet children()}
+								{#if isSyncing}
+									Loading…
+								{:else}
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+										<polyline points="1 20 1 14 7 14"></polyline>
+										<path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path>
+									</svg>
+									Load from Server
+								{/if}
+							{/snippet}
+						</Button>
+					{/if}
+				</div>
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -609,5 +772,58 @@
 	.confirm-actions {
 		display: flex;
 		gap: 0.75rem;
+	}
+
+	/* Cloud Sync card */
+	.sync-card {
+		border-color: rgba(1, 178, 255, 0.25);
+	}
+
+	.sync-card .action-header {
+		color: #01B2FF;
+	}
+
+	.sync-pin-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.pin-input {
+		flex: 1;
+		padding: 0.6rem 0.875rem;
+		font-size: 0.875rem;
+		border: 1px solid rgba(0, 0, 0, 0.12);
+		border-radius: 10px;
+		background: linear-gradient(180deg, #f8f8f8 0%, #f0f0f0 100%);
+		color: var(--text-primary);
+		outline: none;
+		transition: border-color 0.15s;
+	}
+
+	:global(.dark) .pin-input {
+		background: linear-gradient(180deg, #1a1a1a 0%, #141414 100%);
+		border-color: rgba(255, 255, 255, 0.1);
+	}
+
+	.pin-input:focus {
+		border-color: rgba(1, 178, 255, 0.5);
+	}
+
+	.change-pin-link {
+		background: none;
+		border: none;
+		color: #01B2FF;
+		cursor: pointer;
+		font-size: 0.8rem;
+		padding: 0;
+		white-space: nowrap;
+	}
+
+	.sync-actions {
+		display: flex;
+		gap: 0.75rem;
+		flex-wrap: wrap;
 	}
 </style>

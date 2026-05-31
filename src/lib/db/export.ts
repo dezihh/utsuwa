@@ -1,3 +1,5 @@
+import { browser } from '$app/environment';
+import localforage from 'localforage';
 import { db } from '$lib/db';
 import { characterStore } from '$lib/stores/character.svelte';
 import type {
@@ -9,19 +11,51 @@ import type {
 import type { Fact, SessionSummary, ConversationTurn } from '$lib/types/memory';
 import type { CompletedEventRecord } from '$lib/types/events';
 
-export const SAVE_FILE_VERSION = '2.0';
+export const SAVE_FILE_VERSION = '3.0';
 
-// V2 SaveFile - single companion architecture
+// localStorage keys that should be included in export/import
+const SETTINGS_KEYS = [
+	'utsuwa-settings',
+	'utsuwa-mcp-v1',
+	'utsuwa-bg-v1',
+	'utsuwa-overlay-position'
+] as const;
+
+// Localforage instance for VRM storage (mirrors vrm.svelte.ts)
+const vrmStorage = browser
+	? localforage.createInstance({ name: 'utsuwa-vrm', storeName: 'models' })
+	: null;
+
+export interface ExportedVrmModel {
+	id: string;
+	name: string;
+	blob: string; // base64-encoded binary
+	mimeType: string;
+	previewUrl?: string; // base64 thumbnail
+}
+
+export interface ExportedSettings {
+	/** Raw localStorage values (JSON strings) for utsuwa-* keys */
+	localStorage: Record<string, string>;
+	/** All utsuwa-module-* localStorage keys */
+	moduleSettings: Record<string, string>;
+	/** Custom VRM models (non-default), blobs encoded as base64 */
+	vrmModels: ExportedVrmModel[];
+}
+
+// V3 SaveFile - includes settings + VRM models
 export interface SaveFile {
 	version: string;
 	exportedAt: string;
 	appVersion: string;
 	data: {
-		character: CharacterState; // Single unified character (persona + stats)
+		character: CharacterState;
 		facts: Fact[];
 		sessions: SessionSummary[];
 		conversationTurns: ConversationTurn[];
 		completedEvents: CompletedEventRecord[];
+		/** v3+: settings, module configs, VRM models */
+		settings?: ExportedSettings;
 	};
 }
 
@@ -50,8 +84,10 @@ export interface SaveFilePreview {
 		sessions: number;
 		conversationTurns: number;
 		completedEvents: number;
+		vrmModels?: number;
 	};
 	characterName: string;
+	hasSettings: boolean;
 }
 
 export async function exportSave(): Promise<SaveFile> {
@@ -77,6 +113,9 @@ export async function exportSave(): Promise<SaveFile> {
 		({ id: _id, ...rest }) => rest
 	) as CompletedEventRecord[];
 
+	// Collect settings from localStorage
+	const settings = await collectSettings();
+
 	return {
 		version: SAVE_FILE_VERSION,
 		exportedAt: new Date().toISOString(),
@@ -86,9 +125,71 @@ export async function exportSave(): Promise<SaveFile> {
 			facts: cleanFacts,
 			sessions: cleanSessions,
 			conversationTurns: cleanTurns,
-			completedEvents: cleanEvents
+			completedEvents: cleanEvents,
+			settings
 		}
 	};
+}
+
+/** Collect all settings from localStorage and VRM localforage */
+async function collectSettings(): Promise<ExportedSettings> {
+	const localStorage_: Record<string, string> = {};
+	const moduleSettings: Record<string, string> = {};
+
+	if (browser) {
+		// Fixed keys
+		for (const key of SETTINGS_KEYS) {
+			const val = localStorage.getItem(key);
+			if (val !== null) localStorage_[key] = val;
+		}
+
+		// All utsuwa-module-* keys
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key?.startsWith('utsuwa-module-')) {
+				const val = localStorage.getItem(key);
+				if (val !== null) moduleSettings[key] = val;
+			}
+		}
+	}
+
+	// VRM custom models + blobs
+	const vrmModels: ExportedVrmModel[] = [];
+	if (vrmStorage) {
+		try {
+			const modelList = await vrmStorage.getItem<Array<{ id: string; name: string; isDefault?: boolean }>>('model-list');
+			if (modelList) {
+				const customModels = modelList.filter((m) => !m.isDefault);
+				for (const model of customModels) {
+					const blob = await vrmStorage.getItem<Blob>(`model-blob-${model.id}`);
+					const preview = await vrmStorage.getItem<string>(`model-preview-${model.id}`);
+					if (blob) {
+						const base64 = await blobToBase64(blob);
+						vrmModels.push({
+							id: model.id,
+							name: model.name,
+							blob: base64,
+							mimeType: blob.type || 'model/vrm',
+							previewUrl: preview ?? undefined
+						});
+					}
+				}
+			}
+		} catch (e) {
+			console.warn('Failed to export VRM models:', e);
+		}
+	}
+
+	return { localStorage: localStorage_, moduleSettings, vrmModels };
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve((reader.result as string).split(',')[1]);
+		reader.onerror = reject;
+		reader.readAsDataURL(blob);
+	});
 }
 
 export async function importSave(
@@ -98,7 +199,7 @@ export async function importSave(
 	let imported = 0;
 	let skipped = 0;
 
-	const isV2 = saveFile.version.startsWith('2.');
+	const isV2orV3 = saveFile.version.startsWith('2.') || saveFile.version.startsWith('3.');
 
 	if (mode === 'replace') {
 		// Clear all existing data
@@ -111,8 +212,8 @@ export async function importSave(
 		]);
 	}
 
-	if (isV2) {
-		// V2 format - single character
+	if (isV2orV3) {
+		// V2/V3 format - single character
 		const v2File = saveFile as SaveFile;
 
 		if (mode === 'replace') {
@@ -151,6 +252,11 @@ export async function importSave(
 		for (const event of v2File.data.completedEvents) {
 			await db.completedEvents.add(event);
 			imported++;
+		}
+
+		// V3: restore settings
+		if (saveFile.version.startsWith('3.') && v2File.data.settings) {
+			await restoreSettings(v2File.data.settings, mode);
 		}
 	} else {
 		// V1 format - migrate to single character
@@ -244,6 +350,69 @@ export async function importSave(
 	return { imported, skipped };
 }
 
+/** Restore settings from an exported settings block */
+async function restoreSettings(settings: ExportedSettings, mode: 'merge' | 'replace'): Promise<void> {
+	if (!browser) return;
+
+	if (mode === 'replace') {
+		// Clear existing utsuwa-* localStorage keys
+		const keysToRemove: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key?.startsWith('utsuwa-')) keysToRemove.push(key);
+		}
+		keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+		// Clear VRM storage
+		if (vrmStorage) {
+			await vrmStorage.clear();
+		}
+	}
+
+	// Restore fixed localStorage keys
+	for (const [key, value] of Object.entries(settings.localStorage)) {
+		if (mode === 'merge' && localStorage.getItem(key) !== null) continue;
+		localStorage.setItem(key, value);
+	}
+
+	// Restore module settings
+	for (const [key, value] of Object.entries(settings.moduleSettings)) {
+		if (mode === 'merge' && localStorage.getItem(key) !== null) continue;
+		localStorage.setItem(key, value);
+	}
+
+	// Restore VRM models
+	if (vrmStorage && settings.vrmModels.length > 0) {
+		const existingList = await vrmStorage.getItem<Array<{ id: string; name: string; isDefault?: boolean }>>('model-list') ?? [];
+		const existingIds = new Set(existingList.map((m) => m.id));
+
+		const newEntries: Array<{ id: string; name: string; isDefault: boolean }> = [];
+
+		for (const model of settings.vrmModels) {
+			if (mode === 'merge' && existingIds.has(model.id)) continue;
+
+			// Decode base64 blob
+			const binaryStr = atob(model.blob);
+			const bytes = new Uint8Array(binaryStr.length);
+			for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+			const blob = new Blob([bytes], { type: model.mimeType });
+
+			await vrmStorage.setItem(`model-blob-${model.id}`, blob);
+			if (model.previewUrl) {
+				await vrmStorage.setItem(`model-preview-${model.id}`, model.previewUrl);
+			}
+			newEntries.push({ id: model.id, name: model.name, isDefault: false });
+		}
+
+		if (newEntries.length > 0) {
+			const updatedList = mode === 'replace'
+				? newEntries
+				: [...existingList, ...newEntries];
+			await vrmStorage.setItem('model-list', updatedList);
+		}
+	}
+}
+
 export function validateSaveFile(json: unknown): SaveFile | LegacySaveFile | null {
 	if (!json || typeof json !== 'object') return null;
 
@@ -255,6 +424,16 @@ export function validateSaveFile(json: unknown): SaveFile | LegacySaveFile | nul
 	if (!obj.data || typeof obj.data !== 'object') return null;
 
 	const data = obj.data as Record<string, unknown>;
+
+	// V3 format check (same required fields as V2, settings is optional)
+	if (obj.version.toString().startsWith('3.')) {
+		if (!data.character) return null;
+		if (!Array.isArray(data.facts)) return null;
+		if (!Array.isArray(data.sessions)) return null;
+		if (!Array.isArray(data.conversationTurns)) return null;
+		if (!Array.isArray(data.completedEvents)) return null;
+		return json as SaveFile;
+	}
 
 	// V2 format check
 	if (obj.version.toString().startsWith('2.')) {
@@ -276,16 +455,18 @@ export function validateSaveFile(json: unknown): SaveFile | LegacySaveFile | nul
 }
 
 export function getSaveFilePreview(saveFile: SaveFile | LegacySaveFile): SaveFilePreview {
-	const isV2 = saveFile.version.startsWith('2.');
+	const isV2orV3 = saveFile.version.startsWith('2.') || saveFile.version.startsWith('3.');
 
 	let characterName = 'Utsuwa';
-	if (isV2) {
+	if (isV2orV3) {
 		const v2 = saveFile as SaveFile;
 		characterName = v2.data.character?.name || 'Utsuwa';
 	} else {
 		const v1 = saveFile as LegacySaveFile;
 		characterName = (v1.data.personas?.[0]?.name as string) || 'Utsuwa';
 	}
+
+	const v3Settings = (saveFile as SaveFile).data.settings;
 
 	return {
 		version: saveFile.version,
@@ -295,9 +476,11 @@ export function getSaveFilePreview(saveFile: SaveFile | LegacySaveFile): SaveFil
 			facts: saveFile.data.facts?.length ?? 0,
 			sessions: saveFile.data.sessions?.length ?? 0,
 			conversationTurns: saveFile.data.conversationTurns?.length ?? 0,
-			completedEvents: saveFile.data.completedEvents?.length ?? 0
+			completedEvents: saveFile.data.completedEvents?.length ?? 0,
+			vrmModels: v3Settings?.vrmModels.length
 		},
-		characterName
+		characterName,
+		hasSettings: !!v3Settings
 	};
 }
 
@@ -325,4 +508,19 @@ export async function clearAllData(): Promise<void> {
 		db.conversationTurns.clear(),
 		db.completedEvents.clear()
 	]);
+
+	// Clear settings from localStorage
+	if (browser) {
+		const keysToRemove: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key?.startsWith('utsuwa-')) keysToRemove.push(key);
+		}
+		keysToRemove.forEach((k) => localStorage.removeItem(k));
+	}
+
+	// Clear VRM storage
+	if (vrmStorage) {
+		await vrmStorage.clear();
+	}
 }
