@@ -2,9 +2,10 @@
 	interface Props {
 		onNext: () => void;
 		onImport?: () => void;
+		onCloudRestore?: () => void;
 	}
 
-	let { onNext, onImport }: Props = $props();
+	let { onNext, onImport, onCloudRestore }: Props = $props();
 </script>
 
 <div class="step-content">
@@ -67,6 +68,17 @@
 				<line x1="12" y1="3" x2="12" y2="15"/>
 			</svg>
 			Import Save File
+		</button>
+	{/if}
+
+	{#if onCloudRestore}
+		<button class="cloud-btn" onclick={onCloudRestore}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+				<polyline points="8 17 12 21 16 17"/>
+				<line x1="12" y1="12" x2="12" y2="21"/>
+				<path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
+			</svg>
+			Restore from Cloud
 		</button>
 	{/if}
 </div>
@@ -229,5 +241,35 @@
 	:global(.dark) .import-btn:hover {
 		border-color: rgba(255, 255, 255, 0.25);
 		background: rgba(255, 255, 255, 0.06);
+	}
+
+	.cloud-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 1.25rem;
+		background: transparent;
+		color: #01B2FF;
+		border: 1px solid rgba(1, 178, 255, 0.35);
+		border-radius: var(--radius-full);
+		font-size: 0.85rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+	}
+
+	.cloud-btn:hover {
+		background: rgba(1, 178, 255, 0.08);
+		border-color: rgba(1, 178, 255, 0.6);
+	}
+
+	:global(.dark) .cloud-btn {
+		color: #4dd0ff;
+		border-color: rgba(77, 208, 255, 0.3);
+	}
+
+	:global(.dark) .cloud-btn:hover {
+		background: rgba(77, 208, 255, 0.1);
+		border-color: rgba(77, 208, 255, 0.55);
 	}
 </style>

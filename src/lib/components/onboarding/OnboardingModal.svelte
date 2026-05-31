@@ -2,6 +2,8 @@
 	import { characterStore } from '$lib/stores/character.svelte';
 	import type { AppMode } from '$lib/types/character';
 	import { validateSaveFile, importSave } from '$lib/db/export';
+	import { getSyncStatus, pullProfile, rememberPin } from '$lib/services/profile-sync';
+	import { onMount } from 'svelte';
 
 	import WelcomeStep from './steps/WelcomeStep.svelte';
 	import CharacterStep from './steps/CharacterStep.svelte';
@@ -29,8 +31,17 @@
 	let appMode = $state<AppMode>('dating_sim');
 
 	let importError = $state<string | null>(null);
+	let syncAvailable = $state(false);
+	let showCloudPin = $state(false);
+	let cloudPin = $state('');
+	let cloudLoading = $state(false);
 
 	const currentStepIndex = $derived(steps.indexOf(currentStep));
+
+	onMount(async () => {
+		const status = await getSyncStatus();
+		syncAvailable = status.enabled && status.profileExists;
+	});
 
 	function goNext() {
 		const nextIndex = currentStepIndex + 1;
@@ -89,6 +100,21 @@
 		};
 		input.click();
 	}
+
+	async function handleCloudRestore() {
+		if (!cloudPin.trim()) return;
+		cloudLoading = true;
+		importError = null;
+		const result = await pullProfile(cloudPin.trim(), 'replace');
+		cloudLoading = false;
+		if (!result.ok) {
+			importError = result.error ?? 'Cloud restore failed.';
+			return;
+		}
+		rememberPin(cloudPin.trim());
+		handleComplete();
+		window.location.reload();
+	}
 </script>
 
 <div class="modal-overlay" onclick={handleComplete} role="presentation">
@@ -110,7 +136,26 @@
 		<!-- Step content -->
 		<div class="step-wrapper" class:slide-forward={direction === 'forward'} class:slide-back={direction === 'back'}>
 			{#if currentStep === 'welcome'}
-				<WelcomeStep onNext={goNext} onImport={handleImport} />
+				<WelcomeStep
+					onNext={goNext}
+					onImport={handleImport}
+					onCloudRestore={syncAvailable ? () => { showCloudPin = !showCloudPin; importError = null; } : undefined}
+				/>
+				{#if showCloudPin}
+					<div class="cloud-pin-form">
+						<input
+							class="cloud-pin-input"
+							type="password"
+							placeholder="PIN eingeben"
+							bind:value={cloudPin}
+							onkeydown={(e) => e.key === 'Enter' && handleCloudRestore()}
+							autofocus
+						/>
+						<button class="cloud-pin-btn" onclick={handleCloudRestore} disabled={cloudLoading}>
+							{cloudLoading ? 'Lade…' : 'Wiederherstellen'}
+						</button>
+					</div>
+				{/if}
 				{#if importError}
 					<p class="import-error">{importError}</p>
 				{/if}
@@ -292,5 +337,45 @@
 		font-size: 0.8rem;
 		color: #e53e3e;
 		text-align: center;
+	}
+
+	.cloud-pin-form {
+		display: flex;
+		gap: 0.5rem;
+		padding: 0 1.5rem 0.75rem;
+		align-items: center;
+	}
+
+	.cloud-pin-input {
+		flex: 1;
+		padding: 0.5rem 0.75rem;
+		border: 1px solid rgba(0,0,0,0.15);
+		border-radius: var(--radius-md, 8px);
+		font-size: 0.9rem;
+		background: white;
+		color: #1a1a1a;
+	}
+
+	:global(.dark) .cloud-pin-input {
+		background: #2a2a2a;
+		border-color: rgba(255,255,255,0.15);
+		color: #f0f0f0;
+	}
+
+	.cloud-pin-btn {
+		padding: 0.5rem 1rem;
+		background: linear-gradient(180deg, #4dd0ff 0%, #01B2FF 100%);
+		color: white;
+		border: none;
+		border-radius: var(--radius-md, 8px);
+		font-size: 0.85rem;
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+
+	.cloud-pin-btn:disabled {
+		opacity: 0.6;
+		cursor: default;
 	}
 </style>
