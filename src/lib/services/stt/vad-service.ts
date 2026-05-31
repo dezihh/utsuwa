@@ -271,8 +271,12 @@ class VadService {
 					this.speechStartMs = now;
 					this.silenceStartMs = 0;
 					this.capturing = true;
-					// Prepend pre-buffer to speech chunks
-					this.speechChunks = [...this.preBuffer];
+					// Prepend pre-buffer to speech chunks, but skip the stored header chunk
+					// because emitSegment() adds it explicitly when needed.
+					this.speechChunks =
+						this.headerChunk && this.preBuffer[0] === this.headerChunk
+							? this.preBuffer.slice(1)
+							: [...this.preBuffer];
 					this.preBuffer = [];
 					this.callbacks?.onSpeechStart?.();
 					this.setPhase('recording');
@@ -311,9 +315,10 @@ class VadService {
 	private emitSegment() {
 		const mimeType = this.mediaRecorder?.mimeType || 'audio/webm';
 		// Always prepend the header chunk so the blob is a valid, standalone audio file.
-		const chunks = this.headerChunk
-			? [this.headerChunk, ...this.speechChunks]
-			: this.speechChunks;
+		const chunks =
+			this.headerChunk && this.speechChunks[0] !== this.headerChunk
+				? [this.headerChunk, ...this.speechChunks]
+				: this.speechChunks;
 		const blob = new Blob(chunks, { type: mimeType });
 		this.speechChunks = [];
 		this.silenceStartMs = 0;
