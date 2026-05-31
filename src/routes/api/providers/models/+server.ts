@@ -23,6 +23,7 @@ const DEFAULT_BASE_URLS: Record<string, string> = {
 	deepseek: 'https://api.deepseek.com',
 	xai: 'https://api.x.ai/v1',
 	google: 'https://generativelanguage.googleapis.com/v1beta',
+	openrouter: 'https://openrouter.ai/api/v1',
 	// TTS providers
 	elevenlabs: 'https://api.elevenlabs.io/v1',
 	'openai-tts': 'https://api.openai.com/v1'
@@ -143,6 +144,28 @@ async function fetchXAIModels(apiKey: string, baseUrl: string): Promise<ModelInf
 	}));
 }
 
+async function fetchOpenRouterModels(apiKey: string, baseUrl: string): Promise<ModelInfo[]> {
+	const response = await fetch(`${baseUrl}/models`, {
+		headers: {
+			Authorization: `Bearer ${apiKey}`,
+			'HTTP-Referer': 'https://utsuwa.app',
+			'X-Title': 'Utsuwa'
+		}
+	});
+	if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
+	const data = await response.json();
+	return (data.data as Array<{ id: string; name?: string; architecture?: { modality?: string } }>)
+		.filter((m) => {
+			// Keep only text-input/text-output (chat) models
+			const modality = m.architecture?.modality ?? '';
+			return modality === '' || modality.includes('text');
+		})
+		.map((m) => ({
+			id: m.id,
+			name: m.name ?? m.id
+		}));
+}
+
 async function fetchGoogleModels(apiKey: string, baseUrl: string): Promise<ModelInfo[]> {
 	const response = await fetch(`${baseUrl}/models`, {
 		headers: { 'x-goog-api-key': apiKey }
@@ -231,6 +254,10 @@ export const POST: RequestHandler = async ({ request }) => {
 			case 'xai':
 				if (!apiKey) throw new Error('API key required for xAI');
 				models = await fetchXAIModels(apiKey, cleanBaseUrl);
+				break;
+			case 'openrouter':
+				if (!apiKey) throw new Error('API key required for OpenRouter');
+				models = await fetchOpenRouterModels(apiKey, cleanBaseUrl);
 				break;
 			case 'google':
 				if (!apiKey) throw new Error('API key required for Google');

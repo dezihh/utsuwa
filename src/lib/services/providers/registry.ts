@@ -66,6 +66,15 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 		requiresApiKey: true,
 		defaultBaseUrl: 'https://api.x.ai/v1/'
 	},
+	{
+		id: 'openrouter',
+		name: 'OpenRouter',
+		description: 'Access 200+ models from one API',
+		category: 'llm',
+		icon: '🔀',
+		requiresApiKey: true,
+		defaultBaseUrl: 'https://openrouter.ai/api/v1/'
+	},
 	// Local LLMs discover installed models from the user's running local server.
 	{
 		id: 'ollama',

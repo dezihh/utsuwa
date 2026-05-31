@@ -12,6 +12,7 @@ const PROVIDER_BASE_URLS: Partial<Record<LLMProvider, string>> = {
 	google: 'https://generativelanguage.googleapis.com/v1beta/openai/',
 	deepseek: 'https://api.deepseek.com/',
 	xai: 'https://api.x.ai/v1/',
+	openrouter: 'https://openrouter.ai/api/v1/',
 	// Local
 	ollama: 'http://localhost:11434/v1/',
 	lmstudio: 'http://localhost:1234/v1/',
@@ -141,6 +142,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (typedProvider === 'anthropic') {
 			providerBaseURL = providerBaseURL || PROVIDER_BASE_URLS.anthropic;
 			headers['anthropic-dangerous-direct-browser-access'] = 'true';
+		} else if (typedProvider === 'openrouter') {
+			providerBaseURL = providerBaseURL || PROVIDER_BASE_URLS.openrouter;
+			headers['HTTP-Referer'] = 'https://utsuwa.app';
+			headers['X-Title'] = 'Utsuwa';
 		} else if (isLocalProvider) {
 			providerBaseURL = getChatBaseUrl(typedProvider, providerBaseURL);
 		} else {

@@ -17,6 +17,7 @@ export type LLMProvider =
 	| 'google'
 	| 'deepseek'
 	| 'xai'
+	| 'openrouter'
 	// Local
 	| 'ollama'
 	| 'lmstudio'
