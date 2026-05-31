@@ -1,9 +1,10 @@
 <script lang="ts">
 	interface Props {
 		onNext: () => void;
+		onImport?: () => void;
 	}
 
-	let { onNext }: Props = $props();
+	let { onNext, onImport }: Props = $props();
 </script>
 
 <div class="step-content">
@@ -57,6 +58,17 @@
 	<button class="next-btn" onclick={onNext}>
 		Get Started
 	</button>
+
+	{#if onImport}
+		<button class="import-btn" onclick={onImport}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+				<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+				<polyline points="17 8 12 3 7 8"/>
+				<line x1="12" y1="3" x2="12" y2="15"/>
+			</svg>
+			Import Save File
+		</button>
+	{/if}
 </div>
 
 <style>
@@ -186,5 +198,36 @@
 		box-shadow:
 			inset 0 2px 4px rgba(0, 0, 0, 0.2),
 			0 1px 2px rgba(0, 0, 0, 0.1);
+	}
+
+	.import-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 1.25rem;
+		background: transparent;
+		color: var(--text-secondary);
+		border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+		border-radius: var(--radius-full);
+		font-size: 0.85rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+	}
+
+	.import-btn:hover {
+		color: var(--text-primary);
+		border-color: var(--border-color-hover, rgba(0, 0, 0, 0.25));
+		background: rgba(0, 0, 0, 0.04);
+	}
+
+	:global(.dark) .import-btn {
+		border-color: rgba(255, 255, 255, 0.12);
+		color: var(--text-secondary);
+	}
+
+	:global(.dark) .import-btn:hover {
+		border-color: rgba(255, 255, 255, 0.25);
+		background: rgba(255, 255, 255, 0.06);
 	}
 </style>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { characterStore } from '$lib/stores/character.svelte';
 	import type { AppMode } from '$lib/types/character';
+	import { validateSaveFile, importSave } from '$lib/db/export';
 
 	import WelcomeStep from './steps/WelcomeStep.svelte';
 	import CharacterStep from './steps/CharacterStep.svelte';
@@ -26,6 +27,8 @@
 	let characterName = $state('Utsuwa');
 	let systemPrompt = $state('You are a helpful, but rage-baity assistant named Utsuwa. You speak like a snarky anime girl.');
 	let appMode = $state<AppMode>('dating_sim');
+
+	let importError = $state<string | null>(null);
 
 	const currentStepIndex = $derived(steps.indexOf(currentStep));
 
@@ -59,6 +62,33 @@
 		characterStore.markOnboardingComplete();
 		onComplete();
 	}
+
+	function handleImport() {
+		importError = null;
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.accept = '.json';
+		input.onchange = async () => {
+			const file = input.files?.[0];
+			if (!file) return;
+			try {
+				const text = await file.text();
+				const json = JSON.parse(text);
+				const saveFile = validateSaveFile(json);
+				if (!saveFile) {
+					importError = 'Invalid save file format.';
+					return;
+				}
+				await importSave(saveFile, 'replace');
+				handleComplete();
+				// Reload so all stores pick up restored state
+				window.location.reload();
+			} catch (err) {
+				importError = err instanceof Error ? err.message : 'Import failed.';
+			}
+		};
+		input.click();
+	}
 </script>
 
 <div class="modal-overlay" onclick={handleComplete} role="presentation">
@@ -80,7 +110,10 @@
 		<!-- Step content -->
 		<div class="step-wrapper" class:slide-forward={direction === 'forward'} class:slide-back={direction === 'back'}>
 			{#if currentStep === 'welcome'}
-				<WelcomeStep onNext={goNext} />
+				<WelcomeStep onNext={goNext} onImport={handleImport} />
+				{#if importError}
+					<p class="import-error">{importError}</p>
+				{/if}
 			{:else if currentStep === 'character'}
 				<CharacterStep
 					name={characterName}
@@ -251,5 +284,13 @@
 			opacity: 1;
 			transform: translateX(0);
 		}
+	}
+
+	.import-error {
+		margin: 0;
+		padding: 0.5rem 1.5rem 1rem;
+		font-size: 0.8rem;
+		color: #e53e3e;
+		text-align: center;
 	}
 </style>
