@@ -10,6 +10,7 @@
 	let formUrl = $state('');
 	let formCommand = $state('');
 	let formArgs = $state('');
+	let formEnv = $state('');
 	let formError = $state('');
 
 	function resetForm() {
@@ -17,8 +18,21 @@
 		formUrl = '';
 		formCommand = '';
 		formArgs = '';
+		formEnv = '';
 		formError = '';
 		showForm = false;
+	}
+
+	function parseEnv(raw: string): Record<string, string> {
+		const result: Record<string, string> = {};
+		for (const line of raw.split('\n')) {
+			const trimmed = line.trim();
+			if (!trimmed || trimmed.startsWith('#')) continue;
+			const eq = trimmed.indexOf('=');
+			if (eq < 1) continue;
+			result[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+		}
+		return result;
 	}
 
 	function addServer() {
@@ -31,12 +45,15 @@
 			? formArgs.trim().split(/\s+/)
 			: [];
 
+		const env = formEnv.trim() ? parseEnv(formEnv) : undefined;
+
 		mcpStore.addServer({
 			name: formName.trim(),
 			transport: formTransport,
 			url: formTransport === 'http' ? formUrl.trim() : undefined,
 			command: formTransport === 'stdio' ? formCommand.trim() : undefined,
 			args: formTransport === 'stdio' ? args : undefined,
+			env: formTransport === 'stdio' ? env : undefined,
 			enabled: true
 		});
 		resetForm();
@@ -105,6 +122,19 @@
 						<div class="form-row">
 							<label class="form-label" for="mcp-args">Arguments</label>
 							<input id="mcp-args" class="form-input" bind:value={formArgs} placeholder="-y @modelcontextprotocol/server-filesystem /path" />
+						</div>
+						<div class="form-row">
+							<label class="form-label" for="mcp-env">
+								Env Vars
+								<span class="form-hint">KEY=value per line</span>
+							</label>
+							<textarea
+								id="mcp-env"
+								class="form-input form-textarea"
+								bind:value={formEnv}
+								placeholder="SEARXNG_URL=http://192.168.10.4:8090"
+								rows="3"
+							></textarea>
 						</div>
 					{/if}
 
@@ -305,6 +335,19 @@
 		font-size: 0.85rem;
 		background: var(--bg-secondary);
 		color: var(--text-primary);
+	}
+
+	.form-textarea {
+		resize: vertical;
+		font-family: monospace;
+		line-height: 1.4;
+	}
+
+	.form-hint {
+		font-size: 0.72rem;
+		font-weight: 400;
+		color: var(--text-tertiary, #999);
+		margin-left: 0.4rem;
 	}
 
 	.transport-toggle {
