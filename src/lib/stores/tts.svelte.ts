@@ -52,7 +52,7 @@ function createTTSStore() {
 	 * each sentence's audio begins playing, enabling synchronized speech bubbles.
 	 */
 	async function speakSentences(
-		sentences: string[],
+		sentences: SpeechSegment[],
 		options: TTSOptions,
 		callbacks?: { onSentenceStart?: (sentence: string, index: number) => void }
 	) {
@@ -66,8 +66,7 @@ function createTTSStore() {
 		const tts = getTTSProvider(options);
 		if (tts.capabilities?.streaming && tts.speakStreaming) {
 			isSpeaking = true;
-			const segments: SpeechSegment[] = sentences.map((text) => ({ text }));
-			await orchestrator.speakSegments(segments, options, {
+			await orchestrator.speakSegments(sentences, options, {
 				onSegmentStart: (segment, index) => {
 					callbacks?.onSentenceStart?.(segment.text, index);
 				},
@@ -83,9 +82,9 @@ function createTTSStore() {
 			return;
 		}
 
-		const items: QueueItem[] = sentences.map((text, i) => ({
-			text,
-			onStart: callbacks?.onSentenceStart ? () => callbacks.onSentenceStart!(text, i) : undefined
+		const items: QueueItem[] = sentences.map((seg, i) => ({
+			text: seg.text,
+			onStart: callbacks?.onSentenceStart ? () => callbacks.onSentenceStart!(seg.text, i) : undefined
 		}));
 
 		queue = [...queue, ...items];

@@ -46,7 +46,7 @@
 	import { initEmbeddingModel, subscribeToEmbeddingState, type EmbeddingState } from '$lib/services/embeddings';
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
 	import { allEvents } from '$lib/data/events';
-	import { splitIntoSentences } from '$lib/utils/sentences';
+	import { splitIntoSegments, stripLangTags } from '$lib/utils/sentences';
 
 	let canvasRef: HTMLCanvasElement | null = null;
 
@@ -358,7 +358,8 @@
 
 			isTyping = false;
 			const cleanedResponse = await processCompanionResponse(content, fullContent);
-			chatStore.updateLastMessage(cleanedResponse);
+			const displayText = stripLangTags(cleanedResponse);
+			chatStore.updateLastMessage(displayText);
 
 			// TTS - speak if module is enabled
 			const speechState = modulesStore.getModuleState('speech');
@@ -371,15 +372,15 @@
 				isTyping = true;
 				latestResponse = '';
 				spokenSoFar = '';
-				vrmStore.startTalking(cleanedResponse);
+				vrmStore.startTalking(displayText);
 
 				const ttsProvider = speechSettings.activeProvider as TTSProvider;
 				const ttsConfig = settingsStore.getProviderConfig(ttsProvider);
 				const ttsMeta = getTTSProvider(ttsProvider);
-				const sentences = splitIntoSentences(cleanedResponse);
+				const segments = splitIntoSegments(cleanedResponse, ttsConfig.language || undefined);
 
 				ttsStore.speakSentences(
-					sentences,
+					segments,
 					{
 						provider: ttsProvider,
 						apiKey: ttsConfig.apiKey,
@@ -409,9 +410,9 @@
 				onTTSStarted();
 			} else {
 				// Without TTS: show full response immediately
-				latestResponse = cleanedResponse;
-				if (cleanedResponse) {
-					vrmStore.startTalking(cleanedResponse);
+				latestResponse = displayText;
+				if (displayText) {
+					vrmStore.startTalking(displayText);
 				}
 				onTTSDone();
 			}
