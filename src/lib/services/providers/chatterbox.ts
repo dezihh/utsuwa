@@ -1,6 +1,7 @@
 export interface ChatterboxVoice {
 	id: string;
 	name: string;
+	type?: 'predefined' | 'clone';
 }
 
 export interface ChatterboxData {

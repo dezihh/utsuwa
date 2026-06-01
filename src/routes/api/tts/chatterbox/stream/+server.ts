@@ -15,15 +15,22 @@ function buildRequestBody(input: {
 	cfgWeight?: number;
 	temperature?: number;
 }) {
-	// stream:true tells Chatterbox to yield audio as each chunk is synthesized
+	// Detect clone voices (prefixed with "clone:")
+	const isClone = input.voice?.startsWith('clone:');
+	const voiceFilename = isClone ? input.voice!.slice(6) : input.voice;
+
 	const body: Record<string, unknown> = {
 		text: input.text,
-		voice_mode: 'predefined',
+		voice_mode: isClone ? 'clone' : 'predefined',
 		stream: true,
 		split_text: true
 	};
 
-	if (input.voice) body.predefined_voice_id = input.voice;
+	if (isClone) {
+		if (voiceFilename) body.reference_audio_filename = voiceFilename;
+	} else {
+		if (voiceFilename) body.predefined_voice_id = voiceFilename;
+	}
 	if (typeof input.speed === 'number') body.speed_factor = input.speed;
 	if (typeof input.exaggeration === 'number') body.exaggeration = input.exaggeration;
 	if (input.language) body.language = input.language;

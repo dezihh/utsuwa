@@ -918,9 +918,20 @@
 											<option value="">
 												{chatterboxIsLoading ? 'Loading voices...' : 'Select a voice...'}
 											</option>
-											{#each chatterboxVoices as voice}
-												<option value={voice.id}>{voice.name}</option>
-											{/each}
+											{#if chatterboxVoices.some(v => v.type !== 'clone')}
+												<optgroup label="── Predefined ──">
+													{#each chatterboxVoices.filter(v => v.type !== 'clone') as voice}
+														<option value={voice.id}>{voice.name}</option>
+													{/each}
+												</optgroup>
+											{/if}
+											{#if chatterboxVoices.some(v => v.type === 'clone')}
+												<optgroup label="── Voice Clones ──">
+													{#each chatterboxVoices.filter(v => v.type === 'clone') as voice}
+														<option value={voice.id}>🎙 {voice.name}</option>
+													{/each}
+												</optgroup>
+											{/if}
 										</select>
 									</div>
 									<div class="api-key-row">
