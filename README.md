@@ -24,9 +24,9 @@
 - **Dockable Chat Sidebar**: Collapsible sidebar showing full conversation history alongside the 3D view
 - **Voice Input**: Speech-to-text via Groq (Whisper), local Whisper server, or Web Speech API with real-time audio visualization
 - **Duplex / VOX Mode**: Hands-free conversation — the companion listens continuously, detects speech automatically using voice activity detection (VAD), transcribes, responds, and returns to listening. Includes noise rejection, background-noise toast notifications, and live sensitivity controls.
-- **LLM Integration**: Support for 8 LLM providers including OpenAI, Anthropic, Google, xAI, DeepSeek, Ollama, LM Studio, and llama.cpp
+- **LLM Integration**: Support for 9 LLM providers including OpenAI, Anthropic, Google, xAI, DeepSeek, OpenRouter, Ollama, LM Studio, and llama.cpp
 - **Local Model Discovery**: Ollama and LM Studio discover installed local models directly from your device
-- **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, and AllTalk
+- **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, AllTalk, and Chatterbox (with per-segment language + expression tags)
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
 - **Animations**: VRMA-based idle and talking animations with automatic blinking
 - **Character Customization**: Customize your companion's name, personality, and system prompt
@@ -75,19 +75,19 @@ The desktop app uses the same codebase as the web version — your save files ar
 
 ## Supported Providers
 
-### LLM Providers (8)
+### LLM Providers (9)
 
 | Category | Providers |
 |----------|-----------|
-| **Cloud** | OpenAI, Anthropic, Google Gemini, DeepSeek, xAI (Grok) |
+| **Cloud** | OpenAI, Anthropic, Google Gemini, DeepSeek, xAI (Grok), OpenRouter |
 | **Local** | Ollama, LM Studio, llama.cpp |
 
-### TTS Providers (3)
+### TTS Providers (4)
 
 | Category | Providers |
 |----------|-----------|
 | **Cloud** | ElevenLabs, OpenAI TTS |
-| **Local** | AllTalk |
+| **Local** | AllTalk, Chatterbox |
 
 #### AllTalk TTS
 
@@ -99,6 +99,25 @@ AllTalk is configured under **Settings > TTS Providers** and connects to your ex
 - Leave **Auth token** empty for a normal local install; only fill it in when AllTalk sits behind a proxy or custom auth layer
 
 AllTalk determines the spoken language from the selected voice, so no separate language field is required in Utsuwa.
+
+#### Chatterbox TTS
+
+Chatterbox is configured under **Settings > TTS Providers** and connects to your existing Chatterbox instance (no second service started by Utsuwa).
+
+- Set the **API base URL** to your local Chatterbox server, for example `http://localhost:8300/`
+- Pick a **voice** from the dropdown (loaded from the server's predefined voices)
+- Optionally tune:
+  - **Language** (default language hint)
+  - **Exaggeration**
+  - **CFG Weight**
+  - **Temperature**
+
+Utsuwa supports sentence-level voice control tags for Chatterbox:
+
+- Language tags: `[lang:de]`, `[lang:es]`, `[lang:en]`, ...
+- Emotion/sound tags: `[laugh]`, `[giggle]`, `[chuckle]`, `[sigh]`, `[excited]`, `[sad]`, `[calm]`, `[whisper]`, `[dramatic]`
+
+Tags are interpreted for TTS but stripped from visible chat output.
 
 ### STT Providers (3)
 
@@ -151,6 +170,7 @@ Once a server is enabled, its tools are listed immediately. During chat, if any 
 4. The final answer (and a collapsible summary of tool calls) is streamed back to you
 
 All MCP communication happens server-side through the SvelteKit proxy — no CORS issues, no browser restrictions.
+When tools are active, Utsuwa also injects tool-usage guidance into the system prompt so the LLM uses available tools proactively when they improve answer quality.
 
 ## Getting Started
 
