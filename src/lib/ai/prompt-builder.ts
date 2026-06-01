@@ -1,6 +1,7 @@
 import type { CharacterState } from '$lib/types/character';
 import type { ConversationTurn, Fact, SessionSummary, RelevantContext } from '$lib/types/memory';
 import type { PersonaCard } from '$lib/stores/persona.svelte';
+import type { McpTool } from '$lib/types/mcp';
 import { STAGE_BEHAVIORS, STAGE_INSTRUCTIONS } from '$lib/engine/stages';
 
 // Prompt context for building
@@ -14,6 +15,8 @@ export interface PromptContext {
 	ttsProvider?: string;
 	/** Default language code for [lang:xx] hints (e.g. 'de', 'es') */
 	ttsLanguage?: string;
+	/** Active MCP tools — when provided, injects a tool-use instruction block */
+	mcpTools?: McpTool[];
 }
 
 // Build the complete system prompt
@@ -32,6 +35,9 @@ export function buildSystemPrompt(context: PromptContext): string {
 
 	const voiceTags = buildVoiceTagLayer(context);
 	if (voiceTags) layers.push(voiceTags);
+
+	const mcpLayer = buildMcpToolLayer(context);
+	if (mcpLayer) layers.push(mcpLayer);
 
 	return layers.join('\n\n');
 }
@@ -104,6 +110,9 @@ NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affecti
 
 	const voiceTags = buildVoiceTagLayer(ctx);
 	if (voiceTags) parts.push(voiceTags);
+
+	const mcpLayer = buildMcpToolLayer(ctx);
+	if (mcpLayer) parts.push(mcpLayer);
 
 	return parts.join('\n\n');
 }
@@ -262,6 +271,32 @@ After your dialogue response, you may optionally output state changes as JSON:
 
 Keep deltas small (-10 to +10 for most interactions). Only include the JSON if you want to suggest state changes.
 </instructions>`;
+}
+
+// MCP tool layer - injected when active tools are available
+function buildMcpToolLayer(ctx: PromptContext): string | null {
+	if (!ctx.mcpTools || ctx.mcpTools.length === 0) return null;
+
+	const toolList = ctx.mcpTools
+		.map((t) => `- **${t.name}** (${t.serverName}): ${t.description}`)
+		.join('\n');
+
+	return `<available_tools>
+You have access to the following tools and SHOULD use them proactively when they help answer the user's question better:
+
+${toolList}
+
+TOOL USAGE RULES:
+- Use tools whenever the user asks for information that benefits from real-time data, search, or external context.
+- Do NOT wait for the user to explicitly ask you to use a tool — use them on your own initiative.
+- After receiving tool results, incorporate them naturally into your response without mentioning the mechanics.
+- If a tool call fails, answer as best you can from your knowledge and mention the limitation briefly.
+
+EXAMPLES of when to use tools:
+- User asks about current events, news, prices, weather → use search tool
+- User asks to look something up → use search tool
+- User asks a factual question you are uncertain about → verify with search
+</available_tools>`;
 }
 
 // Voice tag layer - injected only when Chatterbox TTS is active

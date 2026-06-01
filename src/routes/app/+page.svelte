@@ -227,6 +227,7 @@
 		const speechSettings = modulesStore.getModuleSettings('speech');
 		const activeTTSProvider = speechSettings?.activeProvider as string | undefined;
 		const ttsConfig = activeTTSProvider ? settingsStore.getProviderConfig(activeTTSProvider) : null;
+		const activeMcpTools = mcpStore.hasActiveTools && !isTauri() ? mcpStore.tools : undefined;
 
 		const context: PromptContext = {
 			persona,
@@ -235,7 +236,8 @@
 			userMessage,
 			systemTime: new Date(),
 			ttsProvider: activeTTSProvider,
-			ttsLanguage: ttsConfig?.language || undefined
+			ttsLanguage: ttsConfig?.language || undefined,
+			mcpTools: activeMcpTools
 		};
 
 		return buildSystemPrompt(context);
