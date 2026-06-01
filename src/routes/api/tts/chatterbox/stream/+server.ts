@@ -15,11 +15,11 @@ function buildRequestBody(input: {
 	cfgWeight?: number;
 	temperature?: number;
 }) {
-	// Use /tts endpoint which supports exaggeration, language and streams chunked audio
+	// stream:true tells Chatterbox to yield audio as each chunk is synthesized
 	const body: Record<string, unknown> = {
 		text: input.text,
 		voice_mode: 'predefined',
-		output_format: 'wav',
+		stream: true,
 		split_text: true
 	};
 
@@ -84,7 +84,9 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 
 	if (!upstream.ok) {
 		const message = await upstream.text().catch(() => '');
-		return new Response(JSON.stringify({ error: `Chatterbox stream error: ${upstream.status} ${message}` }), {
+		let hint = '';
+		if (upstream.status === 404) hint = ' — the selected voice was not found. Please re-select a voice in Settings → Persona.';
+		return new Response(JSON.stringify({ error: `Chatterbox stream error: ${upstream.status} ${message}${hint}` }), {
 			status: 502,
 			headers: { 'Content-Type': 'application/json' }
 		});

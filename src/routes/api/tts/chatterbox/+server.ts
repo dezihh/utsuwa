@@ -84,7 +84,9 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 
 	if (!upstream.ok) {
 		const message = await upstream.text().catch(() => '');
-		return new Response(JSON.stringify({ error: `Chatterbox TTS error: ${upstream.status} ${message}` }), {
+		let hint = '';
+		if (upstream.status === 404) hint = ' — the selected voice was not found. Please re-select a voice in Settings → Persona.';
+		return new Response(JSON.stringify({ error: `Chatterbox TTS error: ${upstream.status} ${message}${hint}` }), {
 			status: 502,
 			headers: { 'Content-Type': 'application/json' }
 		});
