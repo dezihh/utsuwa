@@ -46,7 +46,7 @@
 	import { initEmbeddingModel, subscribeToEmbeddingState, type EmbeddingState } from '$lib/services/embeddings';
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
 	import { allEvents } from '$lib/data/events';
-	import { splitIntoSegments, stripLangTags } from '$lib/utils/sentences';
+	import { splitIntoSegments, stripAllTags } from '$lib/utils/sentences';
 
 	let canvasRef: HTMLCanvasElement | null = null;
 
@@ -295,7 +295,7 @@
 							baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
 							systemPrompt
 						},
-						(text) => { fullContent += text; chatStore.updateLastMessage(stripLangTags(fullContent)); },
+						(text) => { fullContent += text; chatStore.updateLastMessage(stripAllTags(fullContent)); },
 						(error) => reject(new Error(error)),
 						() => resolve()
 					);
@@ -347,7 +347,7 @@
 						if (line.startsWith('0:')) {
 							const text = JSON.parse(line.slice(2));
 							fullContent += text;
-							chatStore.updateLastMessage(stripLangTags(fullContent));
+							chatStore.updateLastMessage(stripAllTags(fullContent));
 						} else if (line.startsWith('e:')) {
 							const { error } = JSON.parse(line.slice(2));
 							throw new Error(error);
@@ -358,7 +358,7 @@
 
 			isTyping = false;
 			const cleanedResponse = await processCompanionResponse(content, fullContent);
-			const displayText = stripLangTags(cleanedResponse);
+			const displayText = stripAllTags(cleanedResponse);
 			chatStore.updateLastMessage(displayText);
 
 			// TTS - speak if module is enabled
