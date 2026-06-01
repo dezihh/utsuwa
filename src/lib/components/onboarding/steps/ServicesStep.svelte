@@ -10,6 +10,7 @@
 		type ModelInfo
 	} from '$lib/services/providers/use-model-fetch';
 	import { fetchAllTalkData, type AllTalkOption } from '$lib/services/providers/alltalk';
+	import { fetchChatterboxVoices, type ChatterboxVoice } from '$lib/services/providers/chatterbox';
 
 	interface Props {
 		onNext: () => void;
@@ -59,6 +60,11 @@
 	let alltalkVoices = $state<AllTalkOption[]>([]);
 	let alltalkRvcVoices = $state<AllTalkOption[]>([]);
 	let lastAllTalkFetchSignature = '';
+
+	let chatterboxVoices = $state<ChatterboxVoice[]>([]);
+	let chatterboxIsLoading = $state(false);
+	let chatterboxFetchError = $state<string | null>(null);
+	let lastChatterboxFetchSignature = '';
 
 	// Use dynamic models if available, otherwise static
 	const ttsModels = $derived(ttsDynamicModels ?? staticTTSModels);
@@ -222,6 +228,36 @@
 	const debouncedFetchTTSModels = debounce(fetchTTSModels, 300);
 	const debouncedFetchAllTalkSettings = debounce(fetchAllTalkSettings, 300);
 
+	async function loadChatterboxVoices() {
+		if (ttsProvider?.id !== 'chatterbox') return;
+		const config = settingsStore.getProviderConfig('chatterbox');
+		chatterboxIsLoading = true;
+		chatterboxFetchError = null;
+		const result = await fetchChatterboxVoices(config.baseUrl);
+		if (ttsProvider?.id !== 'chatterbox') { chatterboxIsLoading = false; return; }
+		chatterboxIsLoading = false;
+		chatterboxVoices = result.voices;
+		chatterboxFetchError = result.error ?? null;
+		if (!result.error && result.voices.length > 0 && !ttsSettings.activeVoiceId) {
+			modulesStore.setModuleSetting('speech', 'activeVoiceId', result.voices[0].id);
+		}
+	}
+
+	const debouncedLoadChatterboxVoices = debounce(loadChatterboxVoices, 300);
+
+	$effect(() => {
+		const targetProvider = ttsSettings.activeProvider as string;
+		if (targetProvider !== 'chatterbox') {
+			lastChatterboxFetchSignature = '';
+			return;
+		}
+		const config = settingsStore.getProviderConfig('chatterbox');
+		const signature = `chatterbox::${config.baseUrl ?? ''}`;
+		if (signature === lastChatterboxFetchSignature) return;
+		lastChatterboxFetchSignature = signature;
+		debouncedLoadChatterboxVoices();
+	});
+
 	$effect(() => {
 		const targetProvider = ttsSettings.activeProvider as string;
 		if (targetProvider !== 'alltalk') {
@@ -368,6 +404,9 @@
 			if (ttsProvider.id === 'alltalk') {
 				debouncedFetchAllTalkSettings();
 			}
+			if (ttsProvider.id === 'chatterbox') {
+				debouncedLoadChatterboxVoices();
+			}
 		}
 	}
 
@@ -377,6 +416,10 @@
 
 	function handleAllTalkRvcVoiceChange(voiceId: string) {
 		modulesStore.setModuleSetting('speech', 'activeRvcVoiceId', voiceId);
+	}
+
+	function handleChatterboxVoiceChange(voiceId: string) {
+		modulesStore.setModuleSetting('speech', 'activeVoiceId', voiceId);
 	}
 
 	function handleNext() {
@@ -599,7 +642,7 @@
 				/>
 			{/if}
 
-			{#if ttsProvider?.isLocal && ttsProvider.id !== 'alltalk'}
+			{#if ttsProvider?.isLocal && ttsProvider.id !== 'alltalk' && ttsProvider.id !== 'chatterbox'}
 				<input
 					type="text"
 					class="api-key-input"
@@ -609,7 +652,7 @@
 				/>
 			{/if}
 
-			{#if ttsProvider?.isLocal && ttsProvider.id !== 'alltalk'}
+			{#if ttsProvider?.isLocal && ttsProvider.id !== 'alltalk' && ttsProvider.id !== 'chatterbox'}
 				<input
 					type="text"
 					class="api-key-input"
@@ -621,6 +664,38 @@
 					<Icon name="check-circle" size={14} />
 					Local provider - no API key needed
 				</p>
+			{/if}
+
+			{#if ttsProvider?.id === 'chatterbox'}
+				<select
+					class="api-key-input"
+					value={ttsSettings.activeVoiceId as string ?? ''}
+					onchange={(e) => handleChatterboxVoiceChange(e.currentTarget.value)}
+					disabled={chatterboxIsLoading}
+				>
+					<option value="">
+						{chatterboxIsLoading ? 'Loading voices...' : 'Select a voice...'}
+					</option>
+					{#each chatterboxVoices as voice}
+						<option value={voice.id}>{voice.name}</option>
+					{/each}
+				</select>
+				<input
+					type="text"
+					class="api-key-input"
+					class:error={!!chatterboxFetchError}
+					placeholder={getTTSProvider('chatterbox')?.defaultBaseUrl || 'http://localhost:8300/'}
+					value={settingsStore.getProviderConfig('chatterbox').baseUrl ?? ''}
+					oninput={(e) => handleTTSBaseUrlChange(e.currentTarget.value)}
+				/>
+				{#if chatterboxFetchError}
+					<p class="provider-note error">{chatterboxFetchError}</p>
+				{:else}
+					<p class="provider-note">
+						<Icon name="check-circle" size={14} />
+						Local provider - no API key needed
+					</p>
+				{/if}
 			{/if}
 		{:else}
 			<p class="skip-note">Enable to add voice to your companion</p>
