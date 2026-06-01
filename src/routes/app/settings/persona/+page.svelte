@@ -1019,6 +1019,36 @@
 										/>
 										<div class="vad-hint">Generation randomness (0.05 = deterministic, 1.0 = creative). Default: 0.8</div>
 									</div>
+
+									<div class="chatterbox-tag-docs">
+										<div class="tag-docs-title">LLM Tags für Sprache &amp; Emotion</div>
+										<div class="tag-docs-body">
+											<p>Das LLM kann diese Tags in Antworten einbetten – sie steuern Aussprache und Klang, sind im Chat aber nicht sichtbar.</p>
+											<div class="tag-group">
+												<span class="tag-group-label">Sprache</span>
+												<code>[lang:es]</code> Spanisch &nbsp;
+												<code>[lang:de]</code> Deutsch &nbsp;
+												<code>[lang:en]</code> Englisch &nbsp;
+												<code>[lang:fr]</code> Französisch
+											</div>
+											<div class="tag-group">
+												<span class="tag-group-label">Emotion / Klang</span>
+												<code>[laugh]</code> 😄 &nbsp;
+												<code>[giggle]</code> 🙈 &nbsp;
+												<code>[chuckle]</code> 😏 &nbsp;
+												<code>[sigh]</code> 😮‍💨<br />
+												<code>[excited]</code> &nbsp;
+												<code>[sad]</code> &nbsp;
+												<code>[calm]</code> &nbsp;
+												<code>[whisper]</code> &nbsp;
+												<code>[dramatic]</code>
+											</div>
+											<div class="tag-group">
+												<span class="tag-group-label">Beispiel für System-Prompt</span>
+												<em>„Markiere Spanisch mit [lang:es] und Deutsch mit [lang:de]. Nutze [laugh] oder [giggle] wenn du lachst."</em>
+											</div>
+										</div>
+									</div>
 								{/if}
 
 								{#if speechSettings.activeProvider === 'alltalk'}
@@ -3090,6 +3120,57 @@
 	.vad-hint {
 		font-size: 0.7rem;
 		color: var(--text-tertiary);
+	}
+
+	.chatterbox-tag-docs {
+		margin-top: 1rem;
+		border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+		border-radius: 8px;
+		padding: 0.75rem;
+		background: var(--bg-secondary, rgba(0,0,0,0.2));
+	}
+
+	.tag-docs-title {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--text-secondary);
+		margin-bottom: 0.5rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.tag-docs-body {
+		font-size: 0.72rem;
+		color: var(--text-tertiary);
+		line-height: 1.6;
+	}
+
+	.tag-docs-body p {
+		margin: 0 0 0.5rem 0;
+	}
+
+	.tag-group {
+		margin-bottom: 0.4rem;
+	}
+
+	.tag-group-label {
+		font-weight: 600;
+		color: var(--text-secondary);
+		display: block;
+		margin-bottom: 0.15rem;
+	}
+
+	.tag-docs-body code {
+		background: var(--bg-tertiary, rgba(255,255,255,0.08));
+		border-radius: 3px;
+		padding: 0.05em 0.3em;
+		font-size: 0.68rem;
+		color: var(--accent-color, #a78bfa);
+	}
+
+	.tag-docs-body em {
+		color: var(--text-secondary);
+		font-style: italic;
 	}
 
 	@keyframes shake {
