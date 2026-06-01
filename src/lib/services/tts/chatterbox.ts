@@ -17,6 +17,9 @@ export class ChatterboxTTS implements ITTSProvider {
 	private speed: number;
 	private baseUrl: string;
 	private exaggeration: number;
+	private language: string | undefined;
+	private cfgWeight: number | undefined;
+	private temperature: number | undefined;
 
 	readonly capabilities: TTSCapabilities = {
 		streaming: true,
@@ -29,6 +32,9 @@ export class ChatterboxTTS implements ITTSProvider {
 		this.speed = options.speed ?? 1;
 		this.baseUrl = ensureTrailingSlash(options.baseUrl || 'http://localhost:8300/');
 		this.exaggeration = options.exaggeration ?? 0.5;
+		this.language = options.language;
+		this.cfgWeight = options.cfgWeight;
+		this.temperature = options.temperature;
 	}
 
 	getAudioContext(): AudioContext {
@@ -44,6 +50,9 @@ export class ChatterboxTTS implements ITTSProvider {
 				voice: this.voiceId,
 				speed: this.speed,
 				exaggeration: this.exaggeration,
+				language: this.language,
+				cfgWeight: this.cfgWeight,
+				temperature: this.temperature,
 				baseUrl: this.baseUrl
 			})
 		});
@@ -86,7 +95,9 @@ export class ChatterboxTTS implements ITTSProvider {
 				speed: this.speed,
 				exaggeration: options?.exaggeration ?? this.exaggeration,
 				emotion: options?.emotion,
-				language: options?.language,
+				language: options?.language ?? this.language,
+				cfgWeight: this.cfgWeight,
+				temperature: this.temperature,
 				baseUrl: this.baseUrl
 			}),
 			signal: abortSignal

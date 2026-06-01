@@ -12,6 +12,8 @@ function buildRequestBody(input: {
 	exaggeration?: number;
 	emotion?: string;
 	language?: string;
+	cfgWeight?: number;
+	temperature?: number;
 }) {
 	// Use /tts endpoint which supports exaggeration, language and streams chunked audio
 	const body: Record<string, unknown> = {
@@ -25,6 +27,8 @@ function buildRequestBody(input: {
 	if (typeof input.speed === 'number') body.speed_factor = input.speed;
 	if (typeof input.exaggeration === 'number') body.exaggeration = input.exaggeration;
 	if (input.language) body.language = input.language;
+	if (typeof input.cfgWeight === 'number') body.cfg_weight = input.cfgWeight;
+	if (typeof input.temperature === 'number') body.temperature = input.temperature;
 
 	return body;
 }
@@ -45,6 +49,8 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 	const exaggeration = typeof body.exaggeration === 'number' ? body.exaggeration : undefined;
 	const emotion = typeof body.emotion === 'string' ? body.emotion : undefined;
 	const language = typeof body.language === 'string' ? body.language : undefined;
+	const cfgWeight = typeof body.cfgWeight === 'number' ? body.cfgWeight : undefined;
+	const temperature = typeof body.temperature === 'number' ? body.temperature : undefined;
 	const baseUrl =
 		typeof body.baseUrl === 'string' && body.baseUrl.trim()
 			? normalizeBaseUrl(body.baseUrl)
@@ -62,7 +68,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 		upstream = await fetch(new URL('tts', baseUrl), {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(buildRequestBody({ text, voice, speed, exaggeration, emotion, language }))
+			body: JSON.stringify(buildRequestBody({ text, voice, speed, exaggeration, emotion, language, cfgWeight, temperature }))
 		});
 	} catch (error) {
 		return new Response(

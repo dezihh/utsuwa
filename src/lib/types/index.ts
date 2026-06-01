@@ -63,6 +63,12 @@ export interface ProviderConfig {
 	modelsFetchedAt?: number;
 	/** VAD sensitivity threshold (0.005 = very sensitive … 0.05 = low). whisper-local only. */
 	vadThreshold?: number;
+	/** Chatterbox: emotion exaggeration 0.0-2.0 */
+	exaggeration?: number;
+	/** Chatterbox: CFG weight 0.0-5.0 */
+	cfgWeight?: number;
+	/** Chatterbox: generation temperature 0.05-1.0 */
+	temperature?: number;
 }
 
 // VRM types

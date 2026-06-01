@@ -10,8 +10,14 @@ export interface TTSOptions {
 	speed?: number;
 	pitch?: number;
 	volume?: number;
-	/** Emotion exaggeration for providers that support it (0.0-1.0) */
+	/** Emotion exaggeration for providers that support it (0.0-2.0) */
 	exaggeration?: number;
+	/** ISO 639-1 language code (undefined = auto-detect) */
+	language?: string;
+	/** Chatterbox CFG weight 0.0-5.0 */
+	cfgWeight?: number;
+	/** Chatterbox generation temperature 0.05-1.0 */
+	temperature?: number;
 }
 
 // Result from TTS speak method

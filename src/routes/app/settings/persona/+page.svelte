@@ -544,6 +544,14 @@
 		modulesStore.setModuleSetting('speech', 'activeVoiceId', voiceId);
 	}
 
+	function handleChatterboxParamChange(key: 'exaggeration' | 'cfgWeight' | 'temperature', value: number) {
+		settingsStore.setProviderConfig('chatterbox', { [key]: value });
+	}
+
+	function handleChatterboxLanguageChange(language: string) {
+		settingsStore.setProviderConfig('chatterbox', { language: language || undefined });
+	}
+
 	function toggleLLM() {
 		modulesStore.setModuleEnabled('consciousness', !isLLMEnabled);
 	}
@@ -933,6 +941,84 @@
 											Local provider - no API key needed
 										</p>
 									{/if}
+									<!-- Language -->
+									<div class="vad-sensitivity-row">
+										<label class="vad-sensitivity-label" for="ps-cb-language">Language</label>
+										<select
+											id="ps-cb-language"
+											class="api-key-input"
+											value={settingsStore.getProviderConfig('chatterbox').language ?? ''}
+											onchange={(e) => handleChatterboxLanguageChange(e.currentTarget.value)}
+										>
+											<option value="">Auto-detect</option>
+											<option value="de">German (de)</option>
+											<option value="en">English (en)</option>
+											<option value="fr">French (fr)</option>
+											<option value="es">Spanish (es)</option>
+											<option value="it">Italian (it)</option>
+											<option value="pt">Portuguese (pt)</option>
+											<option value="nl">Dutch (nl)</option>
+											<option value="pl">Polish (pl)</option>
+											<option value="ru">Russian (ru)</option>
+											<option value="zh">Chinese (zh)</option>
+											<option value="ja">Japanese (ja)</option>
+											<option value="ko">Korean (ko)</option>
+										</select>
+									</div>
+									<!-- Exaggeration -->
+									<div class="vad-sensitivity-row">
+										<label class="vad-sensitivity-label" for="ps-cb-exaggeration">
+											Exaggeration
+											<span class="vad-value">{(settingsStore.getProviderConfig('chatterbox').exaggeration ?? 0.5).toFixed(2)}</span>
+										</label>
+										<input
+											id="ps-cb-exaggeration"
+											type="range"
+											class="vad-slider"
+											min="0"
+											max="2"
+											step="0.05"
+											value={settingsStore.getProviderConfig('chatterbox').exaggeration ?? 0.5}
+											oninput={(e) => handleChatterboxParamChange('exaggeration', Number(e.currentTarget.value))}
+										/>
+										<div class="vad-hint">Emotion intensity (0.0 = flat, 2.0 = very expressive). Default: 0.5</div>
+									</div>
+									<!-- CFG Weight -->
+									<div class="vad-sensitivity-row">
+										<label class="vad-sensitivity-label" for="ps-cb-cfg-weight">
+											CFG Weight
+											<span class="vad-value">{(settingsStore.getProviderConfig('chatterbox').cfgWeight ?? 0.5).toFixed(2)}</span>
+										</label>
+										<input
+											id="ps-cb-cfg-weight"
+											type="range"
+											class="vad-slider"
+											min="0"
+											max="5"
+											step="0.1"
+											value={settingsStore.getProviderConfig('chatterbox').cfgWeight ?? 0.5}
+											oninput={(e) => handleChatterboxParamChange('cfgWeight', Number(e.currentTarget.value))}
+										/>
+										<div class="vad-hint">Classifier-free guidance weight (0.0-5.0). Default: 0.5</div>
+									</div>
+									<!-- Temperature -->
+									<div class="vad-sensitivity-row">
+										<label class="vad-sensitivity-label" for="ps-cb-temperature">
+											Temperature
+											<span class="vad-value">{(settingsStore.getProviderConfig('chatterbox').temperature ?? 0.8).toFixed(2)}</span>
+										</label>
+										<input
+											id="ps-cb-temperature"
+											type="range"
+											class="vad-slider"
+											min="0.05"
+											max="1"
+											step="0.05"
+											value={settingsStore.getProviderConfig('chatterbox').temperature ?? 0.8}
+											oninput={(e) => handleChatterboxParamChange('temperature', Number(e.currentTarget.value))}
+										/>
+										<div class="vad-hint">Generation randomness (0.05 = deterministic, 1.0 = creative). Default: 0.8</div>
+									</div>
 								{/if}
 
 								{#if speechSettings.activeProvider === 'alltalk'}
