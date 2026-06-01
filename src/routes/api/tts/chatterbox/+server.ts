@@ -13,16 +13,17 @@ function buildRequestBody(input: {
 	emotion?: string;
 	language?: string;
 }) {
+	// Use /tts endpoint which supports exaggeration and language
 	const body: Record<string, unknown> = {
-		model: 'chatterbox',
-		input: input.text,
-		response_format: 'wav'
+		text: input.text,
+		voice_mode: 'predefined',
+		output_format: 'wav',
+		split_text: true
 	};
 
-	if (input.voice) body.voice = input.voice;
-	if (typeof input.speed === 'number') body.speed = input.speed;
+	if (input.voice) body.predefined_voice_id = input.voice;
+	if (typeof input.speed === 'number') body.speed_factor = input.speed;
 	if (typeof input.exaggeration === 'number') body.exaggeration = input.exaggeration;
-	if (input.emotion) body.emotion = input.emotion;
 	if (input.language) body.language = input.language;
 
 	return body;
@@ -58,7 +59,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 
 	let upstream: Response;
 	try {
-		upstream = await fetch(new URL('v1/audio/speech', baseUrl), {
+		upstream = await fetch(new URL('tts', baseUrl), {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(buildRequestBody({ text, voice, speed, exaggeration, emotion, language }))
