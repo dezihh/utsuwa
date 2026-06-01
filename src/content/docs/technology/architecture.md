@@ -134,11 +134,16 @@ Text-to-speech converts LLM responses to audio with lip-sync.
 - `src/lib/services/lipsync/analyzer.ts` — Lip-sync audio analysis
 - `src/lib/services/tts/elevenlabs.ts` — ElevenLabs provider
 - `src/lib/services/tts/openai-tts.ts` — OpenAI TTS provider
+- `src/lib/services/tts/alltalk.ts` — AllTalk provider
+- `src/lib/services/tts/chatterbox.ts` — Chatterbox provider (streaming-capable)
 - `src/lib/services/tts/index.ts` — Provider factory and shared audio context
+- `src/lib/services/voice-orchestrator.ts` — Segment orchestration + streaming playback control
 
 **Supported providers:**
 - ElevenLabs (high quality, requires API key)
 - OpenAI TTS (requires API key)
+- AllTalk (local, optional auth token)
+- Chatterbox (local, streaming)
 
 **Flow:**
 1. LLM response text is sent to TTS provider

@@ -27,8 +27,11 @@ export const POST: RequestHandler = async ({ request }) => {
 	const baseUrl = normalizeBaseUrl(formData.get('baseUrl'));
 	const model = ((formData.get('model') as string | null) ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
 
+	// Convert File to Blob for proper multipart transmission to upstream server
+	const audioBlob = new Blob([await audioFile.arrayBuffer()], { type: audioFile.type || 'audio/wav' });
+
 	const whisperForm = new FormData();
-	whisperForm.append('file', audioFile);
+	whisperForm.append('file', audioBlob, audioFile.name);
 	whisperForm.append('model', model);
 	whisperForm.append('response_format', 'json');
 

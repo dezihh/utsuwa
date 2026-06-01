@@ -1,5 +1,6 @@
 import { getTTSProvider, type TTSOptions } from '$lib/services/tts';
 import { getTTSProvider as getTTSMetadata } from '$lib/services/providers/registry';
+import { VoiceOrchestrator, type SpeechSegment } from '$lib/services/voice-orchestrator';
 
 interface QueueItem {
 	text: string;
@@ -11,6 +12,7 @@ function createTTSStore() {
 	let currentAnalyser = $state<AnalyserNode | null>(null);
 	let currentSource = $state<AudioBufferSourceNode | null>(null);
 	let queue = $state<QueueItem[]>([]);
+	const orchestrator = new VoiceOrchestrator();
 
 	async function speak(text: string, options: TTSOptions) {
 		const provider = getTTSMetadata(options.provider);
@@ -18,6 +20,23 @@ function createTTSStore() {
 		// Only providers that require API keys should be blocked here.
 		if (provider?.requiresApiKey && !options.apiKey) {
 			console.warn('TTS not configured - missing API key');
+			return;
+		}
+
+		const tts = getTTSProvider(options);
+		if (tts.capabilities?.streaming && tts.speakStreaming) {
+			isSpeaking = true;
+			const segments: SpeechSegment[] = [{ text }];
+			await orchestrator.speakSegments(segments, options, {
+				onAnalyserUpdate: (analyser) => {
+					currentAnalyser = analyser;
+				},
+				onComplete: () => {
+					isSpeaking = false;
+					currentAnalyser = null;
+					currentSource = null;
+				}
+			});
 			return;
 		}
 
@@ -41,6 +60,26 @@ function createTTSStore() {
 
 		if (provider?.requiresApiKey && !options.apiKey) {
 			console.warn('TTS not configured - missing API key');
+			return;
+		}
+
+		const tts = getTTSProvider(options);
+		if (tts.capabilities?.streaming && tts.speakStreaming) {
+			isSpeaking = true;
+			const segments: SpeechSegment[] = sentences.map((text) => ({ text }));
+			await orchestrator.speakSegments(segments, options, {
+				onSegmentStart: (segment, index) => {
+					callbacks?.onSentenceStart?.(segment.text, index);
+				},
+				onAnalyserUpdate: (analyser) => {
+					currentAnalyser = analyser;
+				},
+				onComplete: () => {
+					isSpeaking = false;
+					currentAnalyser = null;
+					currentSource = null;
+				}
+			});
 			return;
 		}
 
@@ -90,6 +129,8 @@ function createTTSStore() {
 	}
 
 	function stop() {
+		orchestrator.interrupt();
+
 		if (currentSource) {
 			try {
 				currentSource.stop();
@@ -104,10 +145,13 @@ function createTTSStore() {
 	}
 
 	function getAnalyserData(): Uint8Array | null {
-		if (!currentAnalyser) return null;
+		const orchAnalyser = orchestrator.getAnalyser();
+		const activeAnalyser = orchAnalyser || currentAnalyser;
 
-		const dataArray = new Uint8Array(currentAnalyser.frequencyBinCount);
-		currentAnalyser.getByteFrequencyData(dataArray);
+		if (!activeAnalyser) return null;
+
+		const dataArray = new Uint8Array(activeAnalyser.frequencyBinCount);
+		activeAnalyser.getByteFrequencyData(dataArray);
 		return dataArray;
 	}
 
@@ -116,7 +160,7 @@ function createTTSStore() {
 			return isSpeaking;
 		},
 		get currentAnalyser() {
-			return currentAnalyser;
+			return orchestrator.getAnalyser() || currentAnalyser;
 		},
 		speak,
 		speakSentences,

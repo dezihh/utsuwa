@@ -112,7 +112,7 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 ];
 
 // ============================================
-// TTS PROVIDERS (3 total)
+// TTS PROVIDERS (4 total)
 // ============================================
 
 export const TTS_PROVIDERS: ProviderMetadata[] = [
@@ -173,6 +173,17 @@ export const TTS_PROVIDERS: ProviderMetadata[] = [
 		requiresApiKey: false,
 		isLocal: true,
 		defaultBaseUrl: 'http://localhost:7851/api/',
+		voices: []
+	},
+	{
+		id: 'chatterbox',
+		name: 'Chatterbox',
+		description: 'Local TTS with streaming, emotion control, and multilingual support',
+		category: 'tts',
+		icon: '🗣️',
+		requiresApiKey: false,
+		isLocal: true,
+		defaultBaseUrl: 'http://localhost:8300/',
 		voices: []
 	},
 ];

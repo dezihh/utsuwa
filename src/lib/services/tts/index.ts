@@ -10,6 +10,8 @@ export interface TTSOptions {
 	speed?: number;
 	pitch?: number;
 	volume?: number;
+	/** Emotion exaggeration for providers that support it (0.0-1.0) */
+	exaggeration?: number;
 }
 
 // Result from TTS speak method
@@ -18,10 +20,40 @@ export interface TTSSpeakResult {
 	analyser: AnalyserNode;
 }
 
+// Streaming types for providers that support chunked audio
+export interface StreamOptions {
+	/** Emotion style hint for the TTS engine */
+	emotion?: string;
+	/** Emotion intensity (0.0-1.0) */
+	exaggeration?: number;
+	/** Language code (ISO 639-1) for multilingual providers */
+	language?: string;
+	/** AbortSignal for cancellation */
+	signal?: AbortSignal;
+}
+
+export interface AudioChunk {
+	/** Raw audio data (WAV/PCM chunk) */
+	data: ArrayBuffer;
+	/** Whether this is the final chunk */
+	done: boolean;
+}
+
+// Provider capability flags
+export interface TTSCapabilities {
+	streaming: boolean;
+	emotion: boolean;
+	multilingual: boolean;
+}
+
 // Base TTS provider interface
 export interface ITTSProvider {
 	speak(text: string): Promise<TTSSpeakResult>;
 	getAudioContext(): AudioContext;
+	/** Optional streaming speech - only available on providers with capabilities.streaming */
+	speakStreaming?(text: string, options?: StreamOptions): AsyncGenerator<AudioChunk>;
+	/** Provider capability flags */
+	capabilities?: TTSCapabilities;
 }
 
 // Shared audio context for all providers
@@ -52,20 +84,23 @@ export function unlockAudioContext(): void {
 export const TTS_BASE_URLS: Partial<Record<TTSProvider, string>> = {
 	elevenlabs: 'https://api.elevenlabs.io/v1/',
 	'openai-tts': 'https://api.openai.com/v1/',
-	alltalk: 'http://localhost:7851/api/'
+	alltalk: 'http://localhost:7851/api/',
+	chatterbox: 'http://localhost:8300/'
 };
 
 // Default voices per provider
 export const DEFAULT_VOICES: Partial<Record<TTSProvider, string>> = {
 	elevenlabs: 'EXAVITQu4vr4xnSDxMaL', // Bella
 	'openai-tts': 'alloy',
-	alltalk: ''
+	alltalk: '',
+	chatterbox: ''
 };
 
 // Import individual providers
 import { ElevenLabsTTS } from './elevenlabs';
 import { OpenAITTS } from './openai-tts';
 import { AllTalkTTS } from './alltalk';
+import { ChatterboxTTS } from './chatterbox';
 
 // Provider factory
 let currentProvider: ITTSProvider | null = null;
@@ -97,6 +132,10 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 
 		case 'alltalk':
 			currentProvider = new AllTalkTTS(options);
+			break;
+
+		case 'chatterbox':
+			currentProvider = new ChatterboxTTS(options);
 			break;
 
 		default:

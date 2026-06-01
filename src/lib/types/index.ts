@@ -31,7 +31,7 @@ export interface LLMConfig {
 }
 
 // TTS Provider IDs
-export type TTSProvider = 'elevenlabs' | 'openai-tts' | 'alltalk';
+export type TTSProvider = 'elevenlabs' | 'openai-tts' | 'alltalk' | 'chatterbox';
 
 export interface TTSConfig {
 	provider: TTSProvider;

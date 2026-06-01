@@ -476,7 +476,7 @@
 				placeholder={llmProvider.defaultBaseUrl || 'http://localhost:11434/v1/'}
 				value={settingsStore.getProviderConfig(llmProvider.id).baseUrl ?? ''}
 				oninput={(e) => handleLLMBaseUrlChange(e.currentTarget.value)}
-				onblur={fetchLLMModels}
+				onblur={() => fetchLLMModels()}
 			/>
 			{#if llmFetchError}
 				<p class="provider-note error">{llmFetchError}</p>

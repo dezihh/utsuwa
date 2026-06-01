@@ -301,7 +301,10 @@
 				ttsStore.speak(cleanedResponse, {
 					provider: ttsProvider,
 					apiKey: ttsConfig.apiKey,
-					voiceId: speechSettings.activeVoiceId as string || ttsConfig.voiceId,
+					voiceId:
+						(speechSettings.activeVoiceId as string) ||
+						(speechSettings.activeModel as string) ||
+						ttsConfig.voiceId,
 					baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
 					speed: speechSettings.speed as number ?? 1
 				});
