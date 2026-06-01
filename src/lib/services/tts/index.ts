@@ -121,7 +121,11 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 		currentOptions.apiKey === options.apiKey &&
 		currentOptions.voiceId === options.voiceId &&
 		currentOptions.rvcVoiceId === options.rvcVoiceId &&
-		currentOptions.baseUrl === options.baseUrl
+		currentOptions.baseUrl === options.baseUrl &&
+		currentOptions.exaggeration === options.exaggeration &&
+		currentOptions.language === options.language &&
+		currentOptions.cfgWeight === options.cfgWeight &&
+		currentOptions.temperature === options.temperature
 	) {
 		return currentProvider;
 	}

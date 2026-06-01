@@ -197,12 +197,18 @@
 		const persona = personaStore.activeCard;
 		const memories = await retrieveRelevantContext(userMessage);
 
+		const speechSettings = modulesStore.getModuleSettings('speech');
+		const activeTTSProvider = speechSettings?.activeProvider as string | undefined;
+		const ttsConfig = activeTTSProvider ? settingsStore.getProviderConfig(activeTTSProvider) : null;
+
 		const context: PromptContext = {
 			persona,
 			state,
 			memories,
 			userMessage,
-			systemTime: new Date()
+			systemTime: new Date(),
+			ttsProvider: activeTTSProvider,
+			ttsLanguage: ttsConfig?.language || undefined
 		};
 
 		return buildSystemPrompt(context);

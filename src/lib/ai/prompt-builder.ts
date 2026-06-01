@@ -10,6 +10,10 @@ export interface PromptContext {
 	memories: RelevantContext;
 	userMessage: string;
 	systemTime: Date;
+	/** When set, injects voice tag instructions for the active TTS provider */
+	ttsProvider?: string;
+	/** Default language code for [lang:xx] hints (e.g. 'de', 'es') */
+	ttsLanguage?: string;
 }
 
 // Build the complete system prompt
@@ -25,6 +29,9 @@ export function buildSystemPrompt(context: PromptContext): string {
 		buildMemoryLayer(context),
 		buildInstructionLayer(context)
 	];
+
+	const voiceTags = buildVoiceTagLayer(context);
+	if (voiceTags) layers.push(voiceTags);
 
 	return layers.join('\n\n');
 }
@@ -94,6 +101,9 @@ After your response, you may optionally output state changes as JSON:
 
 NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affection, trust, intimacy, comfort, or respect changes - these relationship stats are disabled.
 </instructions>`);
+
+	const voiceTags = buildVoiceTagLayer(ctx);
+	if (voiceTags) parts.push(voiceTags);
 
 	return parts.join('\n\n');
 }
@@ -252,6 +262,42 @@ After your dialogue response, you may optionally output state changes as JSON:
 
 Keep deltas small (-10 to +10 for most interactions). Only include the JSON if you want to suggest state changes.
 </instructions>`;
+}
+
+// Voice tag layer - injected only when Chatterbox TTS is active
+function buildVoiceTagLayer(ctx: PromptContext): string | null {
+	if (ctx.ttsProvider !== 'chatterbox') return null;
+
+	const langHint = ctx.ttsLanguage
+		? `The default spoken language is **${ctx.ttsLanguage}**. Use [lang:${ctx.ttsLanguage}] to return to it after switching.`
+		: 'Use [lang:xx] tags to switch the spoken language per sentence.';
+
+	return `<voice_tags>
+You are connected to a text-to-speech engine (Chatterbox) that understands special inline tags.
+Embed them directly in your response text – they are invisible to the user but control voice and emotion.
+
+LANGUAGE SWITCHING (pronunciation changes per sentence):
+  [lang:de]  German   [lang:es]  Spanish   [lang:en]  English   [lang:fr]  French
+  [lang:it]  Italian  [lang:pt]  Portuguese  [lang:ja]  Japanese  [lang:zh]  Chinese
+${langHint}
+
+EMOTION / SOUND EFFECTS (influence voice expressiveness):
+  [laugh]    — laugh out loud        [giggle]   — giggle
+  [chuckle]  — quiet chuckle        [sigh]     — sigh
+  [excited]  — very excited tone    [sad]      — subdued, melancholic
+  [calm]     — calm, measured       [whisper]  — soft, hushed
+  [dramatic] — over-the-top drama
+
+RULES:
+- Place tags immediately before the affected word or sentence (no space after the tag).
+- Language tags apply to all following sentences until the next [lang:xx] tag.
+- Emotion tags apply to the sentence or phrase they precede.
+- Never explain the tags to the user; never output them as visible text.
+- Use them naturally to make the conversation more expressive and realistic.
+
+EXAMPLE:
+  "[excited]Oh wow, that is impressive! [lang:es]¡Muy bien hecho! [lang:de][chuckle]Du machst das wirklich gut."
+</voice_tags>`;
 }
 
 // Helper functions for descriptions
