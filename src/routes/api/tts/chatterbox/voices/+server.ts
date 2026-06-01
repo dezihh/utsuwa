@@ -13,7 +13,11 @@ export const GET: RequestHandler = async ({ url }) => {
 	}
 
 	if (!response.ok) {
-		return json({ error: `Chatterbox error: ${response.status}` }, { status: response.status });
+		const body = await response.text().catch(() => '');
+		return json(
+			{ error: `Cannot reach Chatterbox voices endpoint (upstream ${response.status}). Check that Chatterbox is running and the base URL is correct (default: http://localhost:8300/).${body ? ' ' + body : ''}` },
+			{ status: 502 }
+		);
 	}
 
 	const data = (await response.json()) as Array<{ display_name: string; filename: string }>;
