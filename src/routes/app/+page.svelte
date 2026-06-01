@@ -295,7 +295,7 @@
 							baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
 							systemPrompt
 						},
-						(text) => { fullContent += text; chatStore.updateLastMessage(fullContent); },
+						(text) => { fullContent += text; chatStore.updateLastMessage(stripLangTags(fullContent)); },
 						(error) => reject(new Error(error)),
 						() => resolve()
 					);
@@ -347,7 +347,7 @@
 						if (line.startsWith('0:')) {
 							const text = JSON.parse(line.slice(2));
 							fullContent += text;
-							chatStore.updateLastMessage(fullContent);
+							chatStore.updateLastMessage(stripLangTags(fullContent));
 						} else if (line.startsWith('e:')) {
 							const { error } = JSON.parse(line.slice(2));
 							throw new Error(error);
