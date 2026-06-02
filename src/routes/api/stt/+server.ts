@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 const DEFAULT_WHISPER_BASE_URL = 'http://127.0.0.1:8000/v1';
-const DEFAULT_MODEL = 'Systran/faster-whisper-large-v3';
+const DEFAULT_MODEL = 'deepdml/faster-whisper-large-v3-turbo-ct2';
 
 function normalizeBaseUrl(value: FormDataEntryValue | null): string {
 	if (typeof value !== 'string') return DEFAULT_WHISPER_BASE_URL;

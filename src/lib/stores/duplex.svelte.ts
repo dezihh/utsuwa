@@ -125,7 +125,7 @@
 				const baseUrl = ((whisperConfig.baseUrl as string | undefined)?.trim() || 'http://127.0.0.1:8000/v1').replace(/\/$/, '');
 				const formData = new FormData();
 				formData.append('file', blob, `duplex.${ext}`);
-				formData.append('model', (whisperConfig as { model?: string }).model || 'Systran/faster-whisper-large-v3');
+				formData.append('model', (whisperConfig as { model?: string }).model || 'deepdml/faster-whisper-large-v3-turbo-ct2');
 				formData.append('baseUrl', baseUrl);
 
 				const res = await fetch('/api/stt', { method: 'POST', body: formData });

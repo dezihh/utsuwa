@@ -1271,6 +1271,18 @@
 										}}
 									/>
 								</div>
+								<div class="api-key-row">
+									<input
+										type="text"
+										class="api-key-input"
+										placeholder="deepdml/faster-whisper-large-v3-turbo-ct2"
+										value={(settingsStore.getProviderConfig('whisper-local') as { model?: string }).model ?? ''}
+										oninput={(e) => {
+											settingsStore.setProviderConfig('whisper-local', { model: e.currentTarget.value });
+										}}
+									/>
+									<span class="api-key-label">Model ID</span>
+								</div>
 								<div class="vad-sensitivity-row">
 									<label class="vad-sensitivity-label">
 										Mic Sensitivity
