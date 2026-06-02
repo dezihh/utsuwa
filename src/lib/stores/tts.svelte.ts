@@ -24,7 +24,7 @@ function createTTSStore() {
 				? (segment: SpeechSegment, index: number) => extraCallbacks.onSentenceStart!(segment.text, index)
 				: undefined,
 			onAnalyserUpdate: (analyser: AnalyserNode) => {
-				console.debug('[TTS Store] onAnalyserUpdate fired, analyser:', analyser);
+				console.log('[TTS Store] onAnalyserUpdate fired, analyser:', analyser);
 				currentAnalyser = analyser;
 			},
 			onEmotionChange: (emotion: string | null) => {

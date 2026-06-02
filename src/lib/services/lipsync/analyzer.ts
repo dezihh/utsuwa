@@ -14,7 +14,7 @@ export class LipSyncAnalyzer {
 	// Tuned smoothing parameters
 	private readonly ATTACK = 0.18; // Slower attack = less snappy
 	private readonly RELEASE = 0.1; // Slower release = smoother close
-	private readonly VOLUME_THRESHOLD = 0.08; // Ignore more low-level noise
+	private readonly VOLUME_THRESHOLD = 0.02; // Sensitive enough for quiet TTS audio
 
 	setAnalyser(analyser: AnalyserNode | null) {
 		this.analyser = analyser;

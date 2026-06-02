@@ -62,7 +62,7 @@
 	let emoteAction = $state<THREE.AnimationAction | null>(null); // One-shot emote animations
 	let isEmotePlaying = $state(false); // True when an emote is playing (disables blinking)
 	let lastIdleIndex = $state(-1); // Track last played idle to avoid repeats
-	let activeLipSyncAnalyser = $state<AnalyserNode | null>(null);
+	let activeLipSyncAnalyser: AnalyserNode | null = null;
 	const currentAnimation = $derived(vrmStore.currentAnimation);
 	// Talking animation plays when TTS is speaking OR when text-based talking is triggered
 	const shouldTalk = $derived(ttsStore.isSpeaking || vrmStore.isTalking);
@@ -302,10 +302,8 @@
 		);
 	}
 
-	// Update lip-sync analyser when TTS state changes
-	$effect(() => {
-		lipSyncAnalyzer.setAnalyser(ttsStore.currentAnalyser);
-	});
+	// Lip-sync analyser is updated in the frame loop below — no $effect needed.
+	// (A reactive $effect has a tracking gap after the first segment; the frame loop handles all.)
 
 	// Sync store emotion to expression controller.
 	$effect(() => {
@@ -596,7 +594,7 @@
 		// Keep the lip-sync analyser aligned with the active TTS source.
 		const analyser = ttsStore.currentAnalyser;
 		if (analyser !== activeLipSyncAnalyser) {
-			console.debug('[VrmModel] analyser changed:', activeLipSyncAnalyser, '→', analyser);
+			console.log('[VrmModel] analyser changed:', activeLipSyncAnalyser, '→', analyser);
 			activeLipSyncAnalyser = analyser;
 			lipSyncAnalyzer.setAnalyser(analyser);
 		}

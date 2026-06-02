@@ -331,7 +331,12 @@ export function splitIntoSegments(
 		segments[0] = { ...segments[0], action };
 	}
 
-	return segments.length > 0 ? segments : [{ text: text.trim(), language: defaultLanguage }];
+	// Use cleanText (action tags stripped) in the fallback — never return raw tag text to TTS
+	return segments.length > 0
+		? segments
+		: cleanText.trim()
+			? [{ text: cleanText.trim(), language: defaultLanguage }]
+			: [];
 }
 
 function extractEmotionBlock(block: string, language?: string): SpeechSegment[] {
