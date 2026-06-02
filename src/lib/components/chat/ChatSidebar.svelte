@@ -66,8 +66,8 @@
 		{:else}
 			{#each chatStore.messages as msg (msg.id)}
 				{@const isLastAssistant = msg.id === lastAssistantId && msg.role === 'assistant'}
-				{@const displayText = isLastAssistant && (speakingText || isTyping)
-					? speakingText
+				{@const displayText = isLastAssistant && isTyping && !speakingText
+					? ''
 					: msg.content}
 				<div class="message" class:user={msg.role === 'user'} class:assistant={msg.role === 'assistant'}>
 					<div class="bubble" class:speaking={isLastAssistant && (speakingText || isTyping)}>

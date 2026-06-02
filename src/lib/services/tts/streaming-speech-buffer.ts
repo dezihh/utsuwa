@@ -37,10 +37,15 @@ export class StreamingSpeechBuffer {
 	}
 
 	private tryEmit(): void {
-		const unprocessed = this.buffer.slice(this.emittedLength);
-		if (!unprocessed) return;
-
-		this.tryEmitBlock(unprocessed);
+		// Loop so that when multiple complete sentences are buffered (e.g. fast LLM),
+		// each is emitted individually in sequence rather than as one big block.
+		let unprocessed = this.buffer.slice(this.emittedLength);
+		while (unprocessed.length > 0) {
+			const before = this.emittedLength;
+			this.tryEmitBlock(unprocessed);
+			if (this.emittedLength === before) break; // no sentence boundary found
+			unprocessed = this.buffer.slice(this.emittedLength);
+		}
 	}
 
 	private tryEmitBlock(text: string): void {
@@ -68,22 +73,22 @@ export class StreamingSpeechBuffer {
 			return;
 		}
 
-		const sentenceEnd = /([.!?…])\s+/g;
-		let lastEnd = -1;
-		let m: RegExpExecArray | null;
+		// Emit only up to the FIRST sentence boundary so that Chatterbox can start
+		// synthesising sentence 1 immediately, without waiting for the last sentence.
+		// tryEmit() loops and calls us again for sentence 2, 3, … in sequence.
+		const sentenceEnd = /([.!?…])\s+/;
+		const m = sentenceEnd.exec(text);
+		if (!m) return;
 
-		while ((m = sentenceEnd.exec(text)) !== null) {
-			lastEnd = m.index + m[0].length;
-		}
+		const firstEnd = m.index + m[0].length;
+		if (firstEnd < 20) return; // too short — wait for more text
 
-		if (lastEnd > 20) {
-			const block = text.slice(0, lastEnd);
-			if (block.trim()) {
-				for (const seg of splitIntoSegments(block, this.options.defaultLanguage, false)) {
-					this.options.onSegment(seg);
-				}
-				this.emittedLength += lastEnd;
+		const block = text.slice(0, firstEnd);
+		if (block.trim()) {
+			for (const seg of splitIntoSegments(block, this.options.defaultLanguage, false)) {
+				this.options.onSegment(seg);
 			}
+			this.emittedLength += firstEnd;
 		}
 	}
 }
