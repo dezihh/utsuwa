@@ -181,15 +181,17 @@
 					duplexAudioLevel = level;
 				},
 				onSpeechStart: () => {
-					// Interrupt TTS + LLM if it is playing/thinking
-					if (ttsActive || duplexPhase === 'thinking') {
+					// Only interrupt active TTS playback.
+					// If we're still thinking, keep recording/transcribing so the
+					// next user turn can abort the request naturally.
+					if (ttsActive) {
 						onInterrupt?.();
 						ttsActive = false;
 					}
 				},
 				onSegmentReady: (blob, mimeType) => {
 					console.debug(`[Duplex] Segment ready: ${blob.size} bytes, phase=${duplexPhase}, active=${isDuplexActive}`);
-					if (!isDuplexActive || duplexPhase === 'thinking') return;
+					if (!isDuplexActive) return;
 					transcribeSegment(blob, mimeType);
 				},
 				onNoiseDetected: () => {
