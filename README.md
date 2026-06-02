@@ -265,6 +265,17 @@ Utsuwa uses that URL directly for model discovery and chat requests. If your lla
 2. Click **"Load VRM"** to select a local `.vrm` file
 3. Or enter a URL to load a VRM model from the web
 
+#### Per-Model Expression Mapping
+
+Different VRM models expose different expression names (for example `Joy/Sorrow/Fun` vs `happy/sad/relaxed`).
+Utsuwa provides a per-avatar mapping table under **Settings > Avatar > Expression Mapping**:
+
+- Map each emotion tag (`[laugh]`, `[sad]`, etc.) to a detected VRM expression
+- Tune intensity and fade-in/fade-out per emotion
+- Use **Reset Auto** to regenerate defaults from detected expressions
+
+Mappings are stored per model and loaded automatically when you switch avatars.
+
 #### Data Management
 
 Your companion data is stored locally on your device. To back up or transfer your data:

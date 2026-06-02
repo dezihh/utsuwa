@@ -19,6 +19,8 @@
 	} from '$lib/services/providers/use-model-fetch';
 	import { fetchAllTalkData, type AllTalkOption } from '$lib/services/providers/alltalk';
 	import { fetchChatterboxVoices, type ChatterboxVoice } from '$lib/services/providers/chatterbox';
+	import { getKnownEmotionTags } from '$lib/utils/sentences';
+	import type { EmotionMapping } from '$lib/services/vrm/expression-controller';
 
 	// Character state - single companion system
 	const charState = $derived.by(() => characterStore.state);
@@ -87,6 +89,7 @@
 	let uploadModalOpen = $state(false);
 	let modeConfirmOpen = $state(false);
 	let pendingMode = $state<'companion' | 'dating_sim' | null>(null);
+	const emotionTags = getKnownEmotionTags();
 
 	// AI Services state
 	const consciousnessSettings = $derived(modulesStore.getModuleSettings('consciousness'));
@@ -565,6 +568,37 @@
 		uploadModalOpen = false;
 	}
 
+	function updateEmotionExpression(emotion: string, expression: string) {
+		vrmStore.setEmotionMapping(emotion, { expression });
+	}
+
+	function updateEmotionIntensity(emotion: string, value: number) {
+		const intensity = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.5;
+		vrmStore.setEmotionMapping(emotion, { intensity });
+	}
+
+	function updateEmotionFadeIn(emotion: string, value: number) {
+		const fadeIn = Number.isFinite(value) ? Math.min(3, Math.max(0.05, value)) : 0.25;
+		vrmStore.setEmotionMapping(emotion, { fadeIn });
+	}
+
+	function updateEmotionFadeOut(emotion: string, value: number) {
+		const fadeOut = Number.isFinite(value) ? Math.min(4, Math.max(0.05, value)) : 0.8;
+		vrmStore.setEmotionMapping(emotion, { fadeOut });
+	}
+
+	function getEmotionConfig(emotion: string): EmotionMapping {
+		const profile = vrmStore.emotionProfile;
+		return (
+			profile?.[emotion] ?? {
+				expression: '',
+				intensity: 0.5,
+				fadeIn: 0.25,
+				fadeOut: 0.8
+			}
+		);
+	}
+
 	function requestModeChange(mode: 'companion' | 'dating_sim') {
 		if (mode === appMode) return;
 		pendingMode = mode;
@@ -657,6 +691,79 @@
 						</button>
 					{/each}
 				</div>
+			</div>
+
+			<div class="expression-mapping-section">
+				<div class="expression-header">
+					<span class="gallery-label">Expression Mapping (per Avatar)</span>
+					<button class="upload-btn" onclick={() => vrmStore.resetEmotionMappingsForActiveModel()}>
+						<Icon name="refresh-cw" size={14} />
+						<span>Reset Auto</span>
+					</button>
+				</div>
+
+				{#if vrmStore.availableExpressions.length === 0}
+					<p class="expression-empty">
+						No expressions detected yet. Select the avatar and wait until it loads in the main scene.
+					</p>
+				{:else}
+					<div class="expression-grid">
+						<div class="expression-grid-header">Emotion Tag</div>
+						<div class="expression-grid-header">VRM Expression</div>
+						<div class="expression-grid-header">Intensity</div>
+						<div class="expression-grid-header">Fade In / Out (s)</div>
+
+						{#each emotionTags as emotion}
+							{@const cfg = getEmotionConfig(emotion)}
+							<div class="expression-emotion">[{emotion}]</div>
+							<div>
+								<select
+									class="expression-select"
+									value={cfg.expression}
+									onchange={(e) => updateEmotionExpression(emotion, e.currentTarget.value)}
+								>
+									<option value="">(disabled)</option>
+									{#each vrmStore.availableExpressions as expr}
+										<option value={expr}>{expr}</option>
+									{/each}
+								</select>
+							</div>
+							<div class="expression-intensity">
+								<input
+									type="range"
+									min="0"
+									max="1"
+									step="0.05"
+									value={cfg.intensity}
+									oninput={(e) =>
+										updateEmotionIntensity(emotion, parseFloat(e.currentTarget.value))}
+								/>
+								<span>{cfg.intensity.toFixed(2)}</span>
+							</div>
+							<div class="expression-fades">
+								<input
+									type="number"
+									min="0.05"
+									max="3"
+									step="0.05"
+									value={cfg.fadeIn}
+									onchange={(e) => updateEmotionFadeIn(emotion, parseFloat(e.currentTarget.value))}
+								/>
+								<input
+									type="number"
+									min="0.05"
+									max="4"
+									step="0.05"
+									value={cfg.fadeOut}
+									onchange={(e) => updateEmotionFadeOut(emotion, parseFloat(e.currentTarget.value))}
+								/>
+							</div>
+						{/each}
+					</div>
+					<p class="expression-hint">
+						Mappings are saved per avatar model and loaded automatically when switching models.
+					</p>
+				{/if}
 			</div>
 
 				<!-- Core Personality (collapsible) -->
@@ -1849,6 +1956,94 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 100%;
+	}
+
+	.expression-mapping-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.65rem;
+		padding: 0.8rem;
+		background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 12px;
+	}
+
+	:global(.dark) .expression-mapping-section {
+		background: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
+		border-color: rgba(255, 255, 255, 0.08);
+	}
+
+	.expression-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+
+	.expression-grid {
+		display: grid;
+		grid-template-columns: 0.9fr 1.4fr 1fr 1fr;
+		gap: 0.4rem 0.6rem;
+		align-items: center;
+	}
+
+	.expression-grid-header {
+		font-size: 0.68rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-tertiary);
+		padding-bottom: 0.2rem;
+		border-bottom: 1px solid var(--border-light);
+	}
+
+	.expression-emotion {
+		font-family: 'Share Tech Mono', monospace;
+		font-size: 0.76rem;
+		color: var(--text-secondary);
+	}
+
+	.expression-select,
+	.expression-fades input {
+		width: 100%;
+		padding: 0.35rem 0.5rem;
+		border-radius: 8px;
+		border: 1px solid var(--border-light);
+		background: var(--bg-primary);
+		color: var(--text-primary);
+		font-size: 0.75rem;
+	}
+
+	.expression-intensity {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+
+	.expression-intensity input[type='range'] {
+		flex: 1;
+	}
+
+	.expression-intensity span {
+		min-width: 2.2rem;
+		text-align: right;
+		font-size: 0.72rem;
+		color: var(--text-tertiary);
+		font-family: 'Share Tech Mono', monospace;
+	}
+
+	.expression-fades {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.35rem;
+	}
+
+	.expression-hint,
+	.expression-empty {
+		margin: 0;
+		font-size: 0.72rem;
+		color: var(--text-tertiary);
+		line-height: 1.4;
 	}
 
 	/* Personality Section */
@@ -3442,6 +3637,19 @@
 
 		.gallery-grid {
 			grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+		}
+
+		.expression-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.expression-grid-header {
+			display: none;
+		}
+
+		.expression-emotion {
+			margin-top: 0.35rem;
+			font-weight: 600;
 		}
 
 		.stats-panel {

@@ -308,6 +308,7 @@
 
 	// Sync store emotion to expression controller.
 	$effect(() => {
+		expressionController.setMappings(vrmStore.emotionProfile);
 		expressionController.setEmotion(vrmStore.currentEmotion);
 	});
 

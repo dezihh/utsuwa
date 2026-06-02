@@ -2,6 +2,11 @@ import { browser } from '$app/environment';
 import type { VRM } from '@pixiv/three-vrm';
 import localforage from 'localforage';
 import { isTauri } from '$lib/services/platform/platform';
+import {
+	DEFAULT_EMOTION_MAPPINGS,
+	type EmotionMapping
+} from '$lib/services/vrm/expression-controller';
+import { getKnownEmotionTags } from '$lib/utils/sentences';
 
 export interface VrmModel {
 	id: string;
@@ -11,6 +16,21 @@ export interface VrmModel {
 	isDefault: boolean;
 	createdAt: number;
 }
+
+type EmotionProfile = Record<string, EmotionMapping>;
+type EmotionProfilesByModel = Record<string, EmotionProfile>;
+
+const EXPRESSION_AUTO_ALIASES: Record<string, string[]> = {
+	laugh: ['joy', 'happy', 'fun'],
+	giggle: ['joy', 'happy', 'fun'],
+	chuckle: ['fun', 'joy', 'happy'],
+	excited: ['joy', 'surprised', 'happy'],
+	sad: ['sorrow', 'sad'],
+	sigh: ['sorrow', 'sad'],
+	calm: ['relaxed', 'neutral'],
+	whisper: ['relaxed', 'neutral'],
+	dramatic: ['surprised', 'angry']
+};
 
 // Default models bundled with the app (first one is loaded by default)
 const DEFAULT_MODELS: VrmModel[] = [
@@ -31,6 +51,18 @@ const vrmStorage = browser
 			storeName: 'models'
 		})
 	: null;
+
+function normalizeExpressionName(name: string): string {
+	return name.toLowerCase().replace(/[\s_-]+/g, '');
+}
+
+function cloneProfile(profile: EmotionProfile): EmotionProfile {
+	const out: EmotionProfile = {};
+	for (const [emotion, config] of Object.entries(profile)) {
+		out[emotion] = { ...config };
+	}
+	return out;
+}
 
 function createVrmStore() {
 	// Current model state - null until initFromStorage determines the correct model
@@ -55,6 +87,7 @@ function createVrmStore() {
 	let talkingTimeout: ReturnType<typeof setTimeout> | null = null;
 	let currentEmotion = $state<string | null>(null);
 	let pendingAction = $state<string | null>(null);
+	let emotionProfilesByModel = $state<EmotionProfilesByModel>({});
 
 	// Head position for 3D speech bubble positioning
 	let headPosition = $state<[number, number, number]>([0, 1.6, 0]);
@@ -79,6 +112,48 @@ function createVrmStore() {
 	let storageReady = false;
 	// Prevents re-emitting sync events when handling incoming ones
 	let isSyncing = false;
+
+	function findExpressionByAliases(expressions: string[], aliases: string[]): string {
+		if (!expressions.length) return '';
+		const normalized = new Map(expressions.map((expr) => [normalizeExpressionName(expr), expr]));
+		for (const alias of aliases) {
+			const key = normalizeExpressionName(alias);
+			const match = normalized.get(key);
+			if (match) return match;
+		}
+		return '';
+	}
+
+	function buildAutoProfile(expressions: string[]): EmotionProfile {
+		const known = getKnownEmotionTags();
+		const profile: EmotionProfile = {};
+		for (const emotion of known) {
+			const base = DEFAULT_EMOTION_MAPPINGS[emotion] ?? {
+				expression: '',
+				intensity: 0.5,
+				fadeIn: 0.25,
+				fadeOut: 0.8
+			};
+			const aliases = EXPRESSION_AUTO_ALIASES[emotion] ?? [base.expression];
+			const expression = findExpressionByAliases(expressions, aliases);
+			profile[emotion] = {
+				expression: expression || '',
+				intensity: base.intensity,
+				fadeIn: base.fadeIn,
+				fadeOut: base.fadeOut
+			};
+		}
+		return profile;
+	}
+
+	function ensureEmotionProfileForModel(modelId: string | null, expressions: string[]): void {
+		if (!modelId || emotionProfilesByModel[modelId]) return;
+		emotionProfilesByModel = {
+			...emotionProfilesByModel,
+			[modelId]: buildAutoProfile(expressions)
+		};
+		void saveToStorage();
+	}
 
 	// Initialize from storage (may override defaults with saved values)
 	if (browser) {
@@ -117,6 +192,12 @@ function createVrmStore() {
 				}
 
 				models = [...DEFAULT_MODELS, ...restored];
+			}
+
+			const savedProfiles =
+				await vrmStorage?.getItem<EmotionProfilesByModel>('expression-profiles-by-model');
+			if (savedProfiles && typeof savedProfiles === 'object') {
+				emotionProfilesByModel = savedProfiles;
 			}
 
 			// Restore preview thumbnails for all models
@@ -164,6 +245,7 @@ function createVrmStore() {
 				.map(({ url, previewUrl, ...rest }) => rest);
 			await vrmStorage.setItem('model-list', customModels);
 			await vrmStorage.setItem('active-model-id', activeModelId);
+			await vrmStorage.setItem('expression-profiles-by-model', emotionProfilesByModel);
 		} catch (e) {
 			console.error('Failed to save VRM storage:', e);
 		}
@@ -179,6 +261,7 @@ function createVrmStore() {
 		// Store available expressions when VRM is set
 		if (instance?.expressionManager) {
 			availableExpressions = instance.expressionManager.expressions.map((e) => e.expressionName);
+			ensureEmotionProfileForModel(activeModelId, availableExpressions);
 		}
 	}
 
@@ -299,6 +382,53 @@ function createVrmStore() {
 
 	function clearPendingAction() {
 		pendingAction = null;
+	}
+
+	function getActiveEmotionProfile(): EmotionProfile | null {
+		if (!activeModelId) return null;
+		const profile = emotionProfilesByModel[activeModelId];
+		if (profile) return profile;
+		return null;
+	}
+
+	function setEmotionMapping(
+		emotion: string,
+		patch: Partial<Pick<EmotionMapping, 'expression' | 'intensity' | 'fadeIn' | 'fadeOut'>>
+	) {
+		if (!activeModelId) return;
+
+		const existing =
+			getActiveEmotionProfile() ??
+			buildAutoProfile(availableExpressions);
+		const current = existing[emotion] ?? {
+			expression: '',
+			intensity: 0.5,
+			fadeIn: 0.25,
+			fadeOut: 0.8
+		};
+
+		const nextProfile: EmotionProfile = cloneProfile(existing);
+		nextProfile[emotion] = {
+			expression: patch.expression ?? current.expression,
+			intensity: patch.intensity ?? current.intensity,
+			fadeIn: patch.fadeIn ?? current.fadeIn,
+			fadeOut: patch.fadeOut ?? current.fadeOut
+		};
+
+		emotionProfilesByModel = {
+			...emotionProfilesByModel,
+			[activeModelId]: nextProfile
+		};
+		void saveToStorage();
+	}
+
+	function resetEmotionMappingsForActiveModel() {
+		if (!activeModelId) return;
+		emotionProfilesByModel = {
+			...emotionProfilesByModel,
+			[activeModelId]: buildAutoProfile(availableExpressions)
+		};
+		void saveToStorage();
 	}
 
 	async function addModel(file: File, previewDataUrl?: string): Promise<void> {
@@ -440,6 +570,9 @@ function createVrmStore() {
 		get pendingAction() {
 			return pendingAction;
 		},
+		get emotionProfile() {
+			return getActiveEmotionProfile();
+		},
 		get headPosition() {
 			return headPosition;
 		},
@@ -459,6 +592,8 @@ function createVrmStore() {
 		setEmotion,
 		triggerAction,
 		clearPendingAction,
+		setEmotionMapping,
+		resetEmotionMappingsForActiveModel,
 		addModel,
 		removeModel,
 		loadModelBlob,
