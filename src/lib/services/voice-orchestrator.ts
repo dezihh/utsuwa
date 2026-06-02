@@ -341,6 +341,7 @@ export class VoiceOrchestrator {
 		callbacks?: OrchestratorCallbacks
 	): Promise<void> {
 		const audioContext = getSharedAudioContext();
+		console.debug('[Orchestrator] playBuffer', index, 'ctx state:', audioContext.state, 'duration:', buffer.duration.toFixed(2) + 's');
 
 		if (audioContext.state === 'suspended') {
 			await audioContext.resume();
@@ -357,6 +358,7 @@ export class VoiceOrchestrator {
 		this.currentSource = source;
 		this.currentAnalyser = analyser;
 
+		console.debug('[Orchestrator] firing onSegmentStart + onAnalyserUpdate for index', index);
 		callbacks?.onSegmentStart?.(segment, index);
 		callbacks?.onAnalyserUpdate?.(analyser);
 

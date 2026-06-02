@@ -596,6 +596,7 @@
 		// Keep the lip-sync analyser aligned with the active TTS source.
 		const analyser = ttsStore.currentAnalyser;
 		if (analyser !== activeLipSyncAnalyser) {
+			console.debug('[VrmModel] analyser changed:', activeLipSyncAnalyser, '→', analyser);
 			activeLipSyncAnalyser = analyser;
 			lipSyncAnalyzer.setAnalyser(analyser);
 		}
