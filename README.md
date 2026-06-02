@@ -115,12 +115,13 @@ Chatterbox is configured under **Settings > TTS Providers** and connects to your
 Utsuwa supports inline control tags for Chatterbox:
 
 - Language tags: `[lang:de]`, `[lang:es]`, `[lang:en]`, ...
-- Emotion/sound tags: `[laugh]`, `[giggle]`, `[chuckle]`, `[sigh]`, `[excited]`, `[sad]`, `[calm]`, `[whisper]`, `[dramatic]`
+- Emotion/sound tags: `[laugh]`, `[giggle]`, `[chuckle]`, `[sigh]`, `[excited]`, `[sad]`, `[calm]`, `[whisper]`, `[dramatic]`, `[slow]`, `[fast]`
 - Body action tags: `[action:wave]`, `[action:nod]`, `[action:shake]`, `[action:jump]`, `[action:bow]`, `[action:think]`, `[action:clap]`, `[action:dance]`
 
 Processing rules:
 - Chatterbox mode keeps full language blocks together (only `[lang:xx]` splits), for more natural prosody.
 - Other TTS providers keep sentence-by-sentence segmentation.
+- If the user asks to continue a previous answer ("weiter", "continue", "go on"), Utsuwa injects continuation guidance so the reply resumes without repeating itself.
 - Tags are interpreted for TTS/avatar control but stripped from visible chat output.
 - Action tags require matching VRMA files in `/animations/` to play.
 

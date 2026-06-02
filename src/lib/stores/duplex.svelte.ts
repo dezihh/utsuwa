@@ -181,8 +181,8 @@
 					duplexAudioLevel = level;
 				},
 				onSpeechStart: () => {
-					// Interrupt TTS if it is playing
-					if (ttsActive) {
+					// Interrupt TTS + LLM if it is playing/thinking
+					if (ttsActive || duplexPhase === 'thinking') {
 						onInterrupt?.();
 						ttsActive = false;
 					}
@@ -205,7 +205,7 @@
 					const cfg = settingsStore.getProviderConfig('whisper-local');
 					return typeof cfg.vadThreshold === 'number' ? cfg.vadThreshold : 0.015;
 				})(),
-				silenceDurationMs: 1500,
+				silenceDurationMs: 1000,
 				minSpeechDurationMs: 500,
 				preBufferMs: 300
 			}

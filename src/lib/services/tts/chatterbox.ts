@@ -92,7 +92,7 @@ export class ChatterboxTTS implements ITTSProvider {
 			body: JSON.stringify({
 				text,
 				voice: this.voiceId,
-				speed: this.speed,
+				speed: options?.speed ?? this.speed,
 				exaggeration: options?.exaggeration ?? this.exaggeration,
 				emotion: options?.emotion,
 				language: options?.language ?? this.language,

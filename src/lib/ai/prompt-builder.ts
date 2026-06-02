@@ -3,6 +3,7 @@ import type { ConversationTurn, Fact, SessionSummary, RelevantContext } from '$l
 import type { PersonaCard } from '$lib/stores/persona.svelte';
 import type { McpTool } from '$lib/types/mcp';
 import { STAGE_BEHAVIORS, STAGE_INSTRUCTIONS } from '$lib/engine/stages';
+import { inferResponseLengthMode } from './response-length.ts';
 
 // Prompt context for building
 export interface PromptContext {
@@ -17,6 +18,10 @@ export interface PromptContext {
 	ttsLanguage?: string;
 	/** Active MCP tools — when provided, injects a tool-use instruction block */
 	mcpTools?: McpTool[];
+	/** When true, continue a previously interrupted response */
+	continueMode?: boolean;
+	/** Previously written assistant text used for continue-mode guidance */
+	continueFromText?: string;
 }
 
 // Build the complete system prompt
@@ -39,6 +44,12 @@ export function buildSystemPrompt(context: PromptContext): string {
 	const mcpLayer = buildMcpToolLayer(context);
 	if (mcpLayer) layers.push(mcpLayer);
 
+	const responseLengthLayer = buildResponseLengthLayer(context);
+	if (responseLengthLayer) layers.push(responseLengthLayer);
+
+	const continueLayer = buildContinueLayer(context);
+	if (continueLayer) layers.push(continueLayer);
+
 	return layers.join('\n\n');
 }
 
@@ -57,7 +68,9 @@ Current time: ${timeStr}, ${dateStr}
 
 RULES:
 - Be helpful, friendly, and conversational
-- Keep responses natural (1-3 paragraphs typically)
+- Match the response length to the task
+- Use as much detail as the user's request needs
+- Short replies are fine for casual chat, but do not truncate stories, explanations, or multi-step answers
 - Remember context from recent conversations
 </system>`);
 
@@ -114,6 +127,12 @@ NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affecti
 	const mcpLayer = buildMcpToolLayer(ctx);
 	if (mcpLayer) parts.push(mcpLayer);
 
+	const responseLengthLayer = buildResponseLengthLayer(ctx);
+	if (responseLengthLayer) parts.push(responseLengthLayer);
+
+	const continueLayer = buildContinueLayer(ctx);
+	if (continueLayer) parts.push(continueLayer);
+
 	return parts.join('\n\n');
 }
 
@@ -131,7 +150,9 @@ CRITICAL RULES:
 - Never break the fourth wall unless the character would
 - Be consistent with established memories and facts
 - Express emotions through dialogue, not stage directions
-- Keep responses conversational and natural (1-3 paragraphs typically)
+- Match the response length to the task
+- Keep casual dialogue compact, but expand naturally when the user asks for a story, explanation, or detailed answer
+- Do not stop after 2-3 sentences if the request needs more space
 
 OUTPUT FORMAT:
 1. Respond naturally in character (dialogue only, no actions in asterisks)
@@ -273,6 +294,31 @@ Keep deltas small (-10 to +10 for most interactions). Only include the JSON if y
 </instructions>`;
 }
 
+function buildResponseLengthLayer(ctx: PromptContext): string {
+	const mode = inferResponseLengthMode(ctx.userMessage);
+
+	if (mode === 'brief') {
+		return `<response_length>
+The user asked for a brief reply. Keep the answer compact, but still fully satisfy the request.
+Do not omit required steps or details that are necessary to complete the task.
+</response_length>`;
+	}
+
+	if (mode === 'longform') {
+		return `<response_length>
+The user asked for a story, explanation, or other detailed answer.
+Write at whatever length is needed to fully satisfy the request, even if that means multiple paragraphs.
+Do not cut the response short after 2-3 sentences.
+</response_length>`;
+	}
+
+	return `<response_length>
+Default to a natural conversational length.
+If the task needs detail, examples, a story, or step-by-step explanation, expand freely instead of forcing brevity.
+</response_length>`;
+}
+
+
 // MCP tool layer - injected when active tools are available
 function buildMcpToolLayer(ctx: PromptContext): string | null {
 	if (!ctx.mcpTools || ctx.mcpTools.length === 0) return null;
@@ -335,6 +381,10 @@ BODY ACTIONS (trigger avatar animations — use sparingly):
   Place [action:xxx] at the start of the sentence where the animation should play.
   Use at most ONE action tag per response.
 
+SPEED TAGS:
+  [slow]  — speak slowly and thoughtfully
+  [fast]  — speak quickly or excitedly
+
 RULES:
 - Place tags immediately before the affected word or sentence (no space after the tag).
 - Language tags apply to all following sentences until the next [lang:xx] tag.
@@ -343,8 +393,26 @@ RULES:
 - Use them naturally to make the conversation more expressive and realistic.
 
 EXAMPLE:
-  "[action:wave][excited]Oh wow, that is impressive! [lang:es]¡Muy bien hecho! [lang:de][chuckle]Du machst das wirklich gut."
+  "[action:wave][excited]Oh wow, that is impressive! [lang:es]¡Muy bien hecho! [lang:de][chuckle]Du machst das wirklich gut. [slow]Ich überlege kurz."
 </voice_tags>`;
+}
+
+function buildContinueLayer(ctx: PromptContext): string | null {
+	if (!ctx.continueMode || !ctx.continueFromText) return null;
+
+	return `<continue_mode>
+The user asked you to continue your previous response.
+
+CRITICAL RULES FOR CONTINUATION:
+- Continue exactly from where your last response stopped
+- Do not repeat, restart, summarize, or rephrase already written text
+- Do not say things like "Okay, let's continue" or "Lass uns weitermachen"
+- Start with the next word or sentence only
+- Produce a substantial continuation when the request needs it
+
+Already written (do not repeat):
+"${ctx.continueFromText.slice(-500)}"
+</continue_mode>`;
 }
 
 // Helper functions for descriptions

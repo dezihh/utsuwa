@@ -33,6 +33,7 @@
 	import { parseResponse, validateStateUpdates, extractPotentialFacts } from '$lib/ai/response-parser';
 	import { calculateBaselineUpdates, analyzeMessage } from '$lib/engine/heuristics';
 	import { mergeUpdates, checkAndApplyStageTransition } from '$lib/engine/state-updates';
+	import type { SpeechSegment } from '$lib/services/voice-orchestrator';
 	import {
 		retrieveRelevantContext,
 		addTurnToWorkingMemory,
@@ -46,7 +47,8 @@
 	import { initEmbeddingModel, subscribeToEmbeddingState, type EmbeddingState } from '$lib/services/embeddings';
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
 	import { allEvents } from '$lib/data/events';
-	import { splitIntoSegments, stripAllTags } from '$lib/utils/sentences';
+	import { splitIntoSegments, stripAllTags, isContinueRequest } from '$lib/utils/sentences';
+	import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
 
 	let canvasRef: HTMLCanvasElement | null = null;
 
@@ -68,6 +70,7 @@
 	let isTyping = $state(false);
 	// Sidebar TTS sync: grows sentence-by-sentence as audio plays
 	let spokenSoFar = $state('');
+	let llmAbortController: AbortController | null = null;
 
 	// Chat sidebar state
 	let sidebarOpen = $state(displayStore.chatDisplayMode !== 'bubble');
@@ -219,7 +222,10 @@
 	}
 
 	// Build system prompt
-	async function buildCompanionSystemPrompt(userMessage: string): Promise<string> {
+	async function buildCompanionSystemPrompt(
+		userMessage: string,
+		options?: { continueMode?: boolean; continueFromText?: string }
+	): Promise<string> {
 		const state = characterStore.state;
 		const persona = personaStore.activeCard;
 		const memories = await retrieveRelevantContext(userMessage);
@@ -237,7 +243,9 @@
 			systemTime: new Date(),
 			ttsProvider: activeTTSProvider,
 			ttsLanguage: ttsConfig?.language || undefined,
-			mcpTools: activeMcpTools
+			mcpTools: activeMcpTools,
+			continueMode: options?.continueMode,
+			continueFromText: options?.continueFromText
 		};
 
 		return buildSystemPrompt(context);
@@ -247,10 +255,21 @@
 	async function handleSend(content: string) {
 		if (!content.trim() || chatStore.isLoading) return;
 
-		// Check if chat is enabled
 		if (!modulesStore.isModuleEnabled('consciousness')) {
 			chatStore.setError('Chat is disabled. Enable it in Settings > Character > AI Services.');
 			return;
+		}
+
+		const continueMode = isContinueRequest(content);
+		let continueFromText: string | undefined;
+		if (continueMode) {
+			for (let i = chatStore.messages.length - 1; i >= 0; i--) {
+				const msg = chatStore.messages[i];
+				if (msg.role === 'assistant' && msg.content) {
+					continueFromText = msg.content;
+					break;
+				}
+			}
 		}
 
 		chatStore.addMessage('user', content);
@@ -263,6 +282,8 @@
 		characterStore.updateStreak();
 		characterStore.updateDaysKnown();
 
+		llmAbortController = new AbortController();
+
 		try {
 			const consciousnessSettings = modulesStore.getModuleSettings('consciousness');
 			const provider = consciousnessSettings.activeProvider as string;
@@ -272,7 +293,7 @@
 				throw new Error('Please configure a provider in Settings > Modules > Consciousness');
 			}
 
-			const systemPrompt = await buildCompanionSystemPrompt(content);
+			const systemPrompt = await buildCompanionSystemPrompt(content, { continueMode, continueFromText });
 			const providerConfig = settingsStore.getProviderConfig(provider);
 			const apiKey = providerConfig.apiKey;
 			const providerMeta = getLLMProvider(provider);
@@ -285,30 +306,92 @@
 			let fullContent = '';
 			const selectedModel = model || providerMeta?.models?.[0]?.id || '';
 
-			// Local providers go through the SvelteKit server route so that
-			// server-side code (running with network_mode: host) can reach
-			// localhost services. Direct chat is only used in Tauri builds
-			// where no server route is available.
+			const speechState = modulesStore.getModuleState('speech');
+			const speechSettings = modulesStore.getModuleSettings('speech');
+			const ttsEnabled = speechState?.enabled;
+			const ttsProvider = speechSettings?.activeProvider as TTSProvider | undefined;
+			const ttsConfig = ttsProvider ? settingsStore.getProviderConfig(ttsProvider) : null;
+			const isChatterbox = ttsProvider === 'chatterbox';
+			const ttsMeta = ttsProvider ? getTTSProvider(ttsProvider) : null;
+			const ttsOptions =
+				ttsEnabled && ttsProvider && ttsConfig
+					? {
+							provider: ttsProvider,
+							apiKey: ttsConfig.apiKey,
+							voiceId: (speechSettings.activeVoiceId as string) || ttsConfig.voiceId,
+							rvcVoiceId: (speechSettings.activeRvcVoiceId as string) || ttsConfig.rvcVoiceId,
+							baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
+							speed: (speechSettings.speed as number) ?? 1,
+							exaggeration: ttsConfig.exaggeration,
+							language: ttsConfig.language,
+							cfgWeight: ttsConfig.cfgWeight,
+							temperature: ttsConfig.temperature
+						}
+					: null;
+
+			let ttsStarted = false;
+			let speechPlayback: Promise<void> = Promise.resolve();
+			const maybeStartTTS = (segmentText: string) => {
+				if (!ttsOptions) return;
+				if (!ttsStarted) {
+					ttsStarted = true;
+					vrmStore.startTalking(segmentText);
+					onTTSStarted();
+				}
+			};
+			const enqueueTTS = (segment: SpeechSegment) => {
+				if (!ttsOptions) return;
+				maybeStartTTS(segment.text);
+				speechPlayback = speechPlayback.then(() =>
+					ttsStore.speakSentences(
+						[segment],
+						ttsOptions,
+						{
+							onSentenceStart: (sentence) => {
+								isTyping = false;
+								latestResponse = sentence;
+								spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
+							}
+						}
+					)
+				);
+			};
+			const speechBuffer = ttsOptions
+				? new StreamingSpeechBuffer({
+						defaultLanguage: ttsConfig?.language || undefined,
+						streaming: isChatterbox,
+						onSegment: (segment) => {
+							enqueueTTS(segment);
+						}
+					})
+				: null;
+
 			const shouldUseDirectChat = isTauri();
 
 			if (shouldUseDirectChat) {
 				await new Promise<void>((resolve, reject) => {
 					streamChatDirect(
 						{
-							messages: chatStore.messages.slice(0, -1).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+							messages: chatStore.messages.slice(0, -1).map((m) => ({
+								role: m.role as 'user' | 'assistant',
+								content: m.content
+							})),
 							provider: provider as import('$lib/types').LLMProvider,
 							model: selectedModel,
 							apiKey: apiKey || undefined,
 							baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
 							systemPrompt
 						},
-						(text) => { fullContent += text; chatStore.updateLastMessage(stripAllTags(fullContent)); },
+						(text) => {
+							fullContent += text;
+							chatStore.updateLastMessage(stripAllTags(fullContent));
+							speechBuffer?.feed(text);
+						},
 						(error) => reject(new Error(error)),
 						() => resolve()
 					);
 				});
 			} else {
-				// Use MCP agentic loop when MCP tools are available
 				const mcpEnabled = mcpStore.hasActiveTools && !isTauri();
 				const chatEndpoint = mcpEnabled ? '/api/mcp/chat' : '/api/chat';
 				const chatBody: Record<string, unknown> = {
@@ -317,7 +400,9 @@
 					model: selectedModel,
 					apiKey: apiKey || undefined,
 					baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
-					systemPrompt
+					systemPrompt,
+					continueMode: continueMode || undefined,
+					continueFromText: continueFromText || undefined
 				};
 				if (mcpEnabled) {
 					chatBody.tools = mcpStore.tools;
@@ -327,7 +412,8 @@
 				const response = await fetch(chatEndpoint, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(chatBody)
+					body: JSON.stringify(chatBody),
+					signal: llmAbortController.signal
 				});
 
 				if (!response.ok) {
@@ -346,6 +432,8 @@
 				if (!reader) throw new Error('No response body');
 
 				while (true) {
+					if (llmAbortController.signal.aborted) break;
+
 					const { done, value } = await reader.read();
 					if (done) break;
 
@@ -355,6 +443,7 @@
 							const text = JSON.parse(line.slice(2));
 							fullContent += text;
 							chatStore.updateLastMessage(stripAllTags(fullContent));
+							speechBuffer?.feed(text);
 						} else if (line.startsWith('e:')) {
 							const { error } = JSON.parse(line.slice(2));
 							throw new Error(error);
@@ -363,65 +452,34 @@
 				}
 			}
 
+			speechBuffer?.flush();
 			isTyping = false;
 			const cleanedResponse = await processCompanionResponse(content, fullContent);
 			const displayText = stripAllTags(cleanedResponse);
 			chatStore.updateLastMessage(displayText);
 
-			// TTS - speak if module is enabled
-			const speechState = modulesStore.getModuleState('speech');
-			const speechSettings = modulesStore.getModuleSettings('speech');
-			const ttsEnabled = speechState?.enabled && !!cleanedResponse;
-
-			if (ttsEnabled) {
-				// With TTS: typing indicator stays until first sentence audio begins,
-				// then bubble and lip-sync update sentence by sentence
-				isTyping = true;
-				latestResponse = '';
-				spokenSoFar = '';
+			if (ttsEnabled && !ttsStarted && cleanedResponse) {
 				vrmStore.startTalking(displayText);
-
-				const ttsProvider = speechSettings.activeProvider as TTSProvider;
-				const ttsConfig = settingsStore.getProviderConfig(ttsProvider);
-				const ttsMeta = getTTSProvider(ttsProvider);
-				const isChatterbox = ttsProvider === 'chatterbox';
-				const segments = splitIntoSegments(
-					cleanedResponse,
-					ttsConfig.language || undefined,
-					isChatterbox
-				);
-
-				ttsStore.speakSentences(
+				onTTSStarted();
+				const segments = splitIntoSegments(cleanedResponse, ttsConfig?.language || undefined, isChatterbox);
+				await ttsStore.speakSentences(
 					segments,
-					{
-						provider: ttsProvider,
-						apiKey: ttsConfig.apiKey,
-						voiceId: speechSettings.activeVoiceId as string || ttsConfig.voiceId,
-						rvcVoiceId: speechSettings.activeRvcVoiceId as string || ttsConfig.rvcVoiceId,
-						baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
-						speed: speechSettings.speed as number ?? 1,
-						exaggeration: ttsConfig.exaggeration,
-						language: ttsConfig.language,
-						cfgWeight: ttsConfig.cfgWeight,
-						temperature: ttsConfig.temperature
-					},
+					ttsOptions!,
 					{
 						onSentenceStart: (sentence) => {
 							isTyping = false;
 							latestResponse = sentence;
-							// Sidebar accumulates all spoken sentences so far
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
 						}
 					}
-				).then(() => {
-					// TTS finished – sidebar reverts to full chatStore message
-					spokenSoFar = '';
-					latestResponse = '';
-					onTTSDone();
-				});
-				onTTSStarted();
+				);
+				onTTSDone();
+			} else if (ttsEnabled && ttsStarted) {
+				await speechPlayback;
+				spokenSoFar = '';
+				latestResponse = '';
+				onTTSDone();
 			} else {
-				// Without TTS: show full response immediately
 				latestResponse = displayText;
 				if (displayText) {
 					vrmStore.startTalking(displayText);
@@ -433,6 +491,7 @@
 			isTyping = false;
 		} finally {
 			chatStore.setLoading(false);
+			llmAbortController = null;
 		}
 	}
 
@@ -440,7 +499,14 @@
 		if (duplexStore.isDuplexActive) {
 			stopDuplex();
 		} else {
-			await startDuplex({ onTranscript: handleSend, onInterrupt: () => ttsStore.stop() });
+			await startDuplex({
+				onTranscript: handleSend,
+				onInterrupt: () => {
+					ttsStore.stop();
+					llmAbortController?.abort();
+					chatStore.setLoading(false);
+				}
+			});
 		}
 	}
 

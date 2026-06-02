@@ -20,6 +20,8 @@ export interface SpeechSegment {
 	language?: string;
 	/** VRM body action to trigger (e.g. wave, nod, jump) */
 	action?: string;
+	/** Optional speech speed override */
+	speed?: number;
 }
 
 /** Callbacks the orchestrator fires so the UI can react synchronously. */
@@ -153,6 +155,7 @@ export class VoiceOrchestrator {
 			emotion: segment.emotion,
 			exaggeration: segment.exaggeration,
 			language: segment.language,
+			speed: segment.speed,
 			signal: this.abortController?.signal
 		};
 

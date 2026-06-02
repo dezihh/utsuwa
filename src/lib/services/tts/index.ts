@@ -34,6 +34,8 @@ export interface StreamOptions {
 	exaggeration?: number;
 	/** Language code (ISO 639-1) for multilingual providers */
 	language?: string;
+	/** Speech speed override (0.5-2.0, 1.0 = normal) */
+	speed?: number;
 	/** AbortSignal for cancellation */
 	signal?: AbortSignal;
 }
@@ -122,6 +124,7 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 		currentOptions.voiceId === options.voiceId &&
 		currentOptions.rvcVoiceId === options.rvcVoiceId &&
 		currentOptions.baseUrl === options.baseUrl &&
+		currentOptions.speed === options.speed &&
 		currentOptions.exaggeration === options.exaggeration &&
 		currentOptions.language === options.language &&
 		currentOptions.cfgWeight === options.cfgWeight &&

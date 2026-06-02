@@ -157,7 +157,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		// Add system message (use provided systemPrompt or default)
 		const defaultSystemPrompt =
-			'You are a friendly AI assistant displayed as a VRM avatar named Utsuwa. Keep responses conversational and relatively concise.';
+			'You are a friendly AI assistant displayed as a VRM avatar named Utsuwa. Keep responses conversational, but expand naturally when the user asks for a story, explanation, or detailed answer.';
 		const messagesWithSystem = [
 			{
 				role: 'system' as const,
