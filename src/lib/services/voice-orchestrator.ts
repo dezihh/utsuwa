@@ -45,8 +45,10 @@ export interface OrchestratorCallbacks {
 interface PipelineItem {
 	segment: SpeechSegment;
 	index: number;
-	/** Resolves to the decoded AudioBuffer once synthesis is complete */
-	bufferPromise: Promise<AudioBuffer | null>;
+	/** Batch path: resolves to the decoded AudioBuffer once synthesis is complete */
+	bufferPromise?: Promise<AudioBuffer | null>;
+	/** Streaming path: called when the runner is ready to play this segment */
+	streamPlay?: (callbacks?: OrchestratorCallbacks) => Promise<void>;
 }
 
 /**
@@ -176,12 +178,30 @@ export class VoiceOrchestrator {
 		if (!this.channel || !this.sessionOptions || this.pipelineAbort?.signal.aborted) return;
 
 		const provider = getTTSProvider(this.sessionOptions);
-		const signal = this.pipelineAbort.signal;
+		const abort = this.pipelineAbort;
+		if (!abort) return;
+		const signal = abort.signal;
 		const index = this.pipelineIndex++;
 
-		const bufferPromise = this.fetchBuffer(provider, segment, signal);
-
-		this.channel.push({ segment, index, bufferPromise });
+		// Use progressive streaming when provider supports it — avoids buffering the
+		// full WAV before playback starts.
+		if (provider.capabilities?.streaming && provider.speakStreaming) {
+			const streamOpts: import('$lib/services/tts').StreamOptions = {
+				emotion: segment.emotion,
+				exaggeration: segment.exaggeration,
+				language: segment.language,
+				speed: segment.speed,
+				signal
+			};
+			this.channel.push({
+				segment,
+				index,
+				streamPlay: (cb) => this.playStreamingSegment(provider, segment, index, streamOpts, cb)
+			});
+		} else {
+			const bufferPromise = this.fetchBuffer(provider, segment, signal);
+			this.channel.push({ segment, index, bufferPromise });
+		}
 	}
 
 	/**
@@ -238,10 +258,16 @@ export class VoiceOrchestrator {
 
 				if (this.pipelineAbort?.signal.aborted) break;
 
-				// Wait for synthesis to finish (may already be done if model was fast)
+				// Streaming path: synthesis and playback happen together
+				if (item.streamPlay) {
+					await item.streamPlay(callbacks);
+					continue;
+				}
+
+				// Batch path: wait for synthesis to finish (may already be done)
 				let buffer: AudioBuffer | null = null;
 				try {
-					buffer = await item.bufferPromise;
+					buffer = await item.bufferPromise!;
 				} catch (err) {
 					if ((err as Error).name === 'AbortError') break;
 					console.error('[VoiceOrchestrator] Synthesis failed for segment:', item.segment.text, err);
@@ -334,6 +360,132 @@ export class VoiceOrchestrator {
 		return audioContext.decodeAudioData(combined.buffer);
 	}
 
+	/**
+	 * Progressively play a streaming TTS segment.
+	 *
+	 * The server sends: [44-byte WAV header] [PCM16 LE chunks…]
+	 * We parse the header once, then schedule each PCM chunk via Web Audio as
+	 * it arrives, so audio starts within ~50 ms of the first data chunk.
+	 */
+	private async playStreamingSegment(
+		provider: ITTSProvider,
+		segment: SpeechSegment,
+		index: number,
+		opts: import('$lib/services/tts').StreamOptions,
+		callbacks?: OrchestratorCallbacks
+	): Promise<void> {
+		const audioContext = getSharedAudioContext();
+		if (audioContext.state === 'suspended') await audioContext.resume();
+
+		const analyser = audioContext.createAnalyser();
+		analyser.fftSize = 256;
+		analyser.connect(audioContext.destination);
+		this.currentAnalyser = analyser;
+
+		// Fire side-effect callbacks before the first audio chunk arrives.
+		if (segment.emotion) callbacks?.onEmotionChange?.(segment.emotion);
+		if (segment.action) callbacks?.onAction?.(segment.action);
+		callbacks?.onSegmentStart?.(segment, index);
+		callbacks?.onAnalyserUpdate?.(analyser);
+
+		const PCM_HEADER_SIZE = 44;
+		let sampleRate = 24000;
+		let numChannels = 1;
+		let headerParsed = false;
+		let headerAccum = new Uint8Array(0);
+
+		// Cursor for gapless scheduling
+		let nextPlayTime = -1;
+
+		const schedulePCM = (pcmBytes: Uint8Array) => {
+			if (pcmBytes.byteLength < 2) return;
+
+			const numSamples = Math.floor(pcmBytes.byteLength / 2);
+			const samplesPerChannel = Math.floor(numSamples / numChannels);
+			if (samplesPerChannel === 0) return;
+
+			const float32 = new Float32Array(numSamples);
+			const view = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength);
+			for (let i = 0; i < numSamples; i++) {
+				float32[i] = view.getInt16(i * 2, true) / 32768.0;
+			}
+
+			const buf = audioContext.createBuffer(numChannels, samplesPerChannel, sampleRate);
+			if (numChannels === 1) {
+				buf.getChannelData(0).set(float32);
+			} else {
+				for (let ch = 0; ch < numChannels; ch++) {
+					const ch32 = buf.getChannelData(ch);
+					for (let i = 0; i < samplesPerChannel; i++) {
+						ch32[i] = float32[i * numChannels + ch];
+					}
+				}
+			}
+
+			const source = audioContext.createBufferSource();
+			source.buffer = buf;
+			source.connect(analyser);
+			this.currentSource = source;
+
+			if (nextPlayTime < 0) {
+				nextPlayTime = audioContext.currentTime + 0.05; // 50 ms lead
+			} else if (nextPlayTime < audioContext.currentTime + 0.02) {
+				nextPlayTime = audioContext.currentTime + 0.02; // catch up if behind
+			}
+
+			source.start(nextPlayTime);
+			nextPlayTime += buf.duration;
+		};
+
+		try {
+			const generator = provider.speakStreaming!(segment.text, opts);
+
+			for await (const chunk of generator) {
+				if (this.pipelineAbort?.signal.aborted || opts.signal?.aborted) break;
+				if (chunk.done) break;
+
+				const bytes = new Uint8Array(chunk.data);
+
+				if (!headerParsed) {
+					// Accumulate until we have the full 44-byte WAV header.
+					const combined = new Uint8Array(headerAccum.byteLength + bytes.byteLength);
+					combined.set(headerAccum);
+					combined.set(bytes, headerAccum.byteLength);
+					headerAccum = combined;
+
+					if (headerAccum.byteLength >= PCM_HEADER_SIZE) {
+						const dv = new DataView(headerAccum.buffer);
+						numChannels = dv.getUint16(22, true);
+						sampleRate = dv.getUint32(24, true);
+						headerParsed = true;
+
+						const pcmTail = headerAccum.slice(PCM_HEADER_SIZE);
+						if (pcmTail.byteLength > 0) schedulePCM(pcmTail);
+						headerAccum = new Uint8Array(0);
+					}
+				} else {
+					schedulePCM(bytes);
+				}
+			}
+		} catch (err) {
+			if ((err as Error).name !== 'AbortError' && !opts.signal?.aborted) {
+				console.error('[VoiceOrchestrator] Streaming segment error:', err);
+			}
+		}
+
+		// Wait until scheduled audio has finished playing.
+		if (nextPlayTime > audioContext.currentTime) {
+			const remaining = (nextPlayTime - audioContext.currentTime) * 1000 + 150;
+			await new Promise<void>((resolve) => {
+				const id = setTimeout(resolve, remaining);
+				this.pipelineAbort?.signal.addEventListener('abort', () => {
+					clearTimeout(id);
+					resolve();
+				}, { once: true });
+			});
+		}
+	}
+
 	private async playBuffer(
 		buffer: AudioBuffer,
 		segment: SpeechSegment,
@@ -367,7 +519,7 @@ export class VoiceOrchestrator {
 		await new Promise<void>((resolve) => {
 			source.onended = () => resolve();
 			// Resolve immediately if the session is interrupted mid-playback
-			this.pipelineAbort?.signal.addEventListener('abort', resolve, { once: true });
+			this.pipelineAbort?.signal.addEventListener('abort', () => resolve(), { once: true });
 		});
 
 		if (this.pipelineAbort?.signal.aborted) {
