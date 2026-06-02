@@ -110,26 +110,9 @@ export class AllTalkTTS implements ITTSProvider {
 	}
 
 	async speak(text: string): Promise<TTSSpeakResult> {
-		if (!this.voiceId) {
-			throw new Error('AllTalk voice is not configured');
-		}
-
-		let arrayBuffer: ArrayBuffer;
-
-		try {
-			arrayBuffer = await this.speakViaProxy(text);
-		} catch (proxyError) {
-			console.warn('AllTalk proxy failed, falling back to direct request:', proxyError);
-			arrayBuffer = await this.speakDirect(text);
-		}
-
+		const audioBuffer = await this.fetchAudioBuffer(text);
 		const audioContext = this.getAudioContext();
 
-		if (audioContext.state === 'suspended') {
-			await audioContext.resume();
-		}
-
-		const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 		const source = audioContext.createBufferSource();
 		source.buffer = audioBuffer;
 		source.playbackRate.value = this.speed;
@@ -142,5 +125,44 @@ export class AllTalkTTS implements ITTSProvider {
 		source.start(0);
 
 		return { source, analyser };
+	}
+
+	async fetchAudioBuffer(text: string, options?: import('./index').StreamOptions): Promise<AudioBuffer> {
+		if (!this.voiceId) {
+			throw new Error('AllTalk voice is not configured');
+		}
+
+		let arrayBuffer: ArrayBuffer;
+
+		try {
+			const response = await fetch('/api/tts/alltalk', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					text,
+					voice: this.voiceId,
+					...(this.rvcVoiceId ? { rvcvoice: this.rvcVoiceId } : {}),
+					speed: this.speed,
+					language: this.language,
+					baseUrl: this.baseUrl
+				}),
+				signal: options?.signal
+			});
+			arrayBuffer = await this.fetchAudio(response);
+		} catch (proxyError) {
+			if ((proxyError as Error).name === 'AbortError') throw proxyError;
+			console.warn('AllTalk proxy failed, falling back to direct request:', proxyError);
+			const response = await fetch(new URL('tts-generate-streaming', this.baseUrl), {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: this.buildForm(text).toString(),
+				signal: options?.signal
+			});
+			arrayBuffer = await this.fetchAudio(response, this.baseUrl);
+		}
+
+		const audioContext = this.getAudioContext();
+		if (audioContext.state === 'suspended') await audioContext.resume();
+		return audioContext.decodeAudioData(arrayBuffer);
 	}
 }

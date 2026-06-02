@@ -9,6 +9,8 @@
 		children: Snippet;
 		disabled?: boolean;
 		class?: string;
+		triggerClass?: string;
+		contentClass?: string;
 	}
 
 	let {
@@ -17,7 +19,9 @@
 		trigger,
 		children,
 		disabled = false,
-		class: className = ''
+		class: className = '',
+		triggerClass = '',
+		contentClass = ''
 	}: Props = $props();
 
 	function handleOpenChange(isOpen: boolean) {
@@ -32,11 +36,11 @@
 	{disabled}
 	class="w-full {className}"
 >
-	<CollapsiblePrimitive.Trigger class="flex w-full outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-button">
+	<CollapsiblePrimitive.Trigger class="flex w-full outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-button {triggerClass}">
 		{@render trigger({ open })}
 	</CollapsiblePrimitive.Trigger>
 
-	<CollapsiblePrimitive.Content class="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+	<CollapsiblePrimitive.Content class="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up {contentClass}">
 		{@render children()}
 	</CollapsiblePrimitive.Content>
 </CollapsiblePrimitive.Root>

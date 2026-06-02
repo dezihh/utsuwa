@@ -24,33 +24,8 @@ export class OpenAITTS implements ITTSProvider {
 	}
 
 	async speak(text: string): Promise<TTSSpeakResult> {
-		const response = await fetch(`${this.baseUrl}audio/speech`, {
-			method: 'POST',
-			headers: {
-				Authorization: `Bearer ${this.apiKey}`,
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({
-				model: this.model,
-				input: text,
-				voice: this.voiceId,
-				speed: this.speed,
-				response_format: 'mp3'
-			})
-		});
-
-		if (!response.ok) {
-			throw new Error(`OpenAI TTS API error: ${response.status}`);
-		}
-
-		const arrayBuffer = await response.arrayBuffer();
+		const audioBuffer = await this.fetchAudioBuffer(text);
 		const audioContext = this.getAudioContext();
-
-		if (audioContext.state === 'suspended') {
-			await audioContext.resume();
-		}
-
-		const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
 		const source = audioContext.createBufferSource();
 		source.buffer = audioBuffer;
@@ -64,5 +39,36 @@ export class OpenAITTS implements ITTSProvider {
 		source.start(0);
 
 		return { source, analyser };
+	}
+
+	async fetchAudioBuffer(text: string, options?: import('./index').StreamOptions): Promise<AudioBuffer> {
+		const response = await fetch(`${this.baseUrl}audio/speech`, {
+			method: 'POST',
+			headers: {
+				Authorization: `Bearer ${this.apiKey}`,
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({
+				model: this.model,
+				input: text,
+				voice: this.voiceId,
+				speed: this.speed,
+				response_format: 'mp3'
+			}),
+			signal: options?.signal
+		});
+
+		if (!response.ok) {
+			throw new Error(`OpenAI TTS API error: ${response.status}`);
+		}
+
+		const arrayBuffer = await response.arrayBuffer();
+		const audioContext = this.getAudioContext();
+
+		if (audioContext.state === 'suspended') {
+			await audioContext.resume();
+		}
+
+		return audioContext.decodeAudioData(arrayBuffer);
 	}
 }

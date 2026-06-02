@@ -305,6 +305,7 @@
 								<span class="value">
 									✓ Included
 									{#if importPreview.counts.vrmModels}({importPreview.counts.vrmModels} VRM model{importPreview.counts.vrmModels !== 1 ? 's' : ''}){/if}
+									{#if importPreview.counts.expressionProfiles} ({importPreview.counts.expressionProfiles} expression profile{importPreview.counts.expressionProfiles !== 1 ? 's' : ''}){/if}
 								</span>
 							</div>
 						{/if}

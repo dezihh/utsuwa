@@ -24,6 +24,26 @@ export class ElevenLabsTTS implements ITTSProvider {
 	}
 
 	async speak(text: string): Promise<TTSSpeakResult> {
+		const audioBuffer = await this.fetchAudioBuffer(text);
+		const audioContext = this.getAudioContext();
+
+		const source = audioContext.createBufferSource();
+		source.buffer = audioBuffer;
+		source.playbackRate.value = this.speed;
+
+		const analyser = audioContext.createAnalyser();
+		analyser.fftSize = 256;
+
+		source.connect(analyser);
+		analyser.connect(audioContext.destination);
+
+		// Start playback
+		source.start(0);
+
+		return { source, analyser };
+	}
+
+	async fetchAudioBuffer(text: string, options?: import('./index').StreamOptions): Promise<AudioBuffer> {
 		const response = await fetch(
 			`${this.baseUrl}text-to-speech/${this.voiceId}/stream`,
 			{
@@ -39,7 +59,8 @@ export class ElevenLabsTTS implements ITTSProvider {
 						stability: 0.5,
 						similarity_boost: 0.75
 					}
-				})
+				}),
+				signal: options?.signal
 			}
 		);
 
@@ -50,29 +71,10 @@ export class ElevenLabsTTS implements ITTSProvider {
 		const arrayBuffer = await response.arrayBuffer();
 		const audioContext = this.getAudioContext();
 
-		// Resume audio context if suspended
 		if (audioContext.state === 'suspended') {
 			await audioContext.resume();
 		}
 
-		const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-		// Create source node
-		const source = audioContext.createBufferSource();
-		source.buffer = audioBuffer;
-		source.playbackRate.value = this.speed;
-
-		// Create analyser for lip-sync
-		const analyser = audioContext.createAnalyser();
-		analyser.fftSize = 256;
-
-		// Connect nodes
-		source.connect(analyser);
-		analyser.connect(audioContext.destination);
-
-		// Start playback
-		source.start(0);
-
-		return { source, analyser };
+		return audioContext.decodeAudioData(arrayBuffer);
 	}
 }

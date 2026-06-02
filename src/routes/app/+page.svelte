@@ -330,31 +330,23 @@
 					: null;
 
 			let ttsStarted = false;
-			let speechPlayback: Promise<void> = Promise.resolve();
-			const maybeStartTTS = (segmentText: string) => {
+			const enqueueTTS = (segment: SpeechSegment) => {
 				if (!ttsOptions) return;
 				if (!ttsStarted) {
 					ttsStarted = true;
-					vrmStore.startTalking(segmentText);
+					vrmStore.startTalking(segment.text);
 					onTTSStarted();
-				}
-			};
-			const enqueueTTS = (segment: SpeechSegment) => {
-				if (!ttsOptions) return;
-				maybeStartTTS(segment.text);
-				speechPlayback = speechPlayback.then(() =>
-					ttsStore.speakSentences(
-						[segment],
-						ttsOptions,
-						{
-							onSentenceStart: (sentence) => {
-								isTyping = false;
-								latestResponse = sentence;
-								spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-							}
+					// Open a pipeline session — synthesis of each segment starts immediately
+					// when pushSpeechSegment() is called, overlapping with playback.
+					ttsStore.beginSpeechSession(ttsOptions, {
+						onSentenceStart: (sentence) => {
+							isTyping = false;
+							latestResponse = sentence;
+							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
 						}
-					)
-				);
+					});
+				}
+				ttsStore.pushSpeechSegment(segment);
 			};
 			const speechBuffer = ttsOptions
 				? new StreamingSpeechBuffer({
@@ -459,23 +451,26 @@
 			chatStore.updateLastMessage(displayText);
 
 			if (ttsEnabled && !ttsStarted && cleanedResponse) {
+				// LLM response was too short to trigger speech buffer during streaming —
+				// start a fresh pipeline session for the complete text now.
 				vrmStore.startTalking(displayText);
 				onTTSStarted();
 				const segments = splitIntoSegments(cleanedResponse, ttsConfig?.language || undefined, isChatterbox);
-				await ttsStore.speakSentences(
-					segments,
-					ttsOptions!,
-					{
-						onSentenceStart: (sentence) => {
-							isTyping = false;
-							latestResponse = sentence;
-							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-						}
+				ttsStore.beginSpeechSession(ttsOptions!, {
+					onSentenceStart: (sentence) => {
+						isTyping = false;
+						latestResponse = sentence;
+						spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
 					}
-				);
+				});
+				for (const seg of segments) {
+					ttsStore.pushSpeechSegment(seg);
+				}
+				await ttsStore.endSpeechSession();
 				onTTSDone();
 			} else if (ttsEnabled && ttsStarted) {
-				await speechPlayback;
+				// Pipeline session already open — close it and wait for remaining audio.
+				await ttsStore.endSpeechSession();
 				spokenSoFar = '';
 				latestResponse = '';
 				onTTSDone();

@@ -62,6 +62,12 @@ export interface ITTSProvider {
 	speakStreaming?(text: string, options?: StreamOptions): AsyncGenerator<AudioChunk>;
 	/** Provider capability flags */
 	capabilities?: TTSCapabilities;
+	/**
+	 * Fetch and decode audio to an AudioBuffer WITHOUT starting playback.
+	 * Used by VoiceOrchestrator pipeline to pre-synthesise segment N+1
+	 * while segment N is still playing, eliminating inter-sentence gaps.
+	 */
+	fetchAudioBuffer?(text: string, options?: StreamOptions): Promise<AudioBuffer>;
 }
 
 // Shared audio context for all providers

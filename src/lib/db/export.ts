@@ -3,6 +3,7 @@ import localforage from 'localforage';
 import { db } from '$lib/db';
 import { characterStore } from '$lib/stores/character.svelte';
 import { backgroundStore } from '$lib/stores/background.svelte';
+import type { EmotionMapping } from '$lib/services/vrm/expression-controller';
 import type {
 	CharacterState,
 	MoodState,
@@ -12,7 +13,7 @@ import type {
 import type { Fact, SessionSummary, ConversationTurn } from '$lib/types/memory';
 import type { CompletedEventRecord } from '$lib/types/events';
 
-export const SAVE_FILE_VERSION = '3.0';
+export const SAVE_FILE_VERSION = '3.1';
 
 // localStorage keys that should be included in export/import
 const SETTINGS_KEYS = [
@@ -52,6 +53,8 @@ export interface ExportedSettings {
 	moduleSettings: Record<string, string>;
 	/** Custom VRM models (non-default), blobs encoded as base64 */
 	vrmModels: ExportedVrmModel[];
+	/** Per-avatar emotion expression mappings */
+	expressionProfilesByModel: Record<string, Record<string, EmotionMapping>>;
 }
 
 // V3 SaveFile - includes settings + VRM models
@@ -96,6 +99,7 @@ export interface SaveFilePreview {
 		conversationTurns: number;
 		completedEvents: number;
 		vrmModels?: number;
+		expressionProfiles?: number;
 	};
 	characterName: string;
 	hasSettings: boolean;
@@ -174,6 +178,7 @@ async function collectSettings(): Promise<ExportedSettings> {
 
 	// VRM custom models + blobs
 	const vrmModels: ExportedVrmModel[] = [];
+	let expressionProfilesByModel: Record<string, Record<string, EmotionMapping>> = {};
 	if (vrmStorage) {
 		try {
 			const modelList = await vrmStorage.getItem<Array<{ id: string; name: string; isDefault?: boolean }>>('model-list');
@@ -194,12 +199,20 @@ async function collectSettings(): Promise<ExportedSettings> {
 					}
 				}
 			}
+
+			const savedProfiles =
+				await vrmStorage.getItem<Record<string, Record<string, EmotionMapping>>>(
+					'expression-profiles-by-model'
+				);
+			if (savedProfiles && typeof savedProfiles === 'object') {
+				expressionProfilesByModel = savedProfiles;
+			}
 		} catch (e) {
 			console.warn('Failed to export VRM models:', e);
 		}
 	}
 
-	return { localStorage: localStorage_, moduleSettings, vrmModels };
+	return { localStorage: localStorage_, moduleSettings, vrmModels, expressionProfilesByModel };
 }
 
 function blobToBase64(blob: Blob): Promise<string> {
@@ -388,6 +401,13 @@ async function restoreSettings(settings: ExportedSettings, mode: 'merge' | 'repl
 		}
 	}
 
+	const existingProfiles =
+		vrmStorage && mode === 'merge'
+			? await vrmStorage.getItem<Record<string, Record<string, EmotionMapping>>>(
+					'expression-profiles-by-model'
+				)
+			: {};
+
 	// Restore fixed localStorage keys
 	for (const [key, value] of Object.entries(settings.localStorage)) {
 		if (mode === 'merge' && localStorage.getItem(key) !== null) continue;
@@ -447,6 +467,16 @@ async function restoreSettings(settings: ExportedSettings, mode: 'merge' | 'repl
 				: [...existingList, ...newEntries];
 			await vrmStorage.setItem('model-list', updatedList);
 		}
+	}
+
+	// Restore per-avatar expression mappings
+	if (vrmStorage && settings.expressionProfilesByModel) {
+		const incomingProfiles = settings.expressionProfilesByModel;
+		const mergedProfiles =
+			mode === 'replace'
+				? incomingProfiles
+				: { ...(existingProfiles ?? {}), ...incomingProfiles };
+		await vrmStorage.setItem('expression-profiles-by-model', mergedProfiles);
 	}
 }
 
@@ -514,7 +544,8 @@ export function getSaveFilePreview(saveFile: SaveFile | LegacySaveFile): SaveFil
 			sessions: saveFile.data.sessions?.length ?? 0,
 			conversationTurns: saveFile.data.conversationTurns?.length ?? 0,
 			completedEvents: saveFile.data.completedEvents?.length ?? 0,
-			vrmModels: v3Settings?.vrmModels.length
+			vrmModels: v3Settings?.vrmModels.length,
+			expressionProfiles: v3Settings ? Object.keys(v3Settings.expressionProfilesByModel ?? {}).length : undefined
 		},
 		characterName,
 		hasSettings: !!v3Settings

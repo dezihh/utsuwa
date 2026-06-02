@@ -42,19 +42,38 @@ export class ChatterboxTTS implements ITTSProvider {
 	}
 
 	async speak(text: string): Promise<TTSSpeakResult> {
+		const audioBuffer = await this.fetchAudioBuffer(text);
+		const audioContext = this.getAudioContext();
+
+		const source = audioContext.createBufferSource();
+		source.buffer = audioBuffer;
+
+		const analyser = audioContext.createAnalyser();
+		analyser.fftSize = 256;
+
+		source.connect(analyser);
+		analyser.connect(audioContext.destination);
+
+		source.start(0);
+
+		return { source, analyser };
+	}
+
+	async fetchAudioBuffer(text: string, options?: StreamOptions): Promise<AudioBuffer> {
 		const response = await fetch('/api/tts/chatterbox', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				text,
 				voice: this.voiceId,
-				speed: this.speed,
-				exaggeration: this.exaggeration,
-				language: this.language,
+				speed: options?.speed ?? this.speed,
+				exaggeration: options?.exaggeration ?? this.exaggeration,
+				language: options?.language ?? this.language,
 				cfgWeight: this.cfgWeight,
 				temperature: this.temperature,
 				baseUrl: this.baseUrl
-			})
+			}),
+			signal: options?.signal
 		});
 
 		if (!response.ok) {
@@ -69,19 +88,7 @@ export class ChatterboxTTS implements ITTSProvider {
 			await audioContext.resume();
 		}
 
-		const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-		const source = audioContext.createBufferSource();
-		source.buffer = audioBuffer;
-
-		const analyser = audioContext.createAnalyser();
-		analyser.fftSize = 256;
-
-		source.connect(analyser);
-		analyser.connect(audioContext.destination);
-
-		source.start(0);
-
-		return { source, analyser };
+		return audioContext.decodeAudioData(arrayBuffer);
 	}
 
 	async *speakStreaming(text: string, options?: StreamOptions): AsyncGenerator<AudioChunk> {

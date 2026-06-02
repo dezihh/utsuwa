@@ -85,6 +85,7 @@
 	let formSystemPrompt = $state('');
 	let personalityExpanded = $state(false);
 	let aiServicesExpanded = $state(false);
+	let expressionMappingExpanded = $state(false);
 	let eventsExpanded = $state(false);
 	let uploadModalOpen = $state(false);
 	let modeConfirmOpen = $state(false);
@@ -693,76 +694,85 @@
 				</div>
 			</div>
 
-			<div class="expression-mapping-section">
-				<div class="expression-header">
-					<span class="gallery-label">Expression Mapping (per Avatar)</span>
-					<button class="upload-btn" onclick={() => vrmStore.resetEmotionMappingsForActiveModel()}>
-						<Icon name="refresh-cw" size={14} />
-						<span>Reset Auto</span>
-					</button>
-				</div>
+			<div class="personality-section expression-mapping-section">
+				<button class="personality-toggle expression-toggle" onclick={() => expressionMappingExpanded = !expressionMappingExpanded}>
+					<Icon name="settings" size={16} />
+					<span>Expression Mapping (per Avatar)</span>
+					<Icon name={expressionMappingExpanded ? 'chevron-up' : 'chevron-down'} size={16} />
+				</button>
 
-				{#if vrmStore.availableExpressions.length === 0}
-					<p class="expression-empty">
-						No expressions detected yet. Select the avatar and wait until it loads in the main scene.
-					</p>
-				{:else}
-					<div class="expression-grid">
-						<div class="expression-grid-header">Emotion Tag</div>
-						<div class="expression-grid-header">VRM Expression</div>
-						<div class="expression-grid-header">Intensity</div>
-						<div class="expression-grid-header">Fade In / Out (s)</div>
+				{#if expressionMappingExpanded}
+					<div class="personality-content expression-content">
+						<div class="expression-content-actions">
+							<button class="upload-btn" onclick={() => vrmStore.resetEmotionMappingsForActiveModel()}>
+								<Icon name="refresh-cw" size={14} />
+								<span>Reset Auto</span>
+							</button>
+						</div>
 
-						{#each emotionTags as emotion}
-							{@const cfg = getEmotionConfig(emotion)}
-							<div class="expression-emotion">[{emotion}]</div>
-							<div>
-								<select
-									class="expression-select"
-									value={cfg.expression}
-									onchange={(e) => updateEmotionExpression(emotion, e.currentTarget.value)}
-								>
-									<option value="">(disabled)</option>
-									{#each vrmStore.availableExpressions as expr}
-										<option value={expr}>{expr}</option>
-									{/each}
-								</select>
+						{#if vrmStore.availableExpressions.length === 0}
+							<p class="expression-empty">
+								No expressions detected yet. Select the avatar and wait until it loads in the main scene.
+							</p>
+						{:else}
+							<div class="expression-grid">
+								<div class="expression-grid-header">Emotion Tag</div>
+								<div class="expression-grid-header">VRM Expression</div>
+								<div class="expression-grid-header">Intensity</div>
+								<div class="expression-grid-header">Fade In / Out (s)</div>
+
+								{#each emotionTags as emotion}
+									{@const cfg = getEmotionConfig(emotion)}
+									<div class="expression-emotion">[{emotion}]</div>
+									<div>
+										<select
+											class="expression-select"
+											value={cfg.expression}
+											onchange={(e) => updateEmotionExpression(emotion, e.currentTarget.value)}
+										>
+											<option value="">(disabled)</option>
+											{#each vrmStore.availableExpressions as expr}
+												<option value={expr}>{expr}</option>
+											{/each}
+										</select>
+									</div>
+									<div class="expression-intensity">
+										<input
+											type="range"
+											min="0"
+											max="1"
+											step="0.05"
+											value={cfg.intensity}
+											oninput={(e) =>
+												updateEmotionIntensity(emotion, parseFloat(e.currentTarget.value))}
+										/>
+										<span>{cfg.intensity.toFixed(2)}</span>
+									</div>
+									<div class="expression-fades">
+										<input
+											type="number"
+											min="0.05"
+											max="3"
+											step="0.05"
+											value={cfg.fadeIn}
+											onchange={(e) => updateEmotionFadeIn(emotion, parseFloat(e.currentTarget.value))}
+										/>
+										<input
+											type="number"
+											min="0.05"
+											max="4"
+											step="0.05"
+											value={cfg.fadeOut}
+											onchange={(e) => updateEmotionFadeOut(emotion, parseFloat(e.currentTarget.value))}
+										/>
+									</div>
+								{/each}
 							</div>
-							<div class="expression-intensity">
-								<input
-									type="range"
-									min="0"
-									max="1"
-									step="0.05"
-									value={cfg.intensity}
-									oninput={(e) =>
-										updateEmotionIntensity(emotion, parseFloat(e.currentTarget.value))}
-								/>
-								<span>{cfg.intensity.toFixed(2)}</span>
-							</div>
-							<div class="expression-fades">
-								<input
-									type="number"
-									min="0.05"
-									max="3"
-									step="0.05"
-									value={cfg.fadeIn}
-									onchange={(e) => updateEmotionFadeIn(emotion, parseFloat(e.currentTarget.value))}
-								/>
-								<input
-									type="number"
-									min="0.05"
-									max="4"
-									step="0.05"
-									value={cfg.fadeOut}
-									onchange={(e) => updateEmotionFadeOut(emotion, parseFloat(e.currentTarget.value))}
-								/>
-							</div>
-						{/each}
+							<p class="expression-hint">
+								Mappings are saved per avatar model and loaded automatically when switching models.
+							</p>
+						{/if}
 					</div>
-					<p class="expression-hint">
-						Mappings are saved per avatar model and loaded automatically when switching models.
-					</p>
 				{/if}
 			</div>
 
@@ -1958,26 +1968,15 @@
 		max-width: 100%;
 	}
 
-	.expression-mapping-section {
-		display: flex;
-		flex-direction: column;
-		gap: 0.65rem;
-		padding: 0.8rem;
-		background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 12px;
+	.expression-content {
+		padding: 0 1rem 1rem;
 	}
 
-	:global(.dark) .expression-mapping-section {
-		background: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
-		border-color: rgba(255, 255, 255, 0.08);
-	}
 
-	.expression-header {
+
+	.expression-content-actions {
 		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
+		justify-content: flex-end;
 	}
 
 	.expression-grid {

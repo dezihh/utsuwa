@@ -93,6 +93,44 @@ function createTTSStore() {
 		await orchestrator.speakSegments(sentences, options, buildOrchestratorCallbacks(callbacks));
 	}
 
+	// ---------------------------------------------------------------------------
+	// Pipeline API — preferred for streaming LLM output
+	// ---------------------------------------------------------------------------
+
+	/**
+	 * Start a new speech pipeline session.
+	 * Synthesis of each segment begins immediately when pushSpeechSegment() is
+	 * called, overlapping with playback of the current segment.
+	 */
+	function beginSpeechSession(
+		options: TTSOptions,
+		callbacks?: { onSentenceStart?: (sentence: string, index: number) => void }
+	): void {
+		const provider = getTTSMetadata(options.provider);
+		if (provider?.requiresApiKey && !options.apiKey) {
+			console.warn('TTS not configured - missing API key');
+			return;
+		}
+
+		isSpeaking = true;
+		orchestrator.beginSession(options, buildOrchestratorCallbacks(callbacks));
+	}
+
+	/** Push the next segment into the pipeline. Synthesis starts immediately. */
+	function pushSpeechSegment(segment: SpeechSegment): void {
+		orchestrator.pushSegment(segment);
+	}
+
+	/**
+	 * Signal that no more segments will be pushed.
+	 * Returns a promise that resolves when all audio has finished playing.
+	 */
+	function endSpeechSession(): Promise<void> {
+		return orchestrator.endSession();
+	}
+
+	// ---------------------------------------------------------------------------
+
 	async function processQueue(options: TTSOptions) {
 		if (queue.length === 0) {
 			isSpeaking = false;
@@ -164,6 +202,9 @@ function createTTSStore() {
 		},
 		speak,
 		speakSentences,
+		beginSpeechSession,
+		pushSpeechSegment,
+		endSpeechSession,
 		stop,
 		getAnalyserData
 	};
