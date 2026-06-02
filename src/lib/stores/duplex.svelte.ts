@@ -12,6 +12,50 @@
 	import { vadService } from '$lib/services/stt/vad-service';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 
+	/** Decode browser audio blob (webm/mp4/ogg) and re-encode as 16 kHz mono PCM16 WAV. */
+	async function blobToWav(blob: Blob): Promise<Blob> {
+		const arrayBuffer = await blob.arrayBuffer();
+		const ctx = new AudioContext({ sampleRate: 16000 });
+		const decoded = await ctx.decodeAudioData(arrayBuffer);
+		await ctx.close();
+
+		// Mix down to mono
+		const numFrames = decoded.length;
+		const mono = new Float32Array(numFrames);
+		for (let c = 0; c < decoded.numberOfChannels; c++) {
+			const ch = decoded.getChannelData(c);
+			for (let i = 0; i < numFrames; i++) mono[i] += ch[i];
+		}
+		if (decoded.numberOfChannels > 1) {
+			for (let i = 0; i < numFrames; i++) mono[i] /= decoded.numberOfChannels;
+		}
+
+		// PCM16 LE samples
+		const pcm = new Int16Array(numFrames);
+		for (let i = 0; i < numFrames; i++) {
+			const s = Math.max(-1, Math.min(1, mono[i]));
+			pcm[i] = s < 0 ? s * 32768 : s * 32767;
+		}
+
+		// Build WAV header
+		const dataLen = pcm.byteLength;
+		const wavBuf = new ArrayBuffer(44 + dataLen);
+		const v = new DataView(wavBuf);
+		const str = (off: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+		str(0, 'RIFF'); v.setUint32(4, 36 + dataLen, true);
+		str(8, 'WAVE'); str(12, 'fmt '); v.setUint32(16, 16, true);
+		v.setUint16(20, 1, true);   // PCM
+		v.setUint16(22, 1, true);   // mono
+		v.setUint32(24, 16000, true); // sampleRate
+		v.setUint32(28, 32000, true); // byteRate
+		v.setUint16(32, 2, true);   // blockAlign
+		v.setUint16(34, 16, true);  // bitsPerSample
+		str(36, 'data'); v.setUint32(40, dataLen, true);
+		new Int16Array(wavBuf, 44).set(pcm);
+
+		return new Blob([wavBuf], { type: 'audio/wav' });
+	}
+
 	export type DuplexPhase =
 		| 'idle'
 		| 'listening'
@@ -121,10 +165,11 @@
 				const data = (await res.json()) as { text?: string };
 				text = data.text?.trim();
 			} else {
-				// Whisper-local via server proxy
+				// Whisper-local via server proxy — convert to WAV first (speaches only accepts PCM formats)
 				const baseUrl = ((whisperConfig.baseUrl as string | undefined)?.trim() || 'http://127.0.0.1:8000/v1').replace(/\/$/, '');
+				const wavBlob = await blobToWav(blob);
 				const formData = new FormData();
-				formData.append('file', blob, `duplex.${ext}`);
+				formData.append('file', wavBlob, 'duplex.wav');
 				formData.append('model', (whisperConfig as { model?: string }).model || 'deepdml/faster-whisper-large-v3-turbo-ct2');
 				formData.append('baseUrl', baseUrl);
 

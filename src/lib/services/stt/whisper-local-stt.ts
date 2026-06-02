@@ -150,17 +150,18 @@ class WhisperLocalSttService {
 
 		this.transcribing = true;
 		const actualMime = this.mediaRecorder?.mimeType || 'audio/mp4';
-		const audioBlob = new Blob(this.audioChunks, { type: actualMime });
+		const rawBlob = new Blob(this.audioChunks, { type: actualMime });
 		this.audioChunks = [];
 
-		const ext = actualMime.includes('webm') ? 'webm' : actualMime.includes('ogg') ? 'ogg' : 'm4a';
+		// Convert to 16 kHz mono WAV — speaches only accepts PCM-based formats
+		const wavBlob = await this.toWav(rawBlob);
 
 		this.abortController = new AbortController();
 		const timeoutId = setTimeout(() => this.abortController?.abort(), 60000);
 
 		try {
 			const formData = new FormData();
-			formData.append('file', audioBlob, `recording.${ext}`);
+			formData.append('file', wavBlob, 'recording.wav');
 			formData.append('model', this.model);
 			formData.append('baseUrl', this.baseUrl);
 
@@ -232,6 +233,43 @@ class WhisperLocalSttService {
 		this.mediaRecorder = null;
 		this.audioChunks = [];
 		this.releaseStream();
+	}
+
+	private async toWav(blob: Blob): Promise<Blob> {
+		const arrayBuffer = await blob.arrayBuffer();
+		const ctx = new AudioContext({ sampleRate: 16000 });
+		const decoded = await ctx.decodeAudioData(arrayBuffer);
+		await ctx.close();
+
+		const numFrames = decoded.length;
+		const mono = new Float32Array(numFrames);
+		for (let c = 0; c < decoded.numberOfChannels; c++) {
+			const ch = decoded.getChannelData(c);
+			for (let i = 0; i < numFrames; i++) mono[i] += ch[i];
+		}
+		if (decoded.numberOfChannels > 1) {
+			for (let i = 0; i < numFrames; i++) mono[i] /= decoded.numberOfChannels;
+		}
+
+		const pcm = new Int16Array(numFrames);
+		for (let i = 0; i < numFrames; i++) {
+			const s = Math.max(-1, Math.min(1, mono[i]));
+			pcm[i] = s < 0 ? s * 32768 : s * 32767;
+		}
+
+		const dataLen = pcm.byteLength;
+		const wavBuf = new ArrayBuffer(44 + dataLen);
+		const v = new DataView(wavBuf);
+		const str = (off: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+		str(0, 'RIFF'); v.setUint32(4, 36 + dataLen, true);
+		str(8, 'WAVE'); str(12, 'fmt '); v.setUint32(16, 16, true);
+		v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+		v.setUint32(24, 16000, true); v.setUint32(28, 32000, true);
+		v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+		str(36, 'data'); v.setUint32(40, dataLen, true);
+		new Int16Array(wavBuf, 44).set(pcm);
+
+		return new Blob([wavBuf], { type: 'audio/wav' });
 	}
 }
 
