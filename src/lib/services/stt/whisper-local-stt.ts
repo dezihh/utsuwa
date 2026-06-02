@@ -2,7 +2,7 @@ import type { SpeechRecognitionCallbacks } from './web-speech';
 
 class WhisperLocalSttService {
 	private baseUrl: string = 'http://127.0.0.1:8000/v1';
-	private model: string = 'Systran/faster-whisper-large-v3';
+	private model: string = 'deepdml/faster-whisper-large-v3-turbo-ct2';
 	private mediaRecorder: MediaRecorder | null = null;
 	private audioChunks: Blob[] = [];
 	private stream: MediaStream | null = null;
