@@ -384,7 +384,12 @@
 				const ttsProvider = speechSettings.activeProvider as TTSProvider;
 				const ttsConfig = settingsStore.getProviderConfig(ttsProvider);
 				const ttsMeta = getTTSProvider(ttsProvider);
-				const segments = splitIntoSegments(cleanedResponse, ttsConfig.language || undefined);
+				const isChatterbox = ttsProvider === 'chatterbox';
+				const segments = splitIntoSegments(
+					cleanedResponse,
+					ttsConfig.language || undefined,
+					isChatterbox
+				);
 
 				ttsStore.speakSentences(
 					segments,

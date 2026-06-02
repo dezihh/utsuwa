@@ -53,6 +53,8 @@ function createVrmStore() {
 	// Talking animation state (triggered by text output)
 	let isTalking = $state(false);
 	let talkingTimeout: ReturnType<typeof setTimeout> | null = null;
+	let currentEmotion = $state<string | null>(null);
+	let pendingAction = $state<string | null>(null);
 
 	// Head position for 3D speech bubble positioning
 	let headPosition = $state<[number, number, number]>([0, 1.6, 0]);
@@ -287,6 +289,18 @@ function createVrmStore() {
 		isTalking = false;
 	}
 
+	function setEmotion(emotion: string | null) {
+		currentEmotion = emotion;
+	}
+
+	function triggerAction(action: string) {
+		pendingAction = action;
+	}
+
+	function clearPendingAction() {
+		pendingAction = null;
+	}
+
 	async function addModel(file: File, previewDataUrl?: string): Promise<void> {
 		const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 		const name = file.name.replace(/\.vrm$/i, '');
@@ -420,6 +434,12 @@ function createVrmStore() {
 		get isTalking() {
 			return isTalking;
 		},
+		get currentEmotion() {
+			return currentEmotion;
+		},
+		get pendingAction() {
+			return pendingAction;
+		},
 		get headPosition() {
 			return headPosition;
 		},
@@ -436,6 +456,9 @@ function createVrmStore() {
 		setCurrentAnimation,
 		startTalking,
 		stopTalking,
+		setEmotion,
+		triggerAction,
+		clearPendingAction,
 		addModel,
 		removeModel,
 		loadModelBlob,

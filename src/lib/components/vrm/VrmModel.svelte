@@ -6,6 +6,7 @@
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 	import { ttsStore } from '$lib/stores/tts.svelte';
 	import { lipSyncAnalyzer } from '$lib/services/lipsync/analyzer';
+	import { expressionController } from '$lib/services/vrm/expression-controller';
 	import { untrack } from 'svelte';
 	import * as THREE from 'three';
 
@@ -305,46 +306,45 @@
 		lipSyncAnalyzer.setAnalyser(ttsStore.currentAnalyser);
 	});
 
-	// Switch between idle and talking animations based on speaking/talking state
+	// Sync store emotion to expression controller.
 	$effect(() => {
-		const speaking = shouldTalk;
-		const currentMixer = untrack(() => mixer);
-		const currentIdleAction = untrack(() => idleAction);
-		const currentTalkingClip = untrack(() => talkingClip);
-		const currentEmotePlaying = untrack(() => isEmotePlaying);
-
-		// Don't switch if emote is playing or no mixer/clips available
-		if (!currentMixer || currentEmotePlaying) return;
-
-		if (speaking && currentTalkingClip) {
-			// Start talking animation, fade out idle
-			if (currentIdleAction) {
-				currentIdleAction.fadeOut(0.3);
-			}
-
-			// Create and play talking action
-			let currentTalkingAction = untrack(() => talkingAction);
-			if (!currentTalkingAction) {
-				currentTalkingAction = currentMixer.clipAction(currentTalkingClip);
-				currentTalkingAction.setLoop(THREE.LoopRepeat, Infinity);
-				talkingAction = currentTalkingAction;
-			}
-			currentTalkingAction.reset().fadeIn(0.3).play();
-
-		} else if (!speaking) {
-			// Stop talking, resume idle animation
-			const currentTalkingAction = untrack(() => talkingAction);
-			if (currentTalkingAction) {
-				currentTalkingAction.fadeOut(0.3);
-			}
-
-			// Resume the current idle action
-			if (currentIdleAction) {
-				currentIdleAction.reset().fadeIn(0.3).play();
-			}
-
-		}
+		expressionController.setEmotion(vrmStore.currentEmotion);
 	});
+
+	// Watch for action triggers from [action:xxx] tags.
+	$effect(() => {
+		const action = vrmStore.pendingAction;
+		if (!action) return;
+
+		const actionAnimations: Record<string, string> = {
+			wave: '/animations/wave.vrma',
+			nod: '/animations/nod.vrma',
+			shake: '/animations/shake.vrma',
+			jump: '/animations/jump.vrma',
+			bow: '/animations/bow.vrma',
+			think: '/animations/think.vrma',
+			clap: '/animations/clap.vrma',
+			dance: '/animations/dance.vrma'
+		};
+
+		(async () => {
+			const animUrl = actionAnimations[action];
+			if (animUrl) {
+				try {
+					const probe = await fetch(animUrl, { method: 'HEAD' });
+					if (probe.ok) {
+						vrmStore.setCurrentAnimation(animUrl);
+					}
+				} catch {
+					// Missing action animation is non-fatal.
+				}
+			}
+			vrmStore.clearPendingAction();
+		})();
+	});
+
+	// Body talking animation is intentionally disabled.
+	// Mouth movement is handled by audio-driven lip-sync.
 
 	// Play emote animations when currentAnimation changes
 	$effect(() => {
@@ -371,16 +371,17 @@
 			return;
 		}
 
-		// Find the emote animation
+		// Accept either registered animation IDs or direct /animations/*.vrma paths.
 		const animationData = vrmStore.availableAnimations.find((a) => a.url === animId || a.id === animId);
-		if (!animationData?.url) return;
+		const animationUrl = typeof animId === 'string' && animId.startsWith('/') ? animId : animationData?.url;
+		if (!animationUrl) return;
 
 		// Load emote VRMA file
 		const loader = new GLTFLoader();
 		loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 
 		loader.load(
-			animationData.url,
+			animationUrl,
 			(gltf) => {
 				const vrmAnimations = gltf.userData.vrmAnimations;
 				if (!vrmAnimations || vrmAnimations.length === 0) {
@@ -669,9 +670,6 @@
 			}
 		}
 
-		// Apply expression changes
-		expressionManager.update();
-
 		// === Lip-sync Animation ===
 		const visemes = lipSyncAnalyzer.update(delta);
 
@@ -690,6 +688,16 @@
 		setExpression('o', visemes.oh);
 		// ARKit style (jawOpen for mouth)
 		setExpression('jawOpen', visemes.aa * 0.7);
+
+		// === Emotion expression animation ===
+		const emotionWeights = expressionController.update(delta);
+		for (const [exprName, weight] of emotionWeights) {
+			if (weight > 0.01) setExpression(exprName, weight);
+			else setExpression(exprName, 0);
+		}
+
+		// Apply all expression changes (blink, lip-sync, emotion)
+		expressionManager.update();
 	});
 </script>
 

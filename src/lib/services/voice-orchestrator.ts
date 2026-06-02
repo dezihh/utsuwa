@@ -18,6 +18,8 @@ export interface SpeechSegment {
 	exaggeration?: number;
 	/** ISO 639-1 language code for multilingual switching */
 	language?: string;
+	/** VRM body action to trigger (e.g. wave, nod, jump) */
+	action?: string;
 }
 
 /** Callbacks the orchestrator fires so the UI can react synchronously. */
@@ -28,6 +30,10 @@ export interface OrchestratorCallbacks {
 	onComplete?: () => void;
 	/** Fired continuously with analyser data for lip-sync */
 	onAnalyserUpdate?: (analyser: AnalyserNode) => void;
+	/** Fired when a segment with an emotion tag starts */
+	onEmotionChange?: (emotion: string | null) => void;
+	/** Fired when a segment has an [action:xxx] tag */
+	onAction?: (action: string) => void;
 }
 
 /**
@@ -64,6 +70,8 @@ export class VoiceOrchestrator {
 				if (this.abortController.signal.aborted) break;
 
 				const segment = segments[i];
+				if (segment.emotion) callbacks?.onEmotionChange?.(segment.emotion);
+				if (segment.action) callbacks?.onAction?.(segment.action);
 
 				if (provider.capabilities?.streaming && provider.speakStreaming) {
 					await this.playStreaming(provider, segment, i, callbacks);
@@ -79,6 +87,7 @@ export class VoiceOrchestrator {
 			this.isPlaying = false;
 			this.currentAnalyser = null;
 			this.currentSource = null;
+			callbacks?.onEmotionChange?.(null);
 			callbacks?.onComplete?.();
 		}
 	}

@@ -323,6 +323,18 @@ EMOTION / SOUND EFFECTS (influence voice expressiveness):
   [calm]     — calm, measured       [whisper]  — soft, hushed
   [dramatic] — over-the-top drama
 
+BODY ACTIONS (trigger avatar animations — use sparingly):
+  [action:wave]   — wave hello/goodbye
+  [action:nod]    — nod in agreement
+  [action:shake]  — shake head (disagreement)
+  [action:jump]   — jump for joy
+  [action:bow]    — bow (thanks/apology)
+  [action:think]  — thinking pose
+  [action:clap]   — applause
+  [action:dance]  — dance
+  Place [action:xxx] at the start of the sentence where the animation should play.
+  Use at most ONE action tag per response.
+
 RULES:
 - Place tags immediately before the affected word or sentence (no space after the tag).
 - Language tags apply to all following sentences until the next [lang:xx] tag.
@@ -331,7 +343,7 @@ RULES:
 - Use them naturally to make the conversation more expressive and realistic.
 
 EXAMPLE:
-  "[excited]Oh wow, that is impressive! [lang:es]¡Muy bien hecho! [lang:de][chuckle]Du machst das wirklich gut."
+  "[action:wave][excited]Oh wow, that is impressive! [lang:es]¡Muy bien hecho! [lang:de][chuckle]Du machst das wirklich gut."
 </voice_tags>`;
 }
 

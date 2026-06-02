@@ -112,12 +112,17 @@ Chatterbox is configured under **Settings > TTS Providers** and connects to your
   - **CFG Weight**
   - **Temperature**
 
-Utsuwa supports sentence-level voice control tags for Chatterbox:
+Utsuwa supports inline control tags for Chatterbox:
 
 - Language tags: `[lang:de]`, `[lang:es]`, `[lang:en]`, ...
 - Emotion/sound tags: `[laugh]`, `[giggle]`, `[chuckle]`, `[sigh]`, `[excited]`, `[sad]`, `[calm]`, `[whisper]`, `[dramatic]`
+- Body action tags: `[action:wave]`, `[action:nod]`, `[action:shake]`, `[action:jump]`, `[action:bow]`, `[action:think]`, `[action:clap]`, `[action:dance]`
 
-Tags are interpreted for TTS but stripped from visible chat output.
+Processing rules:
+- Chatterbox mode keeps full language blocks together (only `[lang:xx]` splits), for more natural prosody.
+- Other TTS providers keep sentence-by-sentence segmentation.
+- Tags are interpreted for TTS/avatar control but stripped from visible chat output.
+- Action tags require matching VRMA files in `/animations/` to play.
 
 ### STT Providers (3)
 

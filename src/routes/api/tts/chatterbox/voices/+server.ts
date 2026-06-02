@@ -1,16 +1,17 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
+const CHATTERBOX_TIMEOUT_MS = 15000;
+
 export const GET: RequestHandler = async ({ url }) => {
 	const baseUrl = (url.searchParams.get('baseUrl') ?? 'http://127.0.0.1:8300').replace(/\/$/, '');
 
-	// Fetch both predefined voices and clone reference files in parallel
-	let predefinedRes: Response, clonesRes: Response;
+	// Predefined voices are required; clone list is optional.
+	let predefinedRes: Response;
 	try {
-		[predefinedRes, clonesRes] = await Promise.all([
-			fetch(`${baseUrl}/get_predefined_voices`, { signal: AbortSignal.timeout(5000) }),
-			fetch(`${baseUrl}/get_reference_files`, { signal: AbortSignal.timeout(5000) })
-		]);
+		predefinedRes = await fetch(`${baseUrl}/get_predefined_voices`, {
+			signal: AbortSignal.timeout(CHATTERBOX_TIMEOUT_MS)
+		});
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : 'Connection failed';
 		return json({ error: `Cannot reach Chatterbox at ${baseUrl}: ${msg}` }, { status: 502 });
@@ -31,17 +32,23 @@ export const GET: RequestHandler = async ({ url }) => {
 		type: 'predefined' as const
 	}));
 
-	// Clone/reference voices — non-fatal if endpoint fails
+	// Clone/reference voices — non-fatal if endpoint fails or times out.
 	let cloneVoices: Array<{ id: string; name: string; type: 'clone' }> = [];
-	if (clonesRes.ok) {
-		const cloneFiles = (await clonesRes.json()) as string[];
-		cloneVoices = cloneFiles.map((filename) => ({
-			id: `clone:${filename}`,
-			name: filename.replace(/\.(wav|mp3|flac|ogg)$/i, ''),
-			type: 'clone' as const
-		}));
+	try {
+		const clonesRes = await fetch(`${baseUrl}/get_reference_files`, {
+			signal: AbortSignal.timeout(CHATTERBOX_TIMEOUT_MS)
+		});
+		if (clonesRes.ok) {
+			const cloneFiles = (await clonesRes.json()) as string[];
+			cloneVoices = cloneFiles.map((filename) => ({
+				id: `clone:${filename}`,
+				name: filename.replace(/\.(wav|mp3|flac|ogg)$/i, ''),
+				type: 'clone' as const
+			}));
+		}
+	} catch {
+		// Keep predefined voices available even if clone endpoint is slow/unreachable.
 	}
 
 	return json({ voices: [...predefinedVoices, ...cloneVoices] });
 };
-

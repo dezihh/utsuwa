@@ -1,6 +1,8 @@
 import { getTTSProvider, type TTSOptions } from '$lib/services/tts';
 import { getTTSProvider as getTTSMetadata } from '$lib/services/providers/registry';
 import { VoiceOrchestrator, type SpeechSegment } from '$lib/services/voice-orchestrator';
+import { vrmStore } from '$lib/stores/vrm.svelte';
+import { expressionController } from '$lib/services/vrm/expression-controller';
 
 interface QueueItem {
 	text: string;
@@ -13,6 +15,33 @@ function createTTSStore() {
 	let currentSource = $state<AudioBufferSourceNode | null>(null);
 	let queue = $state<QueueItem[]>([]);
 	const orchestrator = new VoiceOrchestrator();
+
+	function buildOrchestratorCallbacks(
+		extraCallbacks?: { onSentenceStart?: (sentence: string, index: number) => void }
+	) {
+		return {
+			onSegmentStart: extraCallbacks?.onSentenceStart
+				? (segment: SpeechSegment, index: number) => extraCallbacks.onSentenceStart!(segment.text, index)
+				: undefined,
+			onAnalyserUpdate: (analyser: AnalyserNode) => {
+				currentAnalyser = analyser;
+			},
+			onEmotionChange: (emotion: string | null) => {
+				vrmStore.setEmotion(emotion);
+				expressionController.setEmotion(emotion);
+			},
+			onAction: (action: string) => {
+				vrmStore.triggerAction(action);
+			},
+			onComplete: () => {
+				isSpeaking = false;
+				currentAnalyser = null;
+				currentSource = null;
+				vrmStore.setEmotion(null);
+				expressionController.setEmotion(null);
+			}
+		};
+	}
 
 	async function speak(text: string, options: TTSOptions) {
 		const provider = getTTSMetadata(options.provider);
@@ -27,16 +56,7 @@ function createTTSStore() {
 		if (tts.capabilities?.streaming && tts.speakStreaming) {
 			isSpeaking = true;
 			const segments: SpeechSegment[] = [{ text }];
-			await orchestrator.speakSegments(segments, options, {
-				onAnalyserUpdate: (analyser) => {
-					currentAnalyser = analyser;
-				},
-				onComplete: () => {
-					isSpeaking = false;
-					currentAnalyser = null;
-					currentSource = null;
-				}
-			});
+			await orchestrator.speakSegments(segments, options, buildOrchestratorCallbacks());
 			return;
 		}
 
@@ -64,34 +84,13 @@ function createTTSStore() {
 		}
 
 		const tts = getTTSProvider(options);
-		if (tts.capabilities?.streaming && tts.speakStreaming) {
-			isSpeaking = true;
-			await orchestrator.speakSegments(sentences, options, {
-				onSegmentStart: (segment, index) => {
-					callbacks?.onSentenceStart?.(segment.text, index);
-				},
-				onAnalyserUpdate: (analyser) => {
-					currentAnalyser = analyser;
-				},
-				onComplete: () => {
-					isSpeaking = false;
-					currentAnalyser = null;
-					currentSource = null;
-				}
-			});
+		if (!tts.capabilities?.streaming && !tts.speak) {
+			console.warn('TTS provider has no playback capability');
 			return;
 		}
 
-		const items: QueueItem[] = sentences.map((seg, i) => ({
-			text: seg.text,
-			onStart: callbacks?.onSentenceStart ? () => callbacks.onSentenceStart!(seg.text, i) : undefined
-		}));
-
-		queue = [...queue, ...items];
-
-		if (isSpeaking) return;
-
-		await processQueue(options);
+		isSpeaking = true;
+		await orchestrator.speakSegments(sentences, options, buildOrchestratorCallbacks(callbacks));
 	}
 
 	async function processQueue(options: TTSOptions) {
@@ -129,6 +128,8 @@ function createTTSStore() {
 
 	function stop() {
 		orchestrator.interrupt();
+		expressionController.reset();
+		vrmStore.setEmotion(null);
 
 		if (currentSource) {
 			try {

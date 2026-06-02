@@ -11,10 +11,10 @@ export class LipSyncAnalyzer {
 	private dataArray: Uint8Array | null = null;
 	private smoothedWeights: VisemeWeights = { aa: 0, ee: 0, ih: 0, oh: 0, ou: 0 };
 
-	// Smoothing parameters
-	private readonly ATTACK = 0.3; // Speed to reach target
-	private readonly RELEASE = 0.15; // Speed to return to zero
-	private readonly VOLUME_THRESHOLD = 0.05; // Silence threshold
+	// Tuned smoothing parameters
+	private readonly ATTACK = 0.18; // Slower attack = less snappy
+	private readonly RELEASE = 0.1; // Slower release = smoother close
+	private readonly VOLUME_THRESHOLD = 0.08; // Ignore more low-level noise
 
 	setAnalyser(analyser: AnalyserNode | null) {
 		this.analyser = analyser;
@@ -85,15 +85,15 @@ export class LipSyncAnalyzer {
 		const mid = this.averageRange(lowMidEnd, midEnd) / 255;
 		const high = this.averageRange(midEnd, highEnd) / 255;
 
-		// Map to visemes with volume scaling
-		const scale = Math.min(volume * 2, 1);
+		// Map to visemes with softer scaling for more natural movement
+		const scale = Math.min(volume * 1.8, 1);
 
 		return {
-			aa: Math.min(low * 1.5 * scale, 0.8),
-			oh: Math.min(lowMid * 1.3 * scale, 0.7),
-			ee: Math.min(mid * 1.2 * scale, 0.6),
-			ih: Math.min(high * 1.0 * scale, 0.5),
-			ou: Math.min((low + lowMid) * 0.5 * scale, 0.6)
+			aa: Math.min(low * 1.2 * scale, 0.5),
+			oh: Math.min(lowMid * 1.0 * scale, 0.4),
+			ee: Math.min(mid * 0.9 * scale, 0.35),
+			ih: Math.min(high * 0.7 * scale, 0.3),
+			ou: Math.min((low + lowMid) * 0.4 * scale, 0.35)
 		};
 	}
 
