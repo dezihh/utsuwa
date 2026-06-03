@@ -61,7 +61,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 	const baseUrl =
 		typeof body.baseUrl === 'string' && body.baseUrl.trim()
 			? normalizeBaseUrl(body.baseUrl)
-			: 'http://localhost:8300/';
+			: 'http://localhost:8765/';
 
 	if (!text) {
 		return new Response(JSON.stringify({ error: 'Text is required' }), {

@@ -128,7 +128,10 @@ export class ChatterboxTTS implements ITTSProvider {
                 return fetch('/api/tts/chatterbox/stream', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(this.buildParams(text, options)),
+                        body: JSON.stringify({
+                                ...this.buildParams(text, options),
+                                baseUrl: this.baseUrl
+                        }),
                         signal: options?.signal
                 });
         }
