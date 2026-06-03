@@ -395,15 +395,35 @@ export class VoiceOrchestrator {
 		let bitsPerSample = 16;
 		let headerParsed = false;
 		let headerAccum = new Uint8Array(0);
+		let audioRemainder = new Uint8Array(0); // leftover bytes from misaligned HTTP chunks
 
 		// Cursor for gapless scheduling
 		let nextPlayTime = -1;
 
-		const scheduleAudioBytes = (bytes: Uint8Array) => {
+		const scheduleAudioBytes = (rawBytes: Uint8Array) => {
 			const bytesPerSample = bitsPerSample / 8;
+
+			// Prepend any leftover bytes from the previous chunk to maintain sample alignment.
+			let bytes: Uint8Array;
+			if (audioRemainder.byteLength > 0) {
+				bytes = new Uint8Array(audioRemainder.byteLength + rawBytes.byteLength);
+				bytes.set(audioRemainder);
+				bytes.set(rawBytes, audioRemainder.byteLength);
+				audioRemainder = new Uint8Array(0);
+			} else {
+				bytes = rawBytes;
+			}
+
+			// Save any trailing partial-sample bytes for the next call.
+			const rem = bytes.byteLength % bytesPerSample;
+			if (rem > 0) {
+				audioRemainder = bytes.slice(bytes.byteLength - rem);
+				bytes = bytes.slice(0, bytes.byteLength - rem);
+			}
+
 			if (bytes.byteLength < bytesPerSample) return;
 
-			const numSamples = Math.floor(bytes.byteLength / bytesPerSample);
+			const numSamples = bytes.byteLength / bytesPerSample;
 			const samplesPerChannel = Math.floor(numSamples / numChannels);
 			if (samplesPerChannel === 0) return;
 
