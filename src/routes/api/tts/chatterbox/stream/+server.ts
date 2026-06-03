@@ -1,116 +1,194 @@
 import type { RequestHandler } from './$types';
 
-function normalizeBaseUrl(baseUrl: string): string {
-	const clean = baseUrl.trim().replace(/\/+$/, '');
-	return `${clean}/`;
-}
+const SAMPLE_RATE = 24000;
+const NUM_CHANNELS = 1;
+const WAV_HEADER_SIZE = 44;
 
-function buildRequestBody(input: {
-	text: string;
-	voice?: string;
-	speed?: number;
-	exaggeration?: number;
-	emotion?: string;
-	language?: string;
-	cfgWeight?: number;
-	temperature?: number;
-}) {
-	// Detect clone voices (prefixed with "clone:")
-	const isClone = input.voice?.startsWith('clone:');
-	const voiceFilename = isClone ? input.voice!.slice(6) : input.voice;
+/**
+ * WAV audio format codes.
+ * We use IEEE_FLOAT (3) so the Chatterbox float32 stream passes through unchanged.
+ */
+const WAV_FORMAT_IEEE_FLOAT = 3;
 
-	const body: Record<string, unknown> = {
-		text: input.text,
-		voice_mode: isClone ? 'clone' : 'predefined',
-		stream: true,
-		split_text: true
-	};
-
-	if (isClone) {
-		if (voiceFilename) body.reference_audio_filename = voiceFilename;
-	} else {
-		if (voiceFilename) body.predefined_voice_id = voiceFilename;
+/** Map a UI voice ID to an absolute path inside the Chatterbox container. */
+function voiceToPath(voice: string): string {
+	if (voice.startsWith('clone:')) {
+		return `/app/reference_audio/${voice.slice(6)}.wav`;
 	}
-	if (typeof input.speed === 'number') body.speed_factor = input.speed;
-	if (typeof input.exaggeration === 'number') body.exaggeration = input.exaggeration;
-	if (input.language) body.language = input.language;
-	if (typeof input.cfgWeight === 'number') body.cfg_weight = input.cfgWeight;
-	if (typeof input.temperature === 'number') body.temperature = input.temperature;
-
-	return body;
+	return `/app/voices/${voice}.wav`;
 }
 
-export const POST: RequestHandler = async ({ request, fetch }) => {
+/**
+ * Build a 44-byte WAV header for IEEE Float 32-bit mono audio.
+ * Uses 0xFFFFFFFF as data size (streaming / unknown length).
+ */
+function makeFloat32WavHeader(): Uint8Array {
+	const BITS_PER_SAMPLE = 32;
+	const buf = new ArrayBuffer(WAV_HEADER_SIZE);
+	const v = new DataView(buf);
+	const byteRate = SAMPLE_RATE * NUM_CHANNELS * (BITS_PER_SAMPLE / 8);
+	const blockAlign = NUM_CHANNELS * (BITS_PER_SAMPLE / 8);
+
+	v.setUint32(0, 0x52494646, false);          // 'RIFF'
+	v.setUint32(4, 0xffffffff, true);            // file size (streaming, unknown)
+	v.setUint32(8, 0x57415645, false);           // 'WAVE'
+	v.setUint32(12, 0x666d7420, false);          // 'fmt '
+	v.setUint32(16, 16, true);                   // fmt chunk size
+	v.setUint16(20, WAV_FORMAT_IEEE_FLOAT, true);// audioFormat = 3 (IEEE Float)
+	v.setUint16(22, NUM_CHANNELS, true);
+	v.setUint32(24, SAMPLE_RATE, true);
+	v.setUint32(28, byteRate, true);
+	v.setUint16(32, blockAlign, true);
+	v.setUint16(34, BITS_PER_SAMPLE, true);
+	v.setUint32(36, 0x64617461, false);          // 'data'
+	v.setUint32(40, 0xffffffff, true);           // data size (streaming, unknown)
+
+	return new Uint8Array(buf);
+}
+
+export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json().catch(() => null);
 
 	if (!body || typeof body !== 'object') {
 		return new Response(JSON.stringify({ error: 'Invalid request body' }), {
-			status: 400,
-			headers: { 'Content-Type': 'application/json' }
+			status: 400, headers: { 'Content-Type': 'application/json' }
 		});
 	}
 
 	const text = typeof body.text === 'string' ? body.text : '';
 	const voice = typeof body.voice === 'string' ? body.voice : '';
-	const speed = typeof body.speed === 'number' ? body.speed : undefined;
-	const exaggeration = typeof body.exaggeration === 'number' ? body.exaggeration : undefined;
-	const emotion = typeof body.emotion === 'string' ? body.emotion : undefined;
+	const baseUrl = (typeof body.baseUrl === 'string' && body.baseUrl.trim()
+		? body.baseUrl.trim() : 'http://localhost:8765'
+	).replace(/\/+$/, '');
+	const exaggeration = typeof body.exaggeration === 'number' ? body.exaggeration : 0.4;
+	const cfgWeight = typeof body.cfgWeight === 'number' ? body.cfgWeight : 0.5;
+	const temperature = typeof body.temperature === 'number' ? body.temperature : 0.5;
 	const language = typeof body.language === 'string' ? body.language : undefined;
-	const cfgWeight = typeof body.cfgWeight === 'number' ? body.cfgWeight : undefined;
-	const temperature = typeof body.temperature === 'number' ? body.temperature : undefined;
-	const baseUrl =
-		typeof body.baseUrl === 'string' && body.baseUrl.trim()
-			? normalizeBaseUrl(body.baseUrl)
-			: 'http://localhost:8765/';
 
 	if (!text) {
 		return new Response(JSON.stringify({ error: 'Text is required' }), {
-			status: 400,
-			headers: { 'Content-Type': 'application/json' }
+			status: 400, headers: { 'Content-Type': 'application/json' }
 		});
 	}
 
-	let upstream: Response;
+	// Chatterbox only exposes a WebSocket endpoint — convert http(s) → ws(s).
+	const wsUrl = baseUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:') + '/ws/tts';
+
+	const wsParams: Record<string, unknown> = {
+		text,
+		output_sample_rate: SAMPLE_RATE,
+		chunk_tokens: 25,
+		exaggeration,
+		cfg_weight: cfgWeight,
+		temperature,
+	};
+	if (voice) wsParams.audio_prompt_path = voiceToPath(voice);
+	if (language) wsParams.language_id = language;
+
+	// --- WebSocket setup ---
+	// Set up all state and handlers before sending so no messages are missed.
+
+	const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+	const writer = writable.getWriter();
+	let closed = false;
+	const closeWriter = () => {
+		if (!closed) { closed = true; writer.close().catch(() => {}); }
+	};
+
+	let writeQueue = Promise.resolve();
+	const enqueueWrite = (bytes: Uint8Array) => {
+		writeQueue = writeQueue.then(() => writer.write(bytes)).catch(() => {});
+	};
+
+	type State = 'waiting' | 'streaming' | 'done';
+	let state: State = 'waiting';
+	let resolveWaiting!: () => void;
+	let rejectWaiting!: (err: Error) => void;
+	const waitingPromise = new Promise<void>((res, rej) => {
+		resolveWaiting = res;
+		rejectWaiting = rej;
+	});
+
+	let headerWritten = false;
+	let ws: WebSocket;
+
 	try {
-		upstream = await fetch(new URL('tts', baseUrl), {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(buildRequestBody({ text, voice, speed, exaggeration, emotion, language, cfgWeight, temperature }))
+		ws = new WebSocket(wsUrl);
+	} catch {
+		return new Response(JSON.stringify({ error: `Invalid Chatterbox URL: ${wsUrl}` }), {
+			status: 502, headers: { 'Content-Type': 'application/json' }
 		});
-	} catch (error) {
-		return new Response(
-			JSON.stringify({
-				error: `Chatterbox request failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-			}),
-			{
-				status: 502,
-				headers: { 'Content-Type': 'application/json' }
+	}
+
+	ws.binaryType = 'arraybuffer';
+
+	ws.addEventListener('message', (event: MessageEvent) => {
+		if (typeof event.data === 'string') {
+			let msg: Record<string, unknown>;
+			try { msg = JSON.parse(event.data as string); } catch { return; }
+
+			if (msg.error && state === 'waiting') {
+				rejectWaiting(new Error(String(msg.error)));
+			} else if (msg.status === 'generating' && state === 'waiting') {
+				state = 'streaming';
+				resolveWaiting();
+			} else if (msg.status === 'done') {
+				state = 'done';
+				writeQueue = writeQueue.then(closeWriter);
+				ws.close();
 			}
+			return;
+		}
+
+		// Binary frame: raw float32-LE audio — forward directly, no conversion.
+		if (state !== 'streaming') return;
+
+		const bytes = new Uint8Array(event.data as ArrayBuffer);
+		if (!headerWritten) {
+			headerWritten = true;
+			enqueueWrite(makeFloat32WavHeader());
+		}
+		enqueueWrite(bytes);
+	});
+
+	ws.addEventListener('error', () => {
+		if (state === 'waiting') rejectWaiting(new Error(`Cannot connect to Chatterbox at ${wsUrl}`));
+		closeWriter();
+	});
+
+	ws.addEventListener('close', () => {
+		if (state === 'waiting') rejectWaiting(new Error('Chatterbox closed before sending status'));
+		writeQueue = writeQueue.then(closeWriter);
+	});
+
+	// Wait for connection, then send params.
+	try {
+		await new Promise<void>((res, rej) => {
+			ws.addEventListener('open', () => res(), { once: true });
+			ws.addEventListener('error', () => rej(new Error(`Cannot connect to ${wsUrl}`)), { once: true });
+		});
+	} catch (err) {
+		return new Response(
+			JSON.stringify({ error: `Chatterbox request failed: ${err instanceof Error ? err.message : 'Unknown error'}` }),
+			{ status: 502, headers: { 'Content-Type': 'application/json' } }
 		);
 	}
 
-	if (!upstream.ok) {
-		const message = await upstream.text().catch(() => '');
-		let hint = '';
-		if (upstream.status === 404) hint = ' — the selected voice was not found. Please re-select a voice in Settings → Persona.';
-		return new Response(JSON.stringify({ error: `Chatterbox stream error: ${upstream.status} ${message}${hint}` }), {
-			status: 502,
-			headers: { 'Content-Type': 'application/json' }
-		});
+	ws.send(JSON.stringify(wsParams));
+
+	// Wait for 'generating' — lets us return HTTP 502 on voice-not-found or param errors.
+	try {
+		await waitingPromise;
+	} catch (err) {
+		ws.close();
+		return new Response(
+			JSON.stringify({ error: `Chatterbox error: ${err instanceof Error ? err.message : 'Unknown error'}` }),
+			{ status: 502, headers: { 'Content-Type': 'application/json' } }
+		);
 	}
 
-	if (!upstream.body) {
-		return new Response(JSON.stringify({ error: 'Chatterbox stream returned no body' }), {
-			status: 502,
-			headers: { 'Content-Type': 'application/json' }
-		});
-	}
-
-	return new Response(upstream.body, {
+	return new Response(readable, {
 		status: 200,
-		headers: {
-			'Content-Type': upstream.headers.get('content-type') || 'audio/wav',
-			'Cache-Control': 'no-store'
-		}
+		headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-store' }
 	});
 };

@@ -391,23 +391,34 @@ export class VoiceOrchestrator {
 		const PCM_HEADER_SIZE = 44;
 		let sampleRate = 24000;
 		let numChannels = 1;
+		let audioFormat = 1;   // 1 = PCM int16, 3 = IEEE float32
+		let bitsPerSample = 16;
 		let headerParsed = false;
 		let headerAccum = new Uint8Array(0);
 
 		// Cursor for gapless scheduling
 		let nextPlayTime = -1;
 
-		const schedulePCM = (pcmBytes: Uint8Array) => {
-			if (pcmBytes.byteLength < 2) return;
+		const scheduleAudioBytes = (bytes: Uint8Array) => {
+			const bytesPerSample = bitsPerSample / 8;
+			if (bytes.byteLength < bytesPerSample) return;
 
-			const numSamples = Math.floor(pcmBytes.byteLength / 2);
+			const numSamples = Math.floor(bytes.byteLength / bytesPerSample);
 			const samplesPerChannel = Math.floor(numSamples / numChannels);
 			if (samplesPerChannel === 0) return;
 
 			const float32 = new Float32Array(numSamples);
-			const view = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength);
-			for (let i = 0; i < numSamples; i++) {
-				float32[i] = view.getInt16(i * 2, true) / 32768.0;
+			const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+			if (audioFormat === 3) {
+				// IEEE Float 32-bit — direct copy, no conversion needed
+				for (let i = 0; i < numSamples; i++) {
+					float32[i] = view.getFloat32(i * 4, true);
+				}
+			} else {
+				// PCM 16-bit signed
+				for (let i = 0; i < numSamples; i++) {
+					float32[i] = view.getInt16(i * 2, true) / 32768.0;
+				}
 			}
 
 			const buf = audioContext.createBuffer(numChannels, samplesPerChannel, sampleRate);
@@ -455,16 +466,18 @@ export class VoiceOrchestrator {
 
 					if (headerAccum.byteLength >= PCM_HEADER_SIZE) {
 						const dv = new DataView(headerAccum.buffer);
+						audioFormat = dv.getUint16(20, true);
 						numChannels = dv.getUint16(22, true);
 						sampleRate = dv.getUint32(24, true);
+						bitsPerSample = dv.getUint16(34, true);
 						headerParsed = true;
 
-						const pcmTail = headerAccum.slice(PCM_HEADER_SIZE);
-						if (pcmTail.byteLength > 0) schedulePCM(pcmTail);
+						const audioTail = headerAccum.slice(PCM_HEADER_SIZE);
+						if (audioTail.byteLength > 0) scheduleAudioBytes(audioTail);
 						headerAccum = new Uint8Array(0);
 					}
 				} else {
-					schedulePCM(bytes);
+					scheduleAudioBytes(bytes);
 				}
 			}
 		} catch (err) {

@@ -139,22 +139,17 @@ export class ChatterboxTTS implements ITTSProvider {
         private buildParams(text: string, options?: StreamOptions): Record<string, unknown> {
                 const params: Record<string, unknown> = {
                         text,
-                        output_sample_rate: 24000,
-                        chunk_tokens: 25,
                         exaggeration: options?.exaggeration ?? this.exaggeration,
-                        cfg_weight: this.cfgWeight ?? 0.5,
+                        cfgWeight: this.cfgWeight ?? 0.5,
                         temperature: this.temperature ?? 0.5,
+                        speed: this.speed,
                 };
                 const language = options?.language ?? this.language;
-                if (language) params.language_id = language;
+                if (language) params.language = language;
 
-                // Voice: resolve path for the container
+                // Pass voice ID to server proxy which handles clone: prefix and path resolution
                 if (this.voiceId) {
-                        if (this.voiceId.startsWith('clone:')) {
-                                params.audio_prompt_path = `/app/reference_audio/${this.voiceId.slice(6)}.wav`;
-                        } else {
-                                params.audio_prompt_path = `/app/voices/${this.voiceId}.wav`;
-                        }
+                        params.voice = this.voiceId;
                 }
 
                 return params;
