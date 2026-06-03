@@ -191,12 +191,10 @@ export class ChatterboxTTS implements ITTSProvider {
         }
 
         private getWebSocketUrl(): string {
-                // In browser: connect via SvelteKit proxy or direct to chatterbox-ng
-                // The baseUrl is typically http://localhost:8765/
-                // We need ws://localhost:8765/ws/tts
-                const url = new URL('/ws/tts', this.baseUrl);
+                const normalizedBase = this.baseUrl.endsWith('/') ? this.baseUrl : `${this.baseUrl}/`;
+                const url = new URL('ws/tts', normalizedBase);
                 url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-                return url.toString();
+                return url.toString().replace(/\/$/, '');
         }
 
         private buildParams(text: string, options?: StreamOptions): Record<string, unknown> {
@@ -262,4 +260,3 @@ export class ChatterboxTTS implements ITTSProvider {
                 return buffer;
         }
 }
-
