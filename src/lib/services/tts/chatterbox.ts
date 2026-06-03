@@ -76,8 +76,9 @@ export class ChatterboxTTS implements ITTSProvider {
                 const audioContext = this.getAudioContext();
                 if (audioContext.state === 'suspended') await audioContext.resume();
 
-                const chunks: Float32Array[] = [];
+                const chunks: Uint8Array[] = [];
                 let sampleRate = 24000;
+                let headerSent = false;
 
                 const wsUrl = this.getWebSocketUrl();
 
@@ -91,7 +92,12 @@ export class ChatterboxTTS implements ITTSProvider {
                         ws.onmessage = (event) => {
                                 if (event.data instanceof Blob) {
                                         event.data.arrayBuffer().then(buf => {
-                                                chunks.push(new Float32Array(buf));
+                                                const pcm16 = this.float32ToPcm16(new Float32Array(buf));
+                                                const wavChunk = headerSent
+                                                        ? pcm16
+                                                        : this.prependWavHeader(pcm16, sampleRate);
+                                                headerSent = true;
+                                                chunks.push(wavChunk);
                                         });
                                 } else {
                                         const msg = JSON.parse(event.data as string);
@@ -106,13 +112,10 @@ export class ChatterboxTTS implements ITTSProvider {
                 });
 
                 const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-                const combined = new Float32Array(totalLength);
+                const combined = new Uint8Array(totalLength);
                 let offset = 0;
                 for (const c of chunks) { combined.set(c, offset); offset += c.length; }
-
-                const audioBuffer = audioContext.createBuffer(1, combined.length, sampleRate);
-                audioBuffer.getChannelData(0).set(combined);
-                return audioBuffer;
+                return audioContext.decodeAudioData(combined.buffer.slice(0));
         }
 
         /**
@@ -124,7 +127,7 @@ export class ChatterboxTTS implements ITTSProvider {
 
                 const ws = new WebSocket(wsUrl);
                 let sampleRate = 24000;
-                let opened = false;
+                let headerSent = false;
 
                 // Queue for incoming data
                 const queue: (ArrayBuffer | 'done' | Error)[] = [];
@@ -133,7 +136,6 @@ export class ChatterboxTTS implements ITTSProvider {
                 function notify() { if (resolve) { resolve(); resolve = null; } }
 
                 ws.onopen = () => {
-                        opened = true;
                         ws.send(JSON.stringify(this.buildParams(text, options)));
                 };
 
@@ -179,9 +181,14 @@ export class ChatterboxTTS implements ITTSProvider {
                                         throw item;
                                 }
 
-                                // Convert float32 PCM to WAV chunk for AudioContext.decodeAudioData
-                                // The VoiceOrchestrator expects decodable audio data.
-                                yield { data: this.pcmToWav(new Float32Array(item), sampleRate), done: false };
+                                const pcm16 = this.float32ToPcm16(new Float32Array(item));
+                                yield {
+                                        data: headerSent
+                                                ? pcm16.buffer.slice(pcm16.byteOffset, pcm16.byteOffset + pcm16.byteLength)
+                                                : this.prependWavHeader(pcm16, sampleRate),
+                                        done: false
+                                };
+                                headerSent = true;
                         }
                 } finally {
                         if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
@@ -191,22 +198,22 @@ export class ChatterboxTTS implements ITTSProvider {
         }
 
         private getWebSocketUrl(): string {
-                const normalizedBase = this.baseUrl.endsWith('/') ? this.baseUrl : `${this.baseUrl}/`;
-                const url = new URL('ws/tts', normalizedBase);
-                url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-                return url.toString().replace(/\/$/, '');
+               const normalizedBase = this.baseUrl.endsWith('/') ? this.baseUrl : `${this.baseUrl}/`;
+               const url = new URL('ws/tts', normalizedBase);
+               url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+               return url.toString().replace(/\/$/, '');
         }
 
         private buildParams(text: string, options?: StreamOptions): Record<string, unknown> {
+                const audioContext = this.getAudioContext();
                 const params: Record<string, unknown> = {
                         text,
-                        output_sample_rate: 24000,
+                        output_sample_rate: audioContext.sampleRate, // ← statt hardcoded 24000
                         chunk_tokens: 25,
                         exaggeration: options?.exaggeration ?? this.exaggeration,
                         cfg_weight: this.cfgWeight ?? 0.5,
                         temperature: this.temperature ?? 0.5,
                 };
-
                 const language = options?.language ?? this.language;
                 if (language) params.language_id = language;
 
@@ -222,15 +229,24 @@ export class ChatterboxTTS implements ITTSProvider {
                 return params;
         }
 
+        private float32ToPcm16(samples: Float32Array): Uint8Array {
+                const bytes = new Uint8Array(samples.length * 2);
+                const view = new DataView(bytes.buffer);
+                for (let i = 0; i < samples.length; i++) {
+                        const s = Math.max(-1, Math.min(1, samples[i]));
+                        view.setInt16(i * 2, s < 0 ? s * 32768 : s * 32767, true);
+                }
+                return bytes;
+        }
+
         /**
-         * Convert raw float32 PCM samples to a minimal WAV buffer
-         * so it can be decoded by AudioContext.decodeAudioData().
+         * Create a minimal PCM16 WAV buffer from raw PCM bytes.
          */
-        private pcmToWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
+        private prependWavHeader(pcm16: Uint8Array, sampleRate: number): ArrayBuffer {
                 const numChannels = 1;
-                const bitsPerSample = 32;
+                const bitsPerSample = 16;
                 const bytesPerSample = bitsPerSample / 8;
-                const dataSize = samples.length * bytesPerSample;
+                const dataSize = pcm16.byteLength;
                 const buffer = new ArrayBuffer(44 + dataSize);
                 const view = new DataView(buffer);
 
@@ -253,9 +269,7 @@ export class ChatterboxTTS implements ITTSProvider {
                 writeString(36, 'data');
                 view.setUint32(40, dataSize, true);
 
-                // Copy PCM data
-                const output = new Float32Array(buffer, 44);
-                output.set(samples);
+                new Uint8Array(buffer, 44).set(pcm16);
 
                 return buffer;
         }
