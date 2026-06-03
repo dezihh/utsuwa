@@ -400,10 +400,15 @@ export class VoiceOrchestrator {
 		let headerAccum = new Uint8Array(0);
 		let audioRemainder = new Uint8Array(0); // leftover bytes from misaligned HTTP chunks
 
-		// Accumulate audio payload bytes before scheduling to avoid too-small AudioBufferSource
-		// nodes, which cause audible gaps. Target: ~80ms of audio per scheduled node.
-		// We lazily update this once we know bitsPerSample.
-		let minScheduleBytes = 7680; // default: 24000 Hz × 4 bytes × 0.08 s
+		// Two-phase jitter buffer:
+		// Phase 1 (prebuffer): Accumulate ~400 ms of audio before starting playback.
+		//   This fills a stable queue so subsequent chunks have time to arrive without gaps.
+		// Phase 2 (streaming): Flush every ~120 ms so we don't add unnecessary extra latency.
+		const PREBUFFER_SECS = 0.4;
+		const CHUNK_SECS = 0.12;
+		let prebuffering = true;
+		let prebufferBytes = Math.floor(sampleRate * (bitsPerSample / 8) * PREBUFFER_SECS);
+		let chunkBytes     = Math.floor(sampleRate * (bitsPerSample / 8) * CHUNK_SECS);
 		let pendingBytes = new Uint8Array(0);
 
 		const flushPending = () => {
@@ -413,15 +418,23 @@ export class VoiceOrchestrator {
 		};
 
 		const appendPending = (bytes: Uint8Array) => {
-			// Lazily recalculate min bytes once sampleRate/bitsPerSample are known.
-			minScheduleBytes = Math.floor(sampleRate * (bitsPerSample / 8) * 0.08);
+			// Recalculate thresholds once sampleRate/bitsPerSample are known from the header.
+			prebufferBytes = Math.floor(sampleRate * (bitsPerSample / 8) * PREBUFFER_SECS);
+			chunkBytes     = Math.floor(sampleRate * (bitsPerSample / 8) * CHUNK_SECS);
 
 			const merged = new Uint8Array(pendingBytes.byteLength + bytes.byteLength);
 			merged.set(pendingBytes);
 			merged.set(bytes, pendingBytes.byteLength);
 			pendingBytes = merged;
 
-			if (pendingBytes.byteLength >= minScheduleBytes) flushPending();
+			if (prebuffering) {
+				if (pendingBytes.byteLength >= prebufferBytes) {
+					prebuffering = false;
+					flushPending();
+				}
+			} else {
+				if (pendingBytes.byteLength >= chunkBytes) flushPending();
+			}
 		};
 
 		// Cursor for gapless scheduling
@@ -486,7 +499,8 @@ export class VoiceOrchestrator {
 			this.currentSource = source;
 
 			if (nextPlayTime < 0) {
-				nextPlayTime = audioContext.currentTime + 0.15; // 150 ms lead — gives iOS Safari time to start
+				// Short lead since the prebuffer already filled ~400ms ahead.
+				nextPlayTime = audioContext.currentTime + 0.05;
 			} else if (nextPlayTime < audioContext.currentTime + 0.02) {
 				nextPlayTime = audioContext.currentTime + 0.02; // catch up if behind
 			}

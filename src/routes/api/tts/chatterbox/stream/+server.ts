@@ -77,7 +77,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const wsParams: Record<string, unknown> = {
 		text,
 		output_sample_rate: SAMPLE_RATE,
-		chunk_tokens: 50,
+		chunk_tokens: 100,
 		exaggeration,
 		cfg_weight: cfgWeight,
 		temperature,
