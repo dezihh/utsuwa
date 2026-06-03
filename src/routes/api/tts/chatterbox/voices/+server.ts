@@ -4,9 +4,10 @@ import type { RequestHandler } from './$types';
 const CHATTERBOX_TIMEOUT_MS = 15000;
 
 export const GET: RequestHandler = async ({ url }) => {
-        const baseUrl = (url.searchParams.get('baseUrl') ?? 'http://127.0.0.1:8765').replace(/\/$/, '');
+        // Always use internal URL for server-side fetch to chatterbox-ng.
+        // The browser baseUrl setting is only relevant for direct WebSocket connections.
+        const baseUrl = 'http://127.0.0.1:8765';
 
-        // Fetch voices from chatterbox-ng /api/voices endpoint
         let res: Response;
         try {
                 res = await fetch(`${baseUrl}/api/voices`, {
