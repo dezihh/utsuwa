@@ -400,6 +400,30 @@ export class VoiceOrchestrator {
 		let headerAccum = new Uint8Array(0);
 		let audioRemainder = new Uint8Array(0); // leftover bytes from misaligned HTTP chunks
 
+		// Accumulate audio payload bytes before scheduling to avoid too-small AudioBufferSource
+		// nodes, which cause audible gaps. Target: ~80ms of audio per scheduled node.
+		// We lazily update this once we know bitsPerSample.
+		let minScheduleBytes = 7680; // default: 24000 Hz × 4 bytes × 0.08 s
+		let pendingBytes = new Uint8Array(0);
+
+		const flushPending = () => {
+			if (pendingBytes.byteLength === 0) return;
+			scheduleAudioBytes(pendingBytes);
+			pendingBytes = new Uint8Array(0);
+		};
+
+		const appendPending = (bytes: Uint8Array) => {
+			// Lazily recalculate min bytes once sampleRate/bitsPerSample are known.
+			minScheduleBytes = Math.floor(sampleRate * (bitsPerSample / 8) * 0.08);
+
+			const merged = new Uint8Array(pendingBytes.byteLength + bytes.byteLength);
+			merged.set(pendingBytes);
+			merged.set(bytes, pendingBytes.byteLength);
+			pendingBytes = merged;
+
+			if (pendingBytes.byteLength >= minScheduleBytes) flushPending();
+		};
+
 		// Cursor for gapless scheduling
 		let nextPlayTime = -1;
 
@@ -496,13 +520,16 @@ export class VoiceOrchestrator {
 						headerParsed = true;
 
 						const audioTail = headerAccum.slice(PCM_HEADER_SIZE);
-						if (audioTail.byteLength > 0) scheduleAudioBytes(audioTail);
+						if (audioTail.byteLength > 0) appendPending(audioTail);
 						headerAccum = new Uint8Array(0);
 					}
 				} else {
-					scheduleAudioBytes(bytes);
+					appendPending(bytes);
 				}
 			}
+
+			// Flush any remaining accumulated audio after the stream ends.
+			if (headerParsed) flushPending();
 		} catch (err) {
 			if ((err as Error).name !== 'AbortError' && !opts.signal?.aborted) {
 				console.error('[VoiceOrchestrator] Streaming segment error:', err);
