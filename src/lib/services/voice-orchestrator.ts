@@ -177,31 +177,22 @@ export class VoiceOrchestrator {
 	pushSegment(segment: SpeechSegment): void {
 		if (!this.channel || !this.sessionOptions || this.pipelineAbort?.signal.aborted) return;
 
+		// Skip segments that contain only emoji, whitespace, or punctuation — these produce
+		// no meaningful speech but still incur full TTS generation overhead.
+		const textContent = segment.text.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s\p{P}]/gu, '');
+		if (!textContent.trim()) return;
+
 		const provider = getTTSProvider(this.sessionOptions);
 		const abort = this.pipelineAbort;
 		if (!abort) return;
 		const signal = abort.signal;
 		const index = this.pipelineIndex++;
 
-		// Use progressive streaming when provider supports it — avoids buffering the
-		// full WAV before playback starts.
-		if (provider.capabilities?.streaming && provider.speakStreaming) {
-			const streamOpts: import('$lib/services/tts').StreamOptions = {
-				emotion: segment.emotion,
-				exaggeration: segment.exaggeration,
-				language: segment.language,
-				speed: segment.speed,
-				signal
-			};
-			this.channel.push({
-				segment,
-				index,
-				streamPlay: (cb) => this.playStreamingSegment(provider, segment, index, streamOpts, cb)
-			});
-		} else {
-			const bufferPromise = this.fetchBuffer(provider, segment, signal);
-			this.channel.push({ segment, index, bufferPromise });
-		}
+		// Always use the batch path: start fetching the buffer for segment N+1 immediately
+		// while segment N is still playing. This eliminates inter-segment gaps caused by
+		// the sequential streaming path (which couldn't prefetch).
+		const bufferPromise = this.fetchBuffer(provider, segment, signal);
+		this.channel.push({ segment, index, bufferPromise });
 	}
 
 	/**
@@ -355,9 +346,42 @@ export class VoiceOrchestrator {
 			offset += c.byteLength;
 		}
 
+		// Manual IEEE Float WAV decoder — avoids decodeAudioData() which may not support
+		// format-3 (IEEE float) WAV on iOS Safari.
+		const PCM_HEADER_SIZE = 44;
+		if (combined.byteLength <= PCM_HEADER_SIZE) return null;
+		const dv = new DataView(combined.buffer);
+		const audioFormat   = dv.getUint16(20, true); // 1 = PCM16, 3 = IEEE float32
+		const numChannels   = dv.getUint16(22, true);
+		const sampleRate    = dv.getUint32(24, true);
+		const bitsPerSample = dv.getUint16(34, true);
+		const bytesPerSample = bitsPerSample / 8;
+
+		const payload = combined.slice(PCM_HEADER_SIZE);
+		const numSamples = Math.floor(payload.byteLength / bytesPerSample);
+		const samplesPerChannel = Math.floor(numSamples / numChannels);
+		if (samplesPerChannel === 0) return null;
+
+		const float32 = new Float32Array(numSamples);
+		const pdv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+		if (audioFormat === 3) {
+			for (let i = 0; i < numSamples; i++) float32[i] = pdv.getFloat32(i * 4, true);
+		} else {
+			for (let i = 0; i < numSamples; i++) float32[i] = pdv.getInt16(i * 2, true) / 32768.0;
+		}
+
 		const audioContext = getSharedAudioContext();
 		if (audioContext.state === 'suspended') await audioContext.resume();
-		return audioContext.decodeAudioData(combined.buffer);
+		const audioBuffer = audioContext.createBuffer(numChannels, samplesPerChannel, sampleRate);
+		if (numChannels === 1) {
+			audioBuffer.getChannelData(0).set(float32);
+		} else {
+			for (let ch = 0; ch < numChannels; ch++) {
+				const chData = audioBuffer.getChannelData(ch);
+				for (let i = 0; i < samplesPerChannel; i++) chData[i] = float32[i * numChannels + ch];
+			}
+		}
+		return audioBuffer;
 	}
 
 	/**
