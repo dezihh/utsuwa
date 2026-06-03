@@ -9,16 +9,12 @@ import {
 } from './index';
 
 /**
- * ChatterboxTTS — WebSocket-based streaming TTS provider for chatterbox-ng.
+ * ChatterboxTTS — server-proxied streaming TTS provider for chatterbox-ng.
  *
- * Protocol:
- * 1. Client opens WebSocket to /ws/tts (via server proxy)
- * 2. Client sends JSON params (text, language_id, exaggeration, etc.)
- * 3. Server sends JSON {"status": "generating", "sample_rate": 24000}
- * 4. Server sends binary frames (raw float32 PCM at sample_rate)
- * 5. Server sends JSON {"status": "done"}
- *
- * This enables true streaming: audio plays as soon as first chunk arrives (~173ms).
+ * The browser posts to the same-origin /api/tts/chatterbox/stream endpoint,
+ * and the server forwards the request to chatterbox-ng. This avoids direct
+ * browser connections to localhost:8765, which do not work reliably on iOS/
+ * Safari devices and remote clients.
  */
 export class ChatterboxTTS implements ITTSProvider {
         private voiceId: string;
@@ -50,7 +46,7 @@ export class ChatterboxTTS implements ITTSProvider {
         }
 
         /**
-         * Non-streaming speak: generates full audio via WebSocket, then plays.
+         * Non-streaming speak: fetches the streamed WAV response, then plays.
          */
         async speak(text: string): Promise<TTSSpeakResult> {
                 const audioBuffer = await this.fetchAudioBuffer(text);
@@ -76,139 +72,71 @@ export class ChatterboxTTS implements ITTSProvider {
                 const audioContext = this.getAudioContext();
                 if (audioContext.state === 'suspended') await audioContext.resume();
 
-                const chunks: Uint8Array[] = [];
-                let sampleRate = 24000;
-                let headerSent = false;
+                const response = await this.requestStream(text, options);
+                if (!response.ok) {
+                        const message = await response.text().catch(() => '');
+                        throw new Error(`Chatterbox TTS error: ${response.status} ${message}`);
+                }
 
-                const wsUrl = this.getWebSocketUrl();
-
-                await new Promise<void>((resolve, reject) => {
-                        const ws = new WebSocket(wsUrl);
-
-                        ws.onopen = () => {
-                                ws.send(JSON.stringify(this.buildParams(text, options)));
-                        };
-
-                        ws.onmessage = (event) => {
-                                if (event.data instanceof Blob) {
-                                        event.data.arrayBuffer().then(buf => {
-                                                const pcm16 = this.float32ToPcm16(new Float32Array(buf));
-                                                const wavChunk = headerSent
-                                                        ? pcm16
-                                                        : this.prependWavHeader(pcm16, sampleRate);
-                                                headerSent = true;
-                                                chunks.push(wavChunk);
-                                        });
-                                } else {
-                                        const msg = JSON.parse(event.data as string);
-                                        if (msg.sample_rate) sampleRate = msg.sample_rate;
-                                        if (msg.status === 'done') { ws.close(); resolve(); }
-                                        if (msg.error) { ws.close(); reject(new Error(msg.error)); }
-                                }
-                        };
-
-                        ws.onerror = () => reject(new Error('WebSocket connection failed'));
-                        ws.onclose = () => resolve();
-                });
-
-                const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-                const combined = new Uint8Array(totalLength);
-                let offset = 0;
-                for (const c of chunks) { combined.set(c, offset); offset += c.length; }
-                return audioContext.decodeAudioData(combined.buffer.slice(0));
+                const combined = response.body
+                        ? await this.readStreamToBuffer(response.body)
+                        : await response.arrayBuffer();
+                return audioContext.decodeAudioData(combined.slice(0));
         }
 
         /**
-         * True streaming: yields audio chunks as they arrive via WebSocket.
+         * True streaming: yields audio chunks as they arrive from the server stream.
          */
         async *speakStreaming(text: string, options?: StreamOptions): AsyncGenerator<AudioChunk> {
-                const wsUrl = this.getWebSocketUrl();
                 const abortSignal = options?.signal;
-
-                const ws = new WebSocket(wsUrl);
-                let sampleRate = 24000;
-                let headerSent = false;
-
-                // Queue for incoming data
-                const queue: (ArrayBuffer | 'done' | Error)[] = [];
-                let resolve: (() => void) | null = null;
-
-                function notify() { if (resolve) { resolve(); resolve = null; } }
-
-                ws.onopen = () => {
-                        ws.send(JSON.stringify(this.buildParams(text, options)));
-                };
-
-                ws.onmessage = (event) => {
-                        if (event.data instanceof Blob) {
-                                event.data.arrayBuffer().then(buf => {
-                                        queue.push(buf);
-                                        notify();
-                                });
-                        } else {
-                                const msg = JSON.parse(event.data as string);
-                                if (msg.sample_rate) sampleRate = msg.sample_rate;
-                                if (msg.status === 'done') { queue.push('done'); notify(); }
-                                if (msg.error) { queue.push(new Error(msg.error)); notify(); }
-                        }
-                };
-
-                ws.onerror = () => { queue.push(new Error('WebSocket error')); notify(); };
-
-                // Handle abort
-                if (abortSignal) {
-                        abortSignal.addEventListener('abort', () => {
-                                ws.close();
-                                queue.push('done');
-                                notify();
-                        }, { once: true });
+                const response = await this.requestStream(text, options);
+                if (!response.ok) {
+                        const message = await response.text().catch(() => '');
+                        throw new Error(`Chatterbox TTS error: ${response.status} ${message}`);
                 }
 
+                if (!response.body) {
+                        yield { data: await response.arrayBuffer(), done: false };
+                        yield { data: new ArrayBuffer(0), done: true };
+                        return;
+                }
+
+                const reader = response.body.getReader();
                 try {
                         while (true) {
                                 if (abortSignal?.aborted) return;
 
-                                if (queue.length === 0) {
-                                        await new Promise<void>(r => { resolve = r; });
-                                }
-
-                                const item = queue.shift();
-                                if (!item || item === 'done') {
+                                const { value, done } = await reader.read();
+                                if (done) {
                                         yield { data: new ArrayBuffer(0), done: true };
                                         return;
                                 }
-                                if (item instanceof Error) {
-                                        throw item;
-                                }
 
-                                const pcm16 = this.float32ToPcm16(new Float32Array(item));
-                                yield {
-                                        data: headerSent
-                                                ? pcm16.buffer.slice(pcm16.byteOffset, pcm16.byteOffset + pcm16.byteLength)
-                                                : this.prependWavHeader(pcm16, sampleRate),
-                                        done: false
-                                };
-                                headerSent = true;
+                                if (value && value.byteLength > 0) {
+                                        yield {
+                                                data: value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
+                                                done: false
+                                        };
+                                }
                         }
                 } finally {
-                        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-                                ws.close();
-                        }
+                        reader.releaseLock();
                 }
         }
 
-        private getWebSocketUrl(): string {
-               const normalizedBase = this.baseUrl.endsWith('/') ? this.baseUrl : `${this.baseUrl}/`;
-               const url = new URL('ws/tts', normalizedBase);
-               url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-               return url.toString().replace(/\/$/, '');
+        private async requestStream(text: string, options?: StreamOptions): Promise<Response> {
+                return fetch('/api/tts/chatterbox/stream', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.buildParams(text, options)),
+                        signal: options?.signal
+                });
         }
 
         private buildParams(text: string, options?: StreamOptions): Record<string, unknown> {
-                const audioContext = this.getAudioContext();
                 const params: Record<string, unknown> = {
                         text,
-                        output_sample_rate: audioContext.sampleRate, // ← statt hardcoded 24000
+                        output_sample_rate: 24000,
                         chunk_tokens: 25,
                         exaggeration: options?.exaggeration ?? this.exaggeration,
                         cfg_weight: this.cfgWeight ?? 0.5,
@@ -229,48 +157,29 @@ export class ChatterboxTTS implements ITTSProvider {
                 return params;
         }
 
-        private float32ToPcm16(samples: Float32Array): Uint8Array {
-                const bytes = new Uint8Array(samples.length * 2);
-                const view = new DataView(bytes.buffer);
-                for (let i = 0; i < samples.length; i++) {
-                        const s = Math.max(-1, Math.min(1, samples[i]));
-                        view.setInt16(i * 2, s < 0 ? s * 32768 : s * 32767, true);
+        private async readStreamToBuffer(stream: ReadableStream<Uint8Array>): Promise<ArrayBuffer> {
+                const reader = stream.getReader();
+                const chunks: Uint8Array[] = [];
+                let total = 0;
+
+                try {
+                        while (true) {
+                                const { value, done } = await reader.read();
+                                if (done) break;
+                                if (!value || value.byteLength === 0) continue;
+                                chunks.push(value);
+                                total += value.byteLength;
+                        }
+                } finally {
+                        reader.releaseLock();
                 }
-                return bytes;
-        }
 
-        /**
-         * Create a minimal PCM16 WAV buffer from raw PCM bytes.
-         */
-        private prependWavHeader(pcm16: Uint8Array, sampleRate: number): ArrayBuffer {
-                const numChannels = 1;
-                const bitsPerSample = 16;
-                const bytesPerSample = bitsPerSample / 8;
-                const dataSize = pcm16.byteLength;
-                const buffer = new ArrayBuffer(44 + dataSize);
-                const view = new DataView(buffer);
-
-                // WAV header
-                const writeString = (offset: number, str: string) => {
-                        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-                };
-
-                writeString(0, 'RIFF');
-                view.setUint32(4, 36 + dataSize, true);
-                writeString(8, 'WAVE');
-                writeString(12, 'fmt ');
-                view.setUint32(16, 16, true); // chunk size
-                view.setUint16(20, 3, true);  // format: IEEE float
-                view.setUint16(22, numChannels, true);
-                view.setUint32(24, sampleRate, true);
-                view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
-                view.setUint16(32, numChannels * bytesPerSample, true);
-                view.setUint16(34, bitsPerSample, true);
-                writeString(36, 'data');
-                view.setUint32(40, dataSize, true);
-
-                new Uint8Array(buffer, 44).set(pcm16);
-
-                return buffer;
+                const combined = new Uint8Array(total);
+                let offset = 0;
+                for (const chunk of chunks) {
+                        combined.set(chunk, offset);
+                        offset += chunk.byteLength;
+                }
+                return combined.buffer;
         }
 }
