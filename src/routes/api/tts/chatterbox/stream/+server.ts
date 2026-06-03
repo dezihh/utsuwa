@@ -78,6 +78,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		text,
 		output_sample_rate: SAMPLE_RATE,
 		chunk_tokens: 100,
+		sentence_pipelining: true,
 		exaggeration,
 		cfg_weight: cfgWeight,
 		temperature,

@@ -105,6 +105,7 @@ class PipelineQueue {
  * inter-sentence gap caused by sequential fetch → play → fetch → play.
  */
 export class VoiceOrchestrator {
+	private bufferedStreamingSegments: SpeechSegment[] = [];
 	private currentSource: AudioBufferSourceNode | null = null;
 	private currentAnalyser: AnalyserNode | null = null;
 	private isPlaying = false;
@@ -156,6 +157,7 @@ export class VoiceOrchestrator {
 		this.sessionOptions = options;
 		this.pipelineAbort = new AbortController();
 		this.pipelineIndex = 0;
+		this.bufferedStreamingSegments = [];
 		this.channel = new PipelineQueue();
 		this.pipelineDoneResolved = false;
 		this.pipelineDone = new Promise<void>((resolve) => {
@@ -188,9 +190,17 @@ export class VoiceOrchestrator {
 		const signal = abort.signal;
 		const index = this.pipelineIndex++;
 
-		// Always use the batch path: start fetching the buffer for segment N+1 immediately
-		// while segment N is still playing. This eliminates inter-segment gaps caused by
-		// the sequential streaming path (which couldn't prefetch).
+		console.log(`[VoiceOrchestrator] pushSegment #${index}: ${JSON.stringify(segment.text.slice(0, 80))} (${segment.text.length} chars)`);
+
+		// For streaming providers (Chatterbox): buffer segments and combine into one
+		// request in endSession. This enables sentence_pipelining=true which drops
+		// RTF from 1.5 to ~1.0 and allows gapless progressive playback.
+		if (provider.capabilities?.streaming && provider.speakStreaming) {
+			this.bufferedStreamingSegments.push(segment);
+			return;
+		}
+
+		// Non-streaming providers: batch path (prefetch while previous segment plays)
 		const bufferPromise = this.fetchBuffer(provider, segment, signal);
 		this.channel.push({ segment, index, bufferPromise });
 	}
@@ -200,6 +210,22 @@ export class VoiceOrchestrator {
 	 * Returns a promise that resolves when all audio has finished playing.
 	 */
 	endSession(): Promise<void> {
+		// Flush buffered streaming segments as one combined Chatterbox call.
+		// sentence_pipelining=true on the server means Chatterbox handles splitting
+		// internally with a shared HiFiGAN state — continuous audio, RTF ~1.0.
+		if (this.bufferedStreamingSegments.length > 0 && this.channel && this.sessionOptions && this.pipelineAbort) {
+			const segments = [...this.bufferedStreamingSegments];
+			this.bufferedStreamingSegments = [];
+			const provider = getTTSProvider(this.sessionOptions);
+			const signal = this.pipelineAbort.signal;
+			const index = this.pipelineIndex++;
+			console.log(`[VoiceOrchestrator] combining ${segments.length} segments into one stream`);
+			this.channel.push({
+				segment: segments[0],
+				index,
+				streamPlay: (cb) => this.playAllAsOneStream(provider, segments, index, signal, cb)
+			});
+		}
 		this.channel?.close();
 		return this.pipelineDone;
 	}
@@ -257,6 +283,7 @@ export class VoiceOrchestrator {
 
 				// Batch path: wait for synthesis to finish (may already be done)
 				let buffer: AudioBuffer | null = null;
+				const t0 = performance.now();
 				try {
 					buffer = await item.bufferPromise!;
 				} catch (err) {
@@ -264,6 +291,7 @@ export class VoiceOrchestrator {
 					console.error('[VoiceOrchestrator] Synthesis failed for segment:', item.segment.text, err);
 					continue; // skip this segment
 				}
+				console.log(`[VoiceOrchestrator] segment #${item.index} buffer ready after ${((performance.now()-t0)/1000).toFixed(2)}s wait (${buffer ? buffer.duration.toFixed(2)+'s audio' : 'null'})`);
 
 				if (!buffer || this.pipelineAbort?.signal.aborted) continue;
 
@@ -531,6 +559,198 @@ export class VoiceOrchestrator {
 			} catch {
 				// Already stopped
 			}
+		}
+	}
+
+	/**
+	 * Stream all segments as ONE Chatterbox request with sentence_pipelining=true.
+	 *
+	 * How it works:
+	 *   1. Combine segment texts into one string (Chatterbox splits internally).
+	 *   2. Each streamed binary chunk is decoded and scheduled with precise Web Audio
+	 *      timestamps: source.start(nextPlayTime); nextPlayTime += buffer.duration.
+	 *   3. SCHEDULE_AHEAD_S seconds of "pre-roll" means the first chunk starts playing
+	 *      slightly in the future, giving subsequent chunks time to arrive before their
+	 *      scheduled start — gapless even at RTF ~1.0.
+	 *
+	 * With sentence_pipelining=true on Chatterbox server (RTF ~1.0):
+	 *   - Chunk arrives every ~2.6s, each covers ~2.2s of audio.
+	 *   - Surplus ~0.4s per chunk → SCHEDULE_AHEAD_S=1.5s absorbs up to ~3 cumulative surplus.
+	 */
+	private async playAllAsOneStream(
+		provider: ITTSProvider,
+		segments: SpeechSegment[],
+		index: number,
+		signal: AbortSignal,
+		callbacks?: OrchestratorCallbacks
+	): Promise<void> {
+		const SCHEDULE_AHEAD_S = 1.5;
+
+		const audioContext = getSharedAudioContext();
+		if (audioContext.state === 'suspended' || audioContext.state === ('interrupted' as AudioContextState)) {
+			await audioContext.resume();
+		}
+
+		const analyser = audioContext.createAnalyser();
+		analyser.fftSize = 256;
+		analyser.connect(audioContext.destination);
+		this.currentAnalyser = analyser;
+
+		// Use first segment for emotion/language params; fire callbacks once.
+		const firstSeg = segments[0];
+		if (firstSeg.emotion) callbacks?.onEmotionChange?.(firstSeg.emotion);
+		if (firstSeg.action) callbacks?.onAction?.(firstSeg.action);
+		callbacks?.onSegmentStart?.(firstSeg, index);
+		callbacks?.onAnalyserUpdate?.(analyser);
+
+		// Build combined text. Ensure each sentence ends with sentence-final punctuation
+		// so Chatterbox's sentence splitter works correctly.
+		const combinedText = segments
+			.map((s, i) => {
+				const t = s.text.trim();
+				if (i < segments.length - 1 && !/[.!?…。！？]$/.test(t)) return t + '.';
+				return t;
+			})
+			.join(' ');
+
+		const streamOpts: StreamOptions = {
+			emotion: firstSeg.emotion,
+			exaggeration: firstSeg.exaggeration,
+			language: firstSeg.language,
+			speed: firstSeg.speed,
+			signal
+		};
+
+		const PCM_HEADER_SIZE = 44;
+		let headerParsed = false;
+		let audioFormat = 3;    // default: IEEE float32
+		let numChannels = 1;
+		let sampleRate = 24000;
+		let bytesPerSample = 4;
+
+		let remainder = new Uint8Array(0);
+		// nextPlayTime is set on first chunk: audioContext.currentTime + SCHEDULE_AHEAD_S
+		let nextPlayTime = 0;
+		let firstChunk = true;
+		let lastSourceNode: AudioBufferSourceNode | null = null;
+		let lastSourceEndTime = 0; // estimated wall-clock end of the last scheduled chunk
+
+		const sources: AudioBufferSourceNode[] = [];
+
+		// Register abort listener to stop all scheduled sources.
+		const abortHandler = () => {
+			for (const src of sources) {
+				try { src.stop(); } catch { /* already stopped */ }
+			}
+		};
+		signal.addEventListener('abort', abortHandler, { once: true });
+
+		try {
+			const generator = provider.speakStreaming!(combinedText, streamOpts);
+
+			for await (const chunk of generator) {
+				if (signal.aborted) break;
+				if (chunk.done) break;
+				if (chunk.data.byteLength === 0) continue;
+
+				// Prepend any remainder bytes from the previous iteration.
+				const incoming = new Uint8Array(chunk.data);
+				let raw: Uint8Array;
+				if (remainder.byteLength > 0) {
+					raw = new Uint8Array(remainder.byteLength + incoming.byteLength);
+					raw.set(remainder);
+					raw.set(incoming, remainder.byteLength);
+					remainder = new Uint8Array(0);
+				} else {
+					raw = incoming;
+				}
+
+				let pcmBytes: Uint8Array;
+
+				if (!headerParsed) {
+					// Need at least a full WAV header to parse format.
+					if (raw.byteLength < PCM_HEADER_SIZE) {
+						remainder = raw;
+						continue;
+					}
+					const hdv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+					audioFormat   = hdv.getUint16(20, true);
+					numChannels   = hdv.getUint16(22, true);
+					sampleRate    = hdv.getUint32(24, true);
+					const bps     = hdv.getUint16(34, true);
+					bytesPerSample = bps / 8;
+					headerParsed  = true;
+					pcmBytes = raw.slice(PCM_HEADER_SIZE);
+				} else {
+					pcmBytes = raw;
+				}
+
+				if (pcmBytes.byteLength === 0) continue;
+
+				// Align to sample frame boundary.
+				const frameSize = bytesPerSample * numChannels;
+				const alignedBytes = Math.floor(pcmBytes.byteLength / frameSize) * frameSize;
+				if (alignedBytes === 0) {
+					remainder = pcmBytes;
+					continue;
+				}
+				remainder = pcmBytes.slice(alignedBytes);
+
+				// Decode aligned PCM bytes into Float32.
+				const numSamples = alignedBytes / bytesPerSample;
+				const samplesPerChannel = numSamples / numChannels;
+				const float32 = new Float32Array(numSamples);
+				const pdv = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, alignedBytes);
+				if (audioFormat === 3) {
+					for (let i = 0; i < numSamples; i++) float32[i] = pdv.getFloat32(i * 4, true);
+				} else {
+					for (let i = 0; i < numSamples; i++) float32[i] = pdv.getInt16(i * 2, true) / 32768.0;
+				}
+
+				// Build AudioBuffer.
+				const audioBuffer = audioContext.createBuffer(numChannels, samplesPerChannel, sampleRate);
+				if (numChannels === 1) {
+					audioBuffer.getChannelData(0).set(float32);
+				} else {
+					for (let ch = 0; ch < numChannels; ch++) {
+						const chData = audioBuffer.getChannelData(ch);
+						for (let i = 0; i < samplesPerChannel; i++) chData[i] = float32[i * numChannels + ch];
+					}
+				}
+
+				// Schedule chunk.
+				if (firstChunk) {
+					nextPlayTime = audioContext.currentTime + SCHEDULE_AHEAD_S;
+					firstChunk = false;
+				}
+
+				const src = audioContext.createBufferSource();
+				src.buffer = audioBuffer;
+				src.connect(analyser);
+				this.currentSource = src;
+				sources.push(src);
+				src.start(nextPlayTime);
+				lastSourceNode = src;
+				lastSourceEndTime = nextPlayTime + audioBuffer.duration;
+				nextPlayTime = lastSourceEndTime;
+			}
+		} catch (err) {
+			if ((err as Error).name !== 'AbortError' && !signal.aborted) {
+				console.error('[VoiceOrchestrator] playAllAsOneStream error:', err);
+			}
+		} finally {
+			signal.removeEventListener('abort', abortHandler);
+		}
+
+		if (signal.aborted || !lastSourceNode) return;
+
+		// Wait until all scheduled audio has finished playing.
+		const remainingMs = (lastSourceEndTime - audioContext.currentTime) * 1000;
+		if (remainingMs > 0) {
+			await new Promise<void>((resolve) => {
+				const id = setTimeout(resolve, remainingMs + 150);
+				signal.addEventListener('abort', () => { clearTimeout(id); resolve(); }, { once: true });
+			});
 		}
 	}
 }
