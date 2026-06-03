@@ -375,7 +375,10 @@ export class VoiceOrchestrator {
 		callbacks?: OrchestratorCallbacks
 	): Promise<void> {
 		const audioContext = getSharedAudioContext();
-		if (audioContext.state === 'suspended') await audioContext.resume();
+		// 'interrupted' is an iOS Safari-specific state (e.g. after a phone call).
+		if (audioContext.state === 'suspended' || audioContext.state === ('interrupted' as AudioContextState)) {
+			await audioContext.resume();
+		}
 
 		const analyser = audioContext.createAnalyser();
 		analyser.fftSize = 256;
@@ -459,7 +462,7 @@ export class VoiceOrchestrator {
 			this.currentSource = source;
 
 			if (nextPlayTime < 0) {
-				nextPlayTime = audioContext.currentTime + 0.05; // 50 ms lead
+				nextPlayTime = audioContext.currentTime + 0.15; // 150 ms lead — gives iOS Safari time to start
 			} else if (nextPlayTime < audioContext.currentTime + 0.02) {
 				nextPlayTime = audioContext.currentTime + 0.02; // catch up if behind
 			}

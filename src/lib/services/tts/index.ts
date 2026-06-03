@@ -87,10 +87,21 @@ export function getSharedAudioContext(): AudioContext {
  */
 export function unlockAudioContext(): void {
 	const ctx = getSharedAudioContext();
+	// On iOS Safari, resume() alone is not sufficient to unlock the AudioContext.
+	// Playing a 1-sample silent buffer from within the user gesture fully unlocks it,
+	// allowing async audio scheduling to work without re-suspending.
+	const doUnlock = () => {
+		const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+		const src = ctx.createBufferSource();
+		src.buffer = buf;
+		src.connect(ctx.destination);
+		src.start(0);
+		src.onended = () => src.disconnect();
+	};
 	if (ctx.state === 'suspended') {
-		ctx.resume().catch(() => {
-			// Silently ignore — may already be running
-		});
+		ctx.resume().then(doUnlock).catch(() => {});
+	} else {
+		doUnlock();
 	}
 }
 
