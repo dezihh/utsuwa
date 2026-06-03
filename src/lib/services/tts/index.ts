@@ -99,7 +99,7 @@ export const TTS_BASE_URLS: Partial<Record<TTSProvider, string>> = {
 	elevenlabs: 'https://api.elevenlabs.io/v1/',
 	'openai-tts': 'https://api.openai.com/v1/',
 	alltalk: 'http://localhost:7851/api/',
-	chatterbox: 'http://localhost:8300/'
+	chatterbox: 'http://localhost:8765/'
 };
 
 // Default voices per provider
