@@ -692,7 +692,7 @@
 					type="text"
 					class="api-key-input"
 					class:error={!!chatterboxFetchError}
-					placeholder={getTTSProvider('chatterbox')?.defaultBaseUrl || 'http://localhost:8300/'}
+					placeholder={getTTSProvider('chatterbox')?.defaultBaseUrl || 'http://localhost:8765/'}
 					value={settingsStore.getProviderConfig('chatterbox').baseUrl ?? ''}
 					oninput={(e) => handleTTSBaseUrlChange(e.currentTarget.value)}
 				/>

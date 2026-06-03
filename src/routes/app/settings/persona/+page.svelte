@@ -332,8 +332,15 @@
 		chatterboxIsLoading = false;
 		chatterboxVoices = result.voices;
 		chatterboxFetchError = result.error ?? null;
-		if (!result.error && result.voices.length > 0 && !speechSettings.activeVoiceId) {
-			modulesStore.setModuleSetting('speech', 'activeVoiceId', result.voices[0].id);
+		if (!result.error && result.voices.length > 0) {
+			const currentVoice = speechSettings.activeVoiceId as string;
+			const hasCurrentVoice = currentVoice && result.voices.some((voice) => voice.id === currentVoice);
+			if (!hasCurrentVoice) {
+				const nextVoice = result.defaultVoiceId || result.voices[0]?.id || '';
+				if (nextVoice) {
+					modulesStore.setModuleSetting('speech', 'activeVoiceId', nextVoice);
+				}
+			}
 		}
 	}
 
@@ -1056,7 +1063,7 @@
 											type="text"
 											class="api-key-input"
 											class:error={!!chatterboxFetchError}
-											placeholder={getTTSProvider('chatterbox')?.defaultBaseUrl || 'http://localhost:8300/'}
+											placeholder={getTTSProvider('chatterbox')?.defaultBaseUrl || 'http://localhost:8765/'}
 											value={settingsStore.getProviderConfig('chatterbox').baseUrl ?? ''}
 											oninput={(e) => handleTTSBaseUrlChange(e.currentTarget.value)}
 										/>

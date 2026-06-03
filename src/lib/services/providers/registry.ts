@@ -183,7 +183,7 @@ export const TTS_PROVIDERS: ProviderMetadata[] = [
 		icon: '🗣️',
 		requiresApiKey: false,
 		isLocal: true,
-		defaultBaseUrl: 'http://localhost:8300/',
+		defaultBaseUrl: 'http://localhost:8765/',
 		voices: []
 	},
 ];
