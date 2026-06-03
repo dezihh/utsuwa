@@ -361,11 +361,8 @@ export class VoiceOrchestrator {
 	}
 
 	/**
-	 * Progressively play a streaming TTS segment.
-	 *
-	 * The server sends: [44-byte WAV header] [PCM16 LE chunks…]
-	 * We parse the header once, then schedule each PCM chunk via Web Audio as
-	 * it arrives, so audio starts within ~50 ms of the first data chunk.
+	 * Collect all chunks from a streaming TTS segment, then play as a single
+	 * continuous AudioBuffer. Gapless by construction — no per-chunk scheduling.
 	 */
 	private async playStreamingSegment(
 		provider: ITTSProvider,
@@ -385,181 +382,86 @@ export class VoiceOrchestrator {
 		analyser.connect(audioContext.destination);
 		this.currentAnalyser = analyser;
 
-		// Fire side-effect callbacks before the first audio chunk arrives.
+		// Fire callbacks immediately so UI reacts before audio starts.
 		if (segment.emotion) callbacks?.onEmotionChange?.(segment.emotion);
 		if (segment.action) callbacks?.onAction?.(segment.action);
 		callbacks?.onSegmentStart?.(segment, index);
 		callbacks?.onAnalyserUpdate?.(analyser);
 
-		const PCM_HEADER_SIZE = 44;
-		let sampleRate = 24000;
-		let numChannels = 1;
-		let audioFormat = 1;   // 1 = PCM int16, 3 = IEEE float32
-		let bitsPerSample = 16;
-		let headerParsed = false;
-		let headerAccum = new Uint8Array(0);
-		let audioRemainder = new Uint8Array(0); // leftover bytes from misaligned HTTP chunks
-
-		// Two-phase jitter buffer:
-		// Phase 1 (prebuffer): Accumulate ~400 ms of audio before starting playback.
-		//   This fills a stable queue so subsequent chunks have time to arrive without gaps.
-		// Phase 2 (streaming): Flush every ~120 ms so we don't add unnecessary extra latency.
-		const PREBUFFER_SECS = 0.4;
-		const CHUNK_SECS = 0.12;
-		let prebuffering = true;
-		let prebufferBytes = Math.floor(sampleRate * (bitsPerSample / 8) * PREBUFFER_SECS);
-		let chunkBytes     = Math.floor(sampleRate * (bitsPerSample / 8) * CHUNK_SECS);
-		let pendingBytes = new Uint8Array(0);
-
-		const flushPending = () => {
-			if (pendingBytes.byteLength === 0) return;
-			scheduleAudioBytes(pendingBytes);
-			pendingBytes = new Uint8Array(0);
-		};
-
-		const appendPending = (bytes: Uint8Array) => {
-			// Recalculate thresholds once sampleRate/bitsPerSample are known from the header.
-			prebufferBytes = Math.floor(sampleRate * (bitsPerSample / 8) * PREBUFFER_SECS);
-			chunkBytes     = Math.floor(sampleRate * (bitsPerSample / 8) * CHUNK_SECS);
-
-			const merged = new Uint8Array(pendingBytes.byteLength + bytes.byteLength);
-			merged.set(pendingBytes);
-			merged.set(bytes, pendingBytes.byteLength);
-			pendingBytes = merged;
-
-			if (prebuffering) {
-				if (pendingBytes.byteLength >= prebufferBytes) {
-					prebuffering = false;
-					flushPending();
-				}
-			} else {
-				if (pendingBytes.byteLength >= chunkBytes) flushPending();
+		try {
+			// --- Collect all audio bytes from the stream ---
+			const chunks: Uint8Array[] = [];
+			const generator = provider.speakStreaming!(segment.text, opts);
+			for await (const chunk of generator) {
+				if (this.pipelineAbort?.signal.aborted || opts.signal?.aborted) break;
+				if (chunk.done) break;
+				if (chunk.data.byteLength > 0) chunks.push(new Uint8Array(chunk.data));
 			}
-		};
 
-		// Cursor for gapless scheduling
-		let nextPlayTime = -1;
+			if (chunks.length === 0 || this.pipelineAbort?.signal.aborted || opts.signal?.aborted) return;
 
-		const scheduleAudioBytes = (rawBytes: Uint8Array) => {
+			// --- Concatenate into one buffer ---
+			const totalBytes = chunks.reduce((sum, c) => sum + c.byteLength, 0);
+			const combined = new Uint8Array(totalBytes);
+			let off = 0;
+			for (const c of chunks) { combined.set(c, off); off += c.byteLength; }
+
+			// --- Parse the 44-byte WAV header ---
+			const PCM_HEADER_SIZE = 44;
+			if (combined.byteLength <= PCM_HEADER_SIZE) return;
+			const dv = new DataView(combined.buffer);
+			const audioFormat   = dv.getUint16(20, true); // 1 = PCM16, 3 = IEEE float32
+			const numChannels   = dv.getUint16(22, true);
+			const sampleRate    = dv.getUint32(24, true);
+			const bitsPerSample = dv.getUint16(34, true);
 			const bytesPerSample = bitsPerSample / 8;
 
-			// Prepend any leftover bytes from the previous chunk to maintain sample alignment.
-			let bytes: Uint8Array;
-			if (audioRemainder.byteLength > 0) {
-				bytes = new Uint8Array(audioRemainder.byteLength + rawBytes.byteLength);
-				bytes.set(audioRemainder);
-				bytes.set(rawBytes, audioRemainder.byteLength);
-				audioRemainder = new Uint8Array(0);
-			} else {
-				bytes = rawBytes;
-			}
-
-			// Save any trailing partial-sample bytes for the next call.
-			const rem = bytes.byteLength % bytesPerSample;
-			if (rem > 0) {
-				audioRemainder = bytes.slice(bytes.byteLength - rem);
-				bytes = bytes.slice(0, bytes.byteLength - rem);
-			}
-
-			if (bytes.byteLength < bytesPerSample) return;
-
-			const numSamples = bytes.byteLength / bytesPerSample;
+			// --- Decode audio payload ---
+			const payload = combined.slice(PCM_HEADER_SIZE);
+			const numSamples = Math.floor(payload.byteLength / bytesPerSample);
 			const samplesPerChannel = Math.floor(numSamples / numChannels);
 			if (samplesPerChannel === 0) return;
 
 			const float32 = new Float32Array(numSamples);
-			const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+			const pdv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
 			if (audioFormat === 3) {
-				// IEEE Float 32-bit — direct copy, no conversion needed
-				for (let i = 0; i < numSamples; i++) {
-					float32[i] = view.getFloat32(i * 4, true);
-				}
+				for (let i = 0; i < numSamples; i++) float32[i] = pdv.getFloat32(i * 4, true);
 			} else {
-				// PCM 16-bit signed
-				for (let i = 0; i < numSamples; i++) {
-					float32[i] = view.getInt16(i * 2, true) / 32768.0;
-				}
+				for (let i = 0; i < numSamples; i++) float32[i] = pdv.getInt16(i * 2, true) / 32768.0;
 			}
 
-			const buf = audioContext.createBuffer(numChannels, samplesPerChannel, sampleRate);
+			// --- Build single AudioBuffer and play ---
+			const audioBuffer = audioContext.createBuffer(numChannels, samplesPerChannel, sampleRate);
 			if (numChannels === 1) {
-				buf.getChannelData(0).set(float32);
+				audioBuffer.getChannelData(0).set(float32);
 			} else {
 				for (let ch = 0; ch < numChannels; ch++) {
-					const ch32 = buf.getChannelData(ch);
-					for (let i = 0; i < samplesPerChannel; i++) {
-						ch32[i] = float32[i * numChannels + ch];
-					}
+					const chData = audioBuffer.getChannelData(ch);
+					for (let i = 0; i < samplesPerChannel; i++) chData[i] = float32[i * numChannels + ch];
 				}
 			}
 
+			const startTime = audioContext.currentTime + 0.05;
 			const source = audioContext.createBufferSource();
-			source.buffer = buf;
+			source.buffer = audioBuffer;
 			source.connect(analyser);
 			this.currentSource = source;
+			source.start(startTime);
 
-			if (nextPlayTime < 0) {
-				// Short lead since the prebuffer already filled ~400ms ahead.
-				nextPlayTime = audioContext.currentTime + 0.05;
-			} else if (nextPlayTime < audioContext.currentTime + 0.02) {
-				nextPlayTime = audioContext.currentTime + 0.02; // catch up if behind
-			}
-
-			source.start(nextPlayTime);
-			nextPlayTime += buf.duration;
-		};
-
-		try {
-			const generator = provider.speakStreaming!(segment.text, opts);
-
-			for await (const chunk of generator) {
-				if (this.pipelineAbort?.signal.aborted || opts.signal?.aborted) break;
-				if (chunk.done) break;
-
-				const bytes = new Uint8Array(chunk.data);
-
-				if (!headerParsed) {
-					// Accumulate until we have the full 44-byte WAV header.
-					const combined = new Uint8Array(headerAccum.byteLength + bytes.byteLength);
-					combined.set(headerAccum);
-					combined.set(bytes, headerAccum.byteLength);
-					headerAccum = combined;
-
-					if (headerAccum.byteLength >= PCM_HEADER_SIZE) {
-						const dv = new DataView(headerAccum.buffer);
-						audioFormat = dv.getUint16(20, true);
-						numChannels = dv.getUint16(22, true);
-						sampleRate = dv.getUint32(24, true);
-						bitsPerSample = dv.getUint16(34, true);
-						headerParsed = true;
-
-						const audioTail = headerAccum.slice(PCM_HEADER_SIZE);
-						if (audioTail.byteLength > 0) appendPending(audioTail);
-						headerAccum = new Uint8Array(0);
-					}
-				} else {
-					appendPending(bytes);
-				}
-			}
-
-			// Flush any remaining accumulated audio after the stream ends.
-			if (headerParsed) flushPending();
+			// Wait for playback to complete.
+			const duration = audioBuffer.duration;
+			await new Promise<void>((resolve) => {
+				const id = setTimeout(resolve, (duration + 0.15) * 1000);
+				this.pipelineAbort?.signal.addEventListener('abort', () => {
+					clearTimeout(id);
+					try { source.stop(); } catch { /* already stopped */ }
+					resolve();
+				}, { once: true });
+			});
 		} catch (err) {
 			if ((err as Error).name !== 'AbortError' && !opts.signal?.aborted) {
 				console.error('[VoiceOrchestrator] Streaming segment error:', err);
 			}
-		}
-
-		// Wait until scheduled audio has finished playing.
-		if (nextPlayTime > audioContext.currentTime) {
-			const remaining = (nextPlayTime - audioContext.currentTime) * 1000 + 150;
-			await new Promise<void>((resolve) => {
-				const id = setTimeout(resolve, remaining);
-				this.pipelineAbort?.signal.addEventListener('abort', () => {
-					clearTimeout(id);
-					resolve();
-				}, { once: true });
-			});
 		}
 	}
 
