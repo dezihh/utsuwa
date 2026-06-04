@@ -165,11 +165,11 @@
 				const data = (await res.json()) as { text?: string };
 				text = data.text?.trim();
 			} else {
-				// Whisper-local via server proxy — convert to WAV first (speaches only accepts PCM formats)
+				// Whisper-local via server proxy — send raw blob, server handles format conversion
 				const baseUrl = ((whisperConfig.baseUrl as string | undefined)?.trim() || 'http://127.0.0.1:8000/v1').replace(/\/$/, '');
-				const wavBlob = await blobToWav(blob);
+				const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'm4a' : 'webm';
 				const formData = new FormData();
-				formData.append('file', wavBlob, 'duplex.wav');
+				formData.append('file', blob, `duplex.${ext}`);
 				formData.append('model', (whisperConfig as { model?: string }).model || 'deepdml/faster-whisper-large-v3-turbo-ct2');
 				formData.append('baseUrl', baseUrl);
 

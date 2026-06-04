@@ -32,11 +32,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ error: 'Audio file is empty' }, { status: 400 });
 		}
 
-		// Ensure audio is in WAV format - Whisper requires PCM WAV
-		const validMimeTypes = ['audio/wav', 'audio/x-wav', 'audio/wave'];
-		const validExtension = audioFile.name.toLowerCase().endsWith('.wav');
-		if (!validMimeTypes.includes(audioFile.type) && !validExtension) {
-			return json({ error: 'Only WAV audio format is supported' }, { status: 400 });
+		// Accept any audio format — the upstream whisper server handles conversion via ffmpeg
+		if (!audioFile.type.startsWith('audio/') && !audioFile.name.toLowerCase().match(/\.(wav|webm|ogg|mp3|m4a|flac)$/)) {
+			return json({ error: 'Audio file required' }, { status: 400 });
 		}
 	} catch (err) {
 		return json({ error: 'Failed to process audio file: ' + (err instanceof Error ? err.message : String(err)) }, { status: 400 });

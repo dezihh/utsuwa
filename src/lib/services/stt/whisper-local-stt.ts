@@ -149,19 +149,18 @@ class WhisperLocalSttService {
 		}
 
 		this.transcribing = true;
-		const actualMime = this.mediaRecorder?.mimeType || 'audio/mp4';
+		const actualMime = this.mediaRecorder?.mimeType || 'audio/webm';
 		const rawBlob = new Blob(this.audioChunks, { type: actualMime });
 		this.audioChunks = [];
 
-		// Convert to 16 kHz mono WAV — speaches only accepts PCM-based formats
-		const wavBlob = await this.toWav(rawBlob);
+		const ext = actualMime.includes('webm') ? 'webm' : actualMime.includes('ogg') ? 'ogg' : actualMime.includes('mp4') ? 'm4a' : 'webm';
 
 		this.abortController = new AbortController();
 		const timeoutId = setTimeout(() => this.abortController?.abort(), 60000);
 
 		try {
 			const formData = new FormData();
-			formData.append('file', wavBlob, 'recording.wav');
+			formData.append('file', rawBlob, `recording.${ext}`);
 			formData.append('model', this.model);
 			formData.append('baseUrl', this.baseUrl);
 
