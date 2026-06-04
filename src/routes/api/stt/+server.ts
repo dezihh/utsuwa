@@ -83,7 +83,10 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const data = (await response.json()) as { text?: string };
-	const transcription = data.text ?? '';
-	// Return transcription even if empty string
+	let transcription = data.text ?? '';
+	// If the transcription contains no alphanumeric characters (in any script), treat it as empty.
+	if (!/[\p{L}\p{N}]/u.test(transcription)) {
+		transcription = '';
+	}
 	return json({ text: transcription });
 };
