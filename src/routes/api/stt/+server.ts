@@ -24,6 +24,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'No audio file provided' }, { status: 400 });
 	}
 
+	// Ensure audio is in WAV format - Whisper requires PCM WAV
+	if (audioFile.type !== 'audio/wav') {
+		return json({ error: 'Only WAV audio format is supported' }, { status: 400 });
+	}
+
 	const baseUrl = normalizeBaseUrl(formData.get('baseUrl'));
 	const model = ((formData.get('model') as string | null) ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
 
