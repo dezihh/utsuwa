@@ -237,6 +237,9 @@
 				onSegmentReady: (blob, mimeType) => {
 					console.debug(`[Duplex] Segment ready: ${blob.size} bytes, phase=${duplexPhase}, active=${isDuplexActive}`);
 					if (!isDuplexActive) return;
+					// Skip if a transcription or LLM call is already in flight to avoid
+					// concurrent whisper requests which cause intermittent 500 errors.
+					if (duplexPhase === 'transcribing' || duplexPhase === 'thinking') return;
 					transcribeSegment(blob, mimeType);
 				},
 				onNoiseDetected: () => {
