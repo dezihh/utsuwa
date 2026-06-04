@@ -186,6 +186,20 @@ export const TTS_PROVIDERS: ProviderMetadata[] = [
 		defaultBaseUrl: 'http://localhost:8765/',
 		voices: []
 	},
+	{
+		id: 'omnivoice',
+		name: 'OmniVoice',
+		description: 'Local TTS — RTF ~0.5, 600+ languages, voice cloning (16 or 32 diffusion steps)',
+		category: 'tts',
+		icon: '🌐',
+		requiresApiKey: false,
+		isLocal: true,
+		defaultBaseUrl: 'http://localhost:8766/',
+		voices: [
+			{ id: 'lidl', name: 'Lidl (DE, female, formal)' },
+			{ id: 'female3', name: 'Female3 / Cosi (DE, female, warm)' }
+		]
+	},
 ];
 
 // ============================================

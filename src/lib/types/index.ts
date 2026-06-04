@@ -31,7 +31,7 @@ export interface LLMConfig {
 }
 
 // TTS Provider IDs
-export type TTSProvider = 'elevenlabs' | 'openai-tts' | 'alltalk' | 'chatterbox';
+export type TTSProvider = 'elevenlabs' | 'openai-tts' | 'alltalk' | 'chatterbox' | 'omnivoice';
 
 export interface TTSConfig {
 	provider: TTSProvider;
@@ -69,6 +69,8 @@ export interface ProviderConfig {
 	cfgWeight?: number;
 	/** Chatterbox: generation temperature 0.05-1.0 */
 	temperature?: number;
+	/** OmniVoice: diffusion steps — 16 (fast) or 32 (quality) */
+	omnivoiceNumStep?: number;
 }
 
 // VRM types

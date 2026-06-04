@@ -1018,7 +1018,7 @@
 											/>
 										</div>
 									{/if}
-									{#if provider?.isLocal && provider.id !== 'alltalk' && provider.id !== 'chatterbox'}
+									{#if provider?.isLocal && provider.id !== 'alltalk' && provider.id !== 'chatterbox' && provider.id !== 'omnivoice'}
 										<div class="api-key-row">
 											<input
 												type="text"
@@ -1029,6 +1029,52 @@
 											/>
 										</div>
 									{/if}
+								{/if}
+
+								{#if speechSettings.activeProvider === 'omnivoice'}
+									<div class="api-key-row">
+										<select
+											class="api-key-input"
+											value={speechSettings.activeVoiceId as string ?? 'female3'}
+											onchange={(e) => modulesStore.setModuleSetting('speech', 'activeVoiceId', e.currentTarget.value)}
+										>
+											{#each (getTTSProvider('omnivoice')?.voices ?? []) as voice}
+												<option value={voice.id}>{voice.name}</option>
+											{/each}
+										</select>
+									</div>
+									<div class="api-key-row">
+										<input
+											type="text"
+											class="api-key-input"
+											placeholder={getTTSProvider('omnivoice')?.defaultBaseUrl || 'http://localhost:8766/'}
+											value={settingsStore.getProviderConfig('omnivoice').baseUrl ?? ''}
+											oninput={(e) => handleTTSBaseUrlChange(e.currentTarget.value)}
+										/>
+									</div>
+									<p class="provider-note">
+										<Icon name="check-circle" size={14} />
+										Local provider - no API key needed
+									</p>
+									<div class="vad-sensitivity-row">
+										<label class="vad-sensitivity-label" for="ps-ov-numstep">
+											Quality
+											<span class="vad-value"
+												>{settingsStore.getProviderConfig('omnivoice').omnivoiceNumStep === 16
+													? 'Fast (16)'
+													: 'Quality (32)'}</span
+											>
+										</label>
+										<select
+											id="ps-ov-numstep"
+											class="api-key-input"
+											value={String(settingsStore.getProviderConfig('omnivoice').omnivoiceNumStep ?? 32)}
+											onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceNumStep: Number(e.currentTarget.value) })}
+										>
+											<option value="32">Quality — 32 steps</option>
+											<option value="16">Fast — 16 steps</option>
+										</select>
+									</div>
 								{/if}
 
 								{#if speechSettings.activeProvider === 'chatterbox'}

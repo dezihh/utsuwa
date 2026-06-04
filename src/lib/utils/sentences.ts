@@ -272,9 +272,9 @@ export function stripLangTags(text: string): string {
 
 export function replaceEmotionTagsForDisplay(text: string): string {
 	return text
-		.replace(/\[(\w+)\]/g, (_match, tag) => {
+		.replace(/\[([\w][\w-]*)\]/g, (_match, tag) => {
 			const entry = EMOTION_TAGS[tag.toLowerCase()];
-			if (!entry) return '';
+			if (!entry) return ''; // strip unknown tags (incl. OmniVoice native tags like [laughter], [surprise-oh])
 			return entry.displayText ?? '';
 		})
 		.replace(/  +/g, ' ')

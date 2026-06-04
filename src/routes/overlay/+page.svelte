@@ -346,7 +346,8 @@
 					voiceId: speechSettings.activeVoiceId as string || ttsConfig.voiceId,
 					rvcVoiceId: speechSettings.activeRvcVoiceId as string || ttsConfig.rvcVoiceId,
 					baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
-					speed: speechSettings.speed as number ?? 1
+					speed: speechSettings.speed as number ?? 1,
+					omnivoiceNumStep: ttsConfig.omnivoiceNumStep
 				});
 			}
 		} catch (err) {

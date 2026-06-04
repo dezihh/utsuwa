@@ -650,7 +650,7 @@
 				/>
 			{/if}
 
-			{#if ttsProvider?.isLocal && ttsProvider.id !== 'alltalk' && ttsProvider.id !== 'chatterbox'}
+			{#if ttsProvider?.isLocal && ttsProvider.id !== 'alltalk' && ttsProvider.id !== 'chatterbox' && ttsProvider.id !== 'omnivoice'}
 				<input
 					type="text"
 					class="api-key-input"
@@ -660,7 +660,7 @@
 				/>
 			{/if}
 
-			{#if ttsProvider?.isLocal && ttsProvider.id !== 'alltalk' && ttsProvider.id !== 'chatterbox'}
+			{#if ttsProvider?.isLocal && ttsProvider.id !== 'alltalk' && ttsProvider.id !== 'chatterbox' && ttsProvider.id !== 'omnivoice'}
 				<input
 					type="text"
 					class="api-key-input"
@@ -780,6 +780,57 @@
 						oninput={(e) => handleChatterboxParamChange('temperature', Number(e.currentTarget.value))}
 					/>
 					<div class="vad-hint">Generation randomness (0.05 = deterministic, 1.0 = creative). Default: 0.8</div>
+				</div>
+			{/if}
+
+			{#if ttsProvider?.id === 'omnivoice'}
+				<!-- Voice selection (built-in voices) -->
+				<select
+					class="api-key-input"
+					value={ttsSettings.activeVoiceId as string ?? 'female3'}
+					onchange={(e) => {
+						modulesStore.setModuleSetting('speech', 'activeVoiceId', e.currentTarget.value);
+					}}
+				>
+					{#each (ttsProvider.voices ?? []) as voice}
+						<option value={voice.id}>{voice.name}</option>
+					{/each}
+				</select>
+				<!-- Base URL -->
+				<input
+					type="text"
+					class="api-key-input"
+					placeholder={ttsProvider.defaultBaseUrl || 'http://localhost:8766/'}
+					value={settingsStore.getProviderConfig('omnivoice').baseUrl ?? ''}
+					oninput={(e) => handleTTSBaseUrlChange(e.currentTarget.value)}
+				/>
+				<p class="provider-note">
+					<Icon name="check-circle" size={14} />
+					Local provider - no API key needed
+				</p>
+				<!-- Diffusion steps -->
+				<div class="vad-sensitivity-row">
+					<label class="vad-sensitivity-label" for="ov-numstep">
+						Quality
+						<span class="vad-value"
+							>{settingsStore.getProviderConfig('omnivoice').omnivoiceNumStep === 16
+								? 'Fast (16)'
+								: 'Quality (32)'}</span
+						>
+					</label>
+					<select
+						id="ov-numstep"
+						class="api-key-input"
+						value={String(settingsStore.getProviderConfig('omnivoice').omnivoiceNumStep ?? 32)}
+						onchange={(e) =>
+							settingsStore.setProviderConfig('omnivoice', {
+								omnivoiceNumStep: Number(e.currentTarget.value)
+							})}
+					>
+						<option value="32">Quality — 32 steps (RTF ~0.33)</option>
+						<option value="16">Fast — 16 steps (RTF ~0.18)</option>
+					</select>
+					<div class="vad-hint">32 steps = higher quality; 16 steps = ~2× faster</div>
 				</div>
 			{/if}
 		{:else}

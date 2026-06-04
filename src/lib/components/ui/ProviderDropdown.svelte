@@ -38,7 +38,7 @@
 	// Group providers by category for TTS
 	const ttsCategories = [
 		{ id: 'cloud', label: 'Cloud TTS', providers: ['elevenlabs', 'openai-tts', 'azure-speech', 'deepgram', 'alibaba-cosyvoice', 'volcengine', 'comet-tts'] },
-		{ id: 'local', label: 'Local / Free', providers: ['alltalk', 'chatterbox', 'web-speech', 'index-tts', 'browser-local', 'app-local'] },
+		{ id: 'local', label: 'Local / Free', providers: ['alltalk', 'chatterbox', 'omnivoice', 'web-speech', 'index-tts', 'browser-local', 'app-local'] },
 		{ id: 'generic', label: 'Generic', providers: ['openai-compatible-tts', 'player2-tts'] }
 	];
 

@@ -18,6 +18,8 @@ export interface TTSOptions {
 	cfgWeight?: number;
 	/** Chatterbox generation temperature 0.05-1.0 */
 	temperature?: number;
+	/** OmniVoice diffusion steps — 16 (fast) or 32 (quality) */
+	omnivoiceNumStep?: number;
 }
 
 // Result from TTS speak method
@@ -110,7 +112,8 @@ export const TTS_BASE_URLS: Partial<Record<TTSProvider, string>> = {
 	elevenlabs: 'https://api.elevenlabs.io/v1/',
 	'openai-tts': 'https://api.openai.com/v1/',
 	alltalk: 'http://localhost:7851/api/',
-	chatterbox: 'http://localhost:8765/'
+	chatterbox: 'http://localhost:8765/',
+	omnivoice: 'http://localhost:8766/'
 };
 
 // Default voices per provider
@@ -118,7 +121,8 @@ export const DEFAULT_VOICES: Partial<Record<TTSProvider, string>> = {
 	elevenlabs: 'EXAVITQu4vr4xnSDxMaL', // Bella
 	'openai-tts': 'alloy',
 	alltalk: '',
-	chatterbox: ''
+	chatterbox: '',
+	omnivoice: 'female3'
 };
 
 // Import individual providers
@@ -126,6 +130,7 @@ import { ElevenLabsTTS } from './elevenlabs';
 import { OpenAITTS } from './openai-tts';
 import { AllTalkTTS } from './alltalk';
 import { ChatterboxTTS } from './chatterbox';
+import { OmniVoiceTTS } from './omnivoice';
 
 // Provider factory
 let currentProvider: ITTSProvider | null = null;
@@ -145,7 +150,8 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 		currentOptions.exaggeration === options.exaggeration &&
 		currentOptions.language === options.language &&
 		currentOptions.cfgWeight === options.cfgWeight &&
-		currentOptions.temperature === options.temperature
+		currentOptions.temperature === options.temperature &&
+		currentOptions.omnivoiceNumStep === options.omnivoiceNumStep
 	) {
 		return currentProvider;
 	}
@@ -166,6 +172,10 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 
 		case 'chatterbox':
 			currentProvider = new ChatterboxTTS(options);
+			break;
+
+		case 'omnivoice':
+			currentProvider = new OmniVoiceTTS(options);
 			break;
 
 		default:

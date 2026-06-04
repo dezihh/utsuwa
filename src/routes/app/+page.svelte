@@ -312,6 +312,7 @@
 			const ttsProvider = speechSettings?.activeProvider as TTSProvider | undefined;
 			const ttsConfig = ttsProvider ? settingsStore.getProviderConfig(ttsProvider) : null;
 			const isChatterbox = ttsProvider === 'chatterbox';
+			const isOmniVoice = ttsProvider === 'omnivoice';
 			const ttsMeta = ttsProvider ? getTTSProvider(ttsProvider) : null;
 			const ttsOptions =
 				ttsEnabled && ttsProvider && ttsConfig
@@ -325,7 +326,8 @@
 							exaggeration: ttsConfig.exaggeration,
 							language: ttsConfig.language,
 							cfgWeight: ttsConfig.cfgWeight,
-							temperature: ttsConfig.temperature
+							temperature: ttsConfig.temperature,
+							omnivoiceNumStep: ttsConfig.omnivoiceNumStep
 						}
 					: null;
 
@@ -351,7 +353,7 @@
 			const speechBuffer = ttsOptions
 				? new StreamingSpeechBuffer({
 						defaultLanguage: ttsConfig?.language || undefined,
-						streaming: isChatterbox,
+						streaming: isChatterbox || isOmniVoice,
 						onSegment: (segment) => {
 							enqueueTTS(segment);
 						}

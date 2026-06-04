@@ -345,15 +345,14 @@ EXAMPLES of when to use tools:
 </available_tools>`;
 }
 
-// Voice tag layer - injected only when Chatterbox TTS is active
+// Voice tag layer - injected only when Chatterbox or OmniVoice TTS is active
 function buildVoiceTagLayer(ctx: PromptContext): string | null {
-	if (ctx.ttsProvider !== 'chatterbox') return null;
+	if (ctx.ttsProvider === 'chatterbox') {
+		const langHint = ctx.ttsLanguage
+			? `The default spoken language is **${ctx.ttsLanguage}**. Use [lang:${ctx.ttsLanguage}] to return to it after switching.`
+			: 'Use [lang:xx] tags to switch the spoken language per sentence.';
 
-	const langHint = ctx.ttsLanguage
-		? `The default spoken language is **${ctx.ttsLanguage}**. Use [lang:${ctx.ttsLanguage}] to return to it after switching.`
-		: 'Use [lang:xx] tags to switch the spoken language per sentence.';
-
-	return `<voice_tags>
+		return `<voice_tags>
 You are connected to a text-to-speech engine (Chatterbox) that understands special inline tags.
 Embed them directly in your response text – they are invisible to the user but control voice and emotion.
 
@@ -395,6 +394,67 @@ RULES:
 EXAMPLE:
   "[action:wave][excited]Oh wow, that is impressive! [lang:es]¡Muy bien hecho! [lang:de][chuckle]Du machst das wirklich gut. [slow]Ich überlege kurz."
 </voice_tags>`;
+	}
+
+	if (ctx.ttsProvider === 'omnivoice') {
+		return `<voice_tags>
+You are connected to a text-to-speech engine (OmniVoice) that understands special inline tags.
+Embed them directly in your response text — they control voice, emotion, and avatar animations.
+
+EMOTION / SOUND EFFECTS (these trigger spoken sounds and expressions):
+  [laugh]    — laugh out loud (speaks "Hahaha,")
+  [giggle]   — giggle (speaks "Hihihi,")
+  [chuckle]  — quiet chuckle (speaks "Hehe,")
+  [sigh]     — sigh (speaks "Hach...")
+  [excited]  — excited tone
+  [sad]      — subdued, melancholic
+  [calm]     — calm, measured
+  [whisper]  — soft, hushed
+  [dramatic] — over-the-top drama
+  [surprised]— surprised (speaks "Oh!")
+  [shocked]  — shocked (speaks "Was?!")
+  [confused] — confused (speaks "Häh?")
+  [nervous]  — nervous (speaks "Äh...")
+  [shy]      — shy (speaks "Ähm...")
+  [annoyed]  — annoyed (speaks "Tss,")
+  [frustrated]— frustrated (speaks "Pff,")
+  [cry]      — crying (speaks "Schnief...")
+  [yawn]     — yawning (speaks "Aaah...")
+
+NATIVE SOUND TAGS (OmniVoice produces these as authentic audio — use additionally):
+  [laughter]            — authentic laugh sound (use WITH [laugh] for more impact)
+  [surprise-oh]         — surprised "oh!" sound
+  [surprise-ah]         — surprised "ah!" sound
+  [dissatisfaction-hnn] — dissatisfied grunt
+  [confirmation-en]     — confirming "mhm"
+
+BODY ACTIONS (trigger avatar animations — use sparingly):
+  [action:wave]   — wave hello/goodbye
+  [action:nod]    — nod in agreement
+  [action:shake]  — shake head (disagreement)
+  [action:jump]   — jump for joy
+  [action:bow]    — bow (thanks/apology)
+  [action:think]  — thinking pose
+  [action:clap]   — applause
+  [action:dance]  — dance
+  Place [action:xxx] at the start of the sentence where the animation should play.
+  Use at most ONE action tag per response.
+
+SPEED TAGS:
+  [slow]  — speak slowly and thoughtfully
+  [fast]  — speak quickly or excitedly
+
+RULES:
+- Place emotion tags immediately before the affected word or sentence.
+- Never explain the tags to the user; never output them as visible text.
+- Use them naturally to make the conversation warm, lively, and expressive.
+
+EXAMPLE:
+  "[action:wave][excited]Oh wow, das ist toll! [laugh]Ich freue mich so sehr darüber. [sigh]Manchmal bin ich einfach überwältigt. [laughter] Haha, genau!"
+</voice_tags>`;
+	}
+
+	return null;
 }
 
 function buildContinueLayer(ctx: PromptContext): string | null {
