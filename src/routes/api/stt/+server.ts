@@ -19,14 +19,25 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'Invalid multipart form data' }, { status: 400 });
 	}
 
-	const audioFile = formData.get('file') as File | null;
-	if (!audioFile) {
-		return json({ error: 'No audio file provided' }, { status: 400 });
-	}
+	let audioFile: File;
+	try {
+		const file = formData.get('file');
+		if (!(file instanceof File)) {
+			return json({ error: 'No audio file provided' }, { status: 400 });
+		}
+		audioFile = file;
 
-	// Ensure audio is in WAV format - Whisper requires PCM WAV
-	if (audioFile.type !== 'audio/wav') {
-		return json({ error: 'Only WAV audio format is supported' }, { status: 400 });
+		// Ensure we can read the file (size > 0)
+		if (audioFile.size === 0) {
+			return json({ error: 'Audio file is empty' }, { status: 400 });
+		}
+
+		// Ensure audio is in WAV format - Whisper requires PCM WAV
+		if (audioFile.type !== 'audio/wav') {
+			return json({ error: 'Only WAV audio format is supported' }, { status: 400 });
+		}
+	} catch (err) {
+		return json({ error: 'Failed to process audio file: ' + (err instanceof Error ? err.message : String(err)) }, { status: 400 });
 	}
 
 	const baseUrl = normalizeBaseUrl(formData.get('baseUrl'));
