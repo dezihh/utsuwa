@@ -85,7 +85,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	const data = (await response.json()) as { text?: string };
 	let transcription = data.text ?? '';
 	// If the transcription contains no alphanumeric characters (in any script), treat it as empty.
-	if (!/[\p{L}\p{N}]/u.test(transcription)) {
+	// Use more inclusive pattern that allows German umlauts and other diacritics
+	if (!/[\p{Letter}\p{Number}]/u.test(transcription)) {
 		transcription = '';
 	}
 	return json({ text: transcription });
