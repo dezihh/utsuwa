@@ -33,7 +33,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// Ensure audio is in WAV format - Whisper requires PCM WAV
-		if (audioFile.type !== 'audio/wav') {
+		const validMimeTypes = ['audio/wav', 'audio/x-wav', 'audio/wave'];
+		const validExtension = audioFile.name.toLowerCase().endsWith('.wav');
+		if (!validMimeTypes.includes(audioFile.type) && !validExtension) {
 			return json({ error: 'Only WAV audio format is supported' }, { status: 400 });
 		}
 	} catch (err) {
