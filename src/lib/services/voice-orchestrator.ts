@@ -181,6 +181,7 @@ export class VoiceOrchestrator {
 
 		// Skip segments that contain only emoji, whitespace, or punctuation — these produce
 		// no meaningful speech but still incur full TTS generation overhead.
+		// But keep empty segments so VOX can trigger for valid speech
 		const textContent = segment.text.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s\p{P}]/gu, '');
 		if (!textContent.trim()) return;
 
