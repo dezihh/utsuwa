@@ -165,9 +165,9 @@
 				const data = (await res.json()) as { text?: string };
 				text = data.text?.trim();
 			} else {
-				// Whisper-local via server proxy — send raw blob, server handles format conversion
+				// Whisper-local via server proxy
 				const baseUrl = ((whisperConfig.baseUrl as string | undefined)?.trim() || 'http://127.0.0.1:8000/v1').replace(/\/$/, '');
-				const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'm4a' : 'webm';
+				const ext = mimeType.includes('wav') ? 'wav' : mimeType.includes('webm') ? 'webm' : mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'm4a' : 'wav';
 				const formData = new FormData();
 				formData.append('file', blob, `duplex.${ext}`);
 				formData.append('model', (whisperConfig as { model?: string }).model || 'deepdml/faster-whisper-large-v3-turbo-ct2');

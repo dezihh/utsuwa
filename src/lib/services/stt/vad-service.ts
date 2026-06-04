@@ -6,6 +6,8 @@
  * When silence is detected after speech → emits the recorded segment.
  *
  * Uses a rolling pre-buffer to capture audio just before speech onset.
+ * Audio is captured as raw PCM via ScriptProcessorNode and emitted as WAV,
+ * avoiding MediaRecorder format issues across browsers and platforms.
  */
 
 export type VadServicePhase = 'idle' | 'listening' | 'recording';
@@ -33,25 +35,26 @@ export interface VadConfig {
 	preBufferMs?: number;
 }
 
+// ScriptProcessorNode buffer size (must be power of 2).
+// At 48 kHz → ~85 ms/chunk; at 44.1 kHz → ~93 ms/chunk.
+const PCM_BUFFER_SIZE = 4096;
+
 class VadService {
 	private stream: MediaStream | null = null;
 	private audioContext: AudioContext | null = null;
 	private analyser: AnalyserNode | null = null;
-	private mediaRecorder: MediaRecorder | null = null;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	private processor: any | null = null; // ScriptProcessorNode (deprecated but universally supported)
 	private callbacks: VadCallbacks | null = null;
 	private animFrameId: number | null = null;
 
-	// Pre-buffer: rolling window of recent chunks before speech
-	private preBuffer: Blob[] = [];
-	private preBufferSlots = 3; // timeslice × slots = pre-buffer duration
+	// Pre-buffer: rolling window of recent PCM chunks before speech
+	private preBuffer: Float32Array[] = [];
+	private preBufferSlots = 3;
 
-	// Active speech segment chunks
-	private speechChunks: Blob[] = [];
-	private capturing = false; // true while recording a speech segment
-
-	// The very first chunk from MediaRecorder contains the EBML/WebM container header.
-	// Without it, the Blob is not a valid audio file. We keep it and prepend to every segment.
-	private headerChunk: Blob | null = null;
+	// Active speech segment PCM chunks
+	private speechSamples: Float32Array[] = [];
+	private capturing = false;
 
 	// VAD state
 	private active = false;
@@ -60,29 +63,26 @@ class VadService {
 	private speechStartMs = 0;
 	private silenceStartMs = 0;
 
-	// Noise floor calibration: measure ambient RMS for the first CALIBRATION_MS ms,
-	// then dynamically set the effective threshold above the noise floor.
+	// Noise floor calibration
 	private static readonly CALIBRATION_MS = 1500;
 	private calibrating = false;
 	private calibrationEndMs = 0;
 	private calibrationSamples: number[] = [];
-	private calibratedBase = 0.015; // noise-floor-derived threshold, set after calibration
-	private effectiveThreshold = 0.015; // calibratedBase × sensitivityMultiplier
+	private calibratedBase = 0.015;
+	private effectiveThreshold = 0.015;
 
-	// Sensitivity: 1.0 = default. Lower = more sensitive (catches quieter speech).
-	// Adjusted live via setSensitivity(). Range enforced: 0.3 – 4.0.
+	// Sensitivity: 1.0 = default. Lower = more sensitive, higher = less.
 	private sensitivityMultiplier = 1.0;
 
 	// Config (user-supplied)
 	private speechThreshold = 0.015;
 	private silenceDurationMs = 1500;
 	private minSpeechDurationMs = 500;
-	private timesliceMs = 100;
+	private preBufferMs = 300;
 
 	/** Adjust detection sensitivity at runtime. multiplier < 1 = more sensitive, > 1 = less. */
 	setSensitivity(multiplier: number) {
 		this.sensitivityMultiplier = Math.max(0.3, Math.min(4.0, multiplier));
-		// Recompute effective threshold immediately (only after calibration is done)
 		if (!this.calibrating) {
 			this.effectiveThreshold = this.calibratedBase * this.sensitivityMultiplier;
 		}
@@ -98,11 +98,8 @@ class VadService {
 		this.callbacks = callbacks;
 		if (config?.speechThreshold !== undefined) this.speechThreshold = config.speechThreshold;
 		if (config?.silenceDurationMs !== undefined) this.silenceDurationMs = config.silenceDurationMs;
-		if (config?.minSpeechDurationMs !== undefined)
-			this.minSpeechDurationMs = config.minSpeechDurationMs;
-		if (config?.preBufferMs !== undefined) {
-			this.preBufferSlots = Math.ceil(config.preBufferMs / this.timesliceMs);
-		}
+		if (config?.minSpeechDurationMs !== undefined) this.minSpeechDurationMs = config.minSpeechDurationMs;
+		if (config?.preBufferMs !== undefined) this.preBufferMs = config.preBufferMs;
 
 		try {
 			this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -122,19 +119,22 @@ class VadService {
 
 		this.audioContext = new AudioContext();
 		const source = this.audioContext.createMediaStreamSource(this.stream);
+
 		this.analyser = this.audioContext.createAnalyser();
 		this.analyser.fftSize = 512;
 		source.connect(this.analyser);
 
-		this.startMediaRecorder();
+		this.startPcmCapture(source);
 
 		this.active = true;
 		this.speaking = false;
 		this.capturing = false;
 		this.preBuffer = [];
-		this.speechChunks = [];
+		this.speechSamples = [];
 
-		// Start calibration: measure ambient noise for CALIBRATION_MS before detecting speech
+		const bufferDurationMs = (PCM_BUFFER_SIZE / this.audioContext.sampleRate) * 1000;
+		this.preBufferSlots = Math.max(1, Math.ceil(this.preBufferMs / bufferDurationMs));
+
 		this.effectiveThreshold = this.speechThreshold;
 		this.calibrating = true;
 		this.calibrationEndMs = Date.now() + VadService.CALIBRATION_MS;
@@ -154,13 +154,12 @@ class VadService {
 		this.calibratedBase = this.speechThreshold;
 		this.effectiveThreshold = this.speechThreshold;
 		this.stopAmplitudeTick();
-		this.stopMediaRecorder(false);
+		this.stopPcmCapture();
 		this.releaseStream();
 		this.setPhase('idle');
 		this.callbacks = null;
 		this.preBuffer = [];
-		this.speechChunks = [];
-		this.headerChunk = null;
+		this.speechSamples = [];
 	}
 
 	private setPhase(p: VadServicePhase) {
@@ -168,57 +167,41 @@ class VadService {
 		this.callbacks?.onPhaseChange?.(p);
 	}
 
-	private startMediaRecorder() {
-		if (!this.stream) return;
-		const mimeType = this.getSupportedMimeType();
-		try {
-			this.mediaRecorder = mimeType
-				? new MediaRecorder(this.stream, { mimeType })
-				: new MediaRecorder(this.stream);
-		} catch {
-			this.callbacks?.onError?.('Audio recording not supported on this platform');
-			return;
-		}
+	private startPcmCapture(source: AudioNode) {
+		if (!this.audioContext) return;
+		const ctx = this.audioContext;
 
-		this.mediaRecorder.ondataavailable = (e) => {
-			if (!e.data || e.data.size === 0) return;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		this.processor = (ctx as any).createScriptProcessor(PCM_BUFFER_SIZE, 1, 1);
 
-			// The very first chunk contains the container header (EBML for WebM).
-			// Save it so we can prepend it to every emitted segment.
-			if (this.headerChunk === null) {
-				this.headerChunk = e.data;
-			}
+		this.processor.onaudioprocess = (event: AudioProcessingEvent) => {
+			if (!this.active) return;
+			const samples = new Float32Array(event.inputBuffer.getChannelData(0));
 
 			if (this.capturing) {
-				this.speechChunks.push(e.data);
+				this.speechSamples.push(samples);
 			} else {
-				// Rolling pre-buffer
-				this.preBuffer.push(e.data);
+				this.preBuffer.push(samples);
 				if (this.preBuffer.length > this.preBufferSlots) {
 					this.preBuffer.shift();
 				}
 			}
 		};
 
-		this.mediaRecorder.onstop = () => {
-			// Reset header so the new recording session saves its own header chunk
-			this.headerChunk = null;
-			// Restart for continuous recording
-			if (this.active) this.startMediaRecorder();
-		};
-
-		this.mediaRecorder.start(this.timesliceMs);
+		// ScriptProcessorNode must be in a connected graph to fire — route through
+		// a silent gain so nothing is audible.
+		const silentGain = ctx.createGain();
+		silentGain.gain.value = 0;
+		source.connect(this.processor);
+		this.processor.connect(silentGain);
+		silentGain.connect(ctx.destination);
 	}
 
-	private stopMediaRecorder(restart: boolean) {
-		if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-			if (!restart) {
-				// Prevent auto-restart
-				this.mediaRecorder.onstop = null;
-			}
-			this.mediaRecorder.stop();
+	private stopPcmCapture() {
+		if (this.processor) {
+			this.processor.disconnect();
+			this.processor = null;
 		}
-		this.mediaRecorder = null;
 	}
 
 	private startAmplitudeTick() {
@@ -229,7 +212,6 @@ class VadService {
 		const tick = () => {
 			if (!this.active || !this.analyser) return;
 
-			// Time-domain RMS – much more reliable for speech detection than frequency average
 			this.analyser.getByteTimeDomainData(dataArray);
 			let sumSq = 0;
 			for (let i = 0; i < dataArray.length; i++) {
@@ -242,16 +224,12 @@ class VadService {
 
 			const now = Date.now();
 
-			// ── Calibration phase: collect ambient noise samples ─────────────────────
 			if (this.calibrating) {
 				this.calibrationSamples.push(level);
 				if (now >= this.calibrationEndMs) {
 					this.calibrating = false;
-					// Compute 90th-percentile of ambient samples as noise floor
 					const sorted = [...this.calibrationSamples].sort((a, b) => a - b);
 					const p90 = sorted[Math.floor(sorted.length * 0.9)] ?? 0;
-					// Base threshold = noise_floor × 3, but clamped between user-set minimum and a
-					// reasonable max (0.08) so speech can always be detected even in noisy rooms.
 					const MAX_CALIBRATED_BASE = 0.08;
 					this.calibratedBase = Math.min(
 						MAX_CALIBRATED_BASE,
@@ -262,7 +240,7 @@ class VadService {
 					this.calibrationSamples = [];
 				}
 				this.animFrameId = requestAnimationFrame(tick);
-				return; // Don't detect speech during calibration
+				return;
 			}
 
 			if (!this.speaking) {
@@ -271,12 +249,7 @@ class VadService {
 					this.speechStartMs = now;
 					this.silenceStartMs = 0;
 					this.capturing = true;
-					// Prepend pre-buffer to speech chunks, but skip the stored header chunk
-					// because emitSegment() adds it explicitly when needed.
-					this.speechChunks =
-						this.headerChunk && this.preBuffer[0] === this.headerChunk
-							? this.preBuffer.slice(1)
-							: [...this.preBuffer];
+					this.speechSamples = [...this.preBuffer];
 					this.preBuffer = [];
 					this.callbacks?.onSpeechStart?.();
 					this.setPhase('recording');
@@ -286,22 +259,19 @@ class VadService {
 					if (this.silenceStartMs === 0) {
 						this.silenceStartMs = now;
 					} else if (now - this.silenceStartMs > this.silenceDurationMs) {
-						// Silence long enough → emit segment
 						const speechDuration = this.silenceStartMs - this.speechStartMs;
 						this.speaking = false;
 						this.capturing = false;
 
-						if (speechDuration >= this.minSpeechDurationMs && this.speechChunks.length > 0) {
+						if (speechDuration >= this.minSpeechDurationMs && this.speechSamples.length > 0) {
 							this.emitSegment();
 						} else {
-							// Too short — likely noise/click. Notify caller.
-							this.speechChunks = [];
+							this.speechSamples = [];
 							this.callbacks?.onNoiseDetected?.();
 							this.setPhase('listening');
 						}
 					}
 				} else {
-					// Still speaking — reset silence timer
 					this.silenceStartMs = 0;
 				}
 			}
@@ -313,17 +283,45 @@ class VadService {
 	}
 
 	private emitSegment() {
-		const mimeType = this.mediaRecorder?.mimeType || 'audio/webm';
-		// Always prepend the header chunk so the blob is a valid, standalone audio file.
-		const chunks =
-			this.headerChunk && this.speechChunks[0] !== this.headerChunk
-				? [this.headerChunk, ...this.speechChunks]
-				: this.speechChunks;
-		const blob = new Blob(chunks, { type: mimeType });
-		this.speechChunks = [];
+		const chunks = this.speechSamples;
+		this.speechSamples = [];
 		this.silenceStartMs = 0;
 		this.setPhase('listening');
-		this.callbacks?.onSegmentReady?.(blob, mimeType);
+
+		if (chunks.length === 0) return;
+
+		const wavBlob = this.samplesToWav(chunks);
+		this.callbacks?.onSegmentReady?.(wavBlob, 'audio/wav');
+	}
+
+	private samplesToWav(chunks: Float32Array[]): Blob {
+		const sampleRate = this.audioContext?.sampleRate ?? 16000;
+		const totalSamples = chunks.reduce((sum, c) => sum + c.length, 0);
+		const pcm = new Int16Array(totalSamples);
+		let offset = 0;
+		for (const chunk of chunks) {
+			for (let i = 0; i < chunk.length; i++) {
+				const s = Math.max(-1, Math.min(1, chunk[i]));
+				pcm[offset++] = s < 0 ? s * 32768 : s * 32767;
+			}
+		}
+
+		const dataLen = pcm.byteLength;
+		const wavBuf = new ArrayBuffer(44 + dataLen);
+		const v = new DataView(wavBuf);
+		const w = (off: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+		w(0, 'RIFF'); v.setUint32(4, 36 + dataLen, true);
+		w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true);
+		v.setUint16(20, 1, true);             // PCM
+		v.setUint16(22, 1, true);             // mono
+		v.setUint32(24, sampleRate, true);    // sample rate
+		v.setUint32(28, sampleRate * 2, true); // byte rate
+		v.setUint16(32, 2, true);             // block align
+		v.setUint16(34, 16, true);            // bits per sample
+		w(36, 'data'); v.setUint32(40, dataLen, true);
+		new Int16Array(wavBuf, 44).set(pcm);
+
+		return new Blob([wavBuf], { type: 'audio/wav' });
 	}
 
 	private stopAmplitudeTick() {
@@ -343,14 +341,6 @@ class VadService {
 			this.audioContext = null;
 		}
 		this.analyser = null;
-	}
-
-	private getSupportedMimeType(): string | undefined {
-		const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
-		for (const type of types) {
-			if (MediaRecorder.isTypeSupported(type)) return type;
-		}
-		return undefined;
 	}
 }
 
