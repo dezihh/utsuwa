@@ -346,7 +346,7 @@ class VadService {
 	}
 
 	private getSupportedMimeType(): string | undefined {
-		const types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+		const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
 		for (const type of types) {
 			if (MediaRecorder.isTypeSupported(type)) return type;
 		}
