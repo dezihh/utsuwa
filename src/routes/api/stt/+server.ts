@@ -65,5 +65,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const data = (await response.json()) as { text?: string };
-	return json({ text: data.text ?? '' });
+	const transcription = data.text ?? '';
+	// Return transcription even if empty string
+	return json({ text: transcription });
 };
