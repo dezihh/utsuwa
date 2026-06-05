@@ -299,6 +299,14 @@ export function stripLangTags(text: string): string {
 		.trim();
 }
 
+/**
+ * Strips only action tags (avatar animations) — keeps [lang:xx] and [voice:xxx] control tags
+ * so the LLM can see its own tag usage in conversation history and continue the pattern.
+ */
+export function stripForApiContext(text: string): string {
+	return text.replace(ACTION_TAG_REGEX, '').replace(/  +/g, ' ').trim();
+}
+
 export function replaceEmotionTagsForDisplay(text: string): string {
 	return text
 		.replace(/\[([\w][\w-]*)\]/g, (_match, tag) => {
@@ -374,11 +382,14 @@ export function splitIntoSegments(
 		segments[0] = { ...segments[0], action };
 	}
 
-	// Fallback: strip control tags (lang/voice) before checking emptiness.
-	// A text consisting only of [voice:default] or [lang:es] produces no speech.
+	// Fallback: strip control tags and emotion-only tags (e.g. [excited]) before
+	// checking emptiness. Emotion tags with empty ttsText produce no speech on their own.
+	// Passthrough tags ([laughter] etc.) are intentional text for the TTS engine and kept.
 	const fallbackText = cleanText
 		.replace(/\[lang:[a-z]{2,3}\]/gi, '')
 		.replace(/\[voice:(?:default|alt)\]/gi, '')
+		.replace(/\[(\w+)\]/g, (_m, tag) => (EMOTION_TAGS[tag.toLowerCase()] ? '' : `[${tag}]`))
+		.replace(/  +/g, ' ')
 		.trim();
 	return segments.length > 0
 		? segments

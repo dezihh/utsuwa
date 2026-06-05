@@ -2,6 +2,9 @@ export interface Message {
 	id: string;
 	role: 'user' | 'assistant';
 	content: string;
+	/** Original content with [lang:xx]/[voice:xxx] control tags kept — used as API context
+	 *  so the LLM sees its own tag usage and continues the pattern correctly. */
+	apiContent?: string;
 	timestamp: Date;
 }
 
@@ -23,10 +26,10 @@ function createChatStore() {
 		return message;
 	}
 
-	function updateLastMessage(content: string) {
+	function updateLastMessage(content: string, apiContent?: string) {
 		if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
 			messages = messages.map((msg, i) =>
-				i === messages.length - 1 ? { ...msg, content } : msg
+				i === messages.length - 1 ? { ...msg, content, ...(apiContent !== undefined ? { apiContent } : {}) } : msg
 			);
 		}
 	}

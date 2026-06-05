@@ -154,6 +154,10 @@ export class VoiceOrchestrator {
 	private pipelineAbort: AbortController | null = null;
 	private sessionOptions: TTSOptions | null = null;
 	private pipelineIndex = 0;
+	// Inferred alt language: set to the first explicitly-tagged language seen when
+	// sessionOptions.language (primary language) is not configured. Lets us distinguish
+	// "Spanish = alt" from "German = default" even without explicit primary language config.
+	private inferredAltLanguage: string | undefined = undefined;
 	private pipelineDoneResolve: (() => void) | null = null;
 	private pipelineDone: Promise<void> = Promise.resolve();
 	private pipelineDoneResolved = true;
@@ -199,6 +203,7 @@ export class VoiceOrchestrator {
 		this.sessionOptions = options;
 		this.pipelineAbort = new AbortController();
 		this.pipelineIndex = 0;
+		this.inferredAltLanguage = undefined;
 		this.bufferedStreamingSegments = [];
 		this.channel = new PipelineQueue();
 
@@ -232,13 +237,22 @@ export class VoiceOrchestrator {
 		const textContent = segment.text.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s\p{P}]/gu, '');
 		if (!textContent.trim()) return;
 
+		// Auto-assign alt voice when language differs from the configured primary language.
+		// Requires sessionOptions.language to be set — without a known primary language we
+		// cannot reliably distinguish "alt language" from "primary language explicitly tagged".
+		if (!segment.voiceId && this.sessionOptions.alternativeVoiceId && segment.language && this.sessionOptions.language) {
+			if (segment.language !== this.sessionOptions.language) {
+				segment = { ...segment, voiceId: 'alt' };
+			}
+		}
+
 		const provider = getTTSProvider(this.sessionOptions);
 		const abort = this.pipelineAbort;
 		if (!abort) return;
 		const signal = abort.signal;
 		const index = this.pipelineIndex++;
 
-		console.log(`[VoiceOrchestrator] pushSegment #${index}: ${JSON.stringify(segment.text.slice(0, 80))} (${segment.text.length} chars)`);
+		console.log(`[VoiceOrchestrator] pushSegment #${index}: ${JSON.stringify(segment.text.slice(0, 80))} (${segment.text.length} chars, lang=${segment.language ?? '-'}, voice=${segment.voiceId ?? '-'})`);
 
 		// For streaming providers (Chatterbox): buffer segments and combine into one
 		// request in endSession. This enables sentence_pipelining=true which drops

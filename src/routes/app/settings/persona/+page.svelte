@@ -1230,6 +1230,32 @@
 										</select>
 									</div>
 
+									<div class="vad-sensitivity-row">
+										<label class="vad-sensitivity-label" for="ps-ov-lang">Primary Language</label>
+										<select
+											id="ps-ov-lang"
+											class="api-key-input"
+											value={settingsStore.getProviderConfig('omnivoice').language ?? ''}
+											onchange={(e) => settingsStore.setProviderConfig('omnivoice', { language: e.currentTarget.value || undefined })}
+										>
+											<option value="">Auto-detect</option>
+											<option value="de">German (de)</option>
+											<option value="en">English (en)</option>
+											<option value="es">Spanish (es)</option>
+											<option value="fr">French (fr)</option>
+											<option value="it">Italian (it)</option>
+											<option value="pt">Portuguese (pt)</option>
+											<option value="ja">Japanese (ja)</option>
+											<option value="zh">Chinese (zh)</option>
+											<option value="ko">Korean (ko)</option>
+											<option value="ru">Russian (ru)</option>
+											<option value="ar">Arabic (ar)</option>
+											<option value="nl">Dutch (nl)</option>
+											<option value="pl">Polish (pl)</option>
+										</select>
+									</div>
+									<p class="provider-note">Required for automatic alt-voice switching on language change.</p>
+
 									<!-- ── Default Voice Profile ── -->
 									<div class="ov-profile-header">Default Voice</div>
 

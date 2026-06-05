@@ -399,6 +399,16 @@ EXAMPLE:
 	}
 
 	if (ctx.ttsProvider === 'omnivoice') {
+		const primaryLang = ctx.ttsLanguage;
+		const langHint = primaryLang
+			? `The primary spoken language is **${primaryLang}**. ALWAYS place [lang:xx] immediately before the first word in any other language. Return to the primary language with [lang:${primaryLang}].`
+			: 'ALWAYS place [lang:xx] immediately before text in a different language than the surrounding sentences.';
+
+		// Pick a contrasting language for the bilingual example so it does not look language-locked
+		const altLangCode = (!primaryLang || primaryLang === 'es') ? 'en' : 'es';
+		const primaryLangCode = primaryLang ?? 'de';
+		const bilingualExample = `[excited]Let's practice! [lang:${altLangCode}]Great, how are you? [lang:${primaryLangCode}][sigh]Very well done!`;
+
 		return `<voice_tags>
 You are connected to a text-to-speech engine (OmniVoice) that understands special inline tags.
 Embed them directly in your response text — they control voice, emotion, and avatar animations.
@@ -442,37 +452,28 @@ BODY ACTIONS (trigger avatar animations — use sparingly):
   Place [action:xxx] at the start of the sentence where the animation should play.
   Use at most ONE action tag per response.
 
-LANGUAGE TAGS (switch spoken language mid-response):
-  [lang:de]  — switch to German
-  [lang:es]  — switch to Spanish
-  [lang:en]  — switch to English
-  [lang:fr]  — switch to French
-  (and any other ISO 639-1 code)
-  Place [lang:xx] immediately before the first word in the new language.
+LANGUAGE TAGS — required for correct pronunciation when mixing languages:
+  ${langHint}
+  Use any ISO 639-1 code: [lang:de] [lang:es] [lang:en] [lang:fr] [lang:it] [lang:pt] [lang:ja] …
   The tag applies to all following text until the next [lang:xx] tag.
 
 SPEED TAGS:
   [slow]  — speak slowly and thoughtfully
   [fast]  — speak quickly or excitedly
 
-${ctx.ttsAltVoiceEnabled ? `VOICE TAGS (two voices are configured — use them for language switches):
-  [voice:default]  — primary voice, use for the primary language
-  [voice:alt]      — alternative voice, use for ANY other language
-  Place [voice:xxx] immediately before the first word in the new language (together with [lang:xx]).
-  Always switch voice when switching language. Switch back with [voice:default][lang:xx] when returning.
-  EXAMPLE: "[voice:default][lang:de]Auf Deutsch: Wie geht es dir? [voice:alt][lang:es]¿Cómo estás? [voice:default][lang:de]Das war Spanisch."` : `VOICE TAGS (switch between speakers — only relevant when two roles are active):
-  [voice:default]  — primary voice (your default speaking role)
-  [voice:alt]      — alternative voice (second role, e.g. student or dialogue partner)
-  Place [voice:xxx] at the very start of the paragraph where the speaker changes.
-  Omit voice tags entirely if there is only one speaker.`}
+VOICE TAGS (only for explicit speaker-role changes, e.g. teacher vs. student dialogue):
+  [voice:default]  — primary voice
+  [voice:alt]      — alternative voice
+  Language switches are handled automatically — do NOT add [voice:xxx] for language changes.
 
 RULES:
 - Place emotion tags immediately before the affected word or sentence.
 - Never explain the tags to the user; never output them as visible text.
 - Use them naturally to make the conversation warm, lively, and expressive.
 
-EXAMPLE:
-  "[action:wave][excited]Oh wow, das ist toll! [laugh]Ich freue mich so sehr darüber. [sigh]Manchmal bin ich einfach überwältigt. [laughter] Haha, genau!"
+EXAMPLES:
+  Monolingual: "[action:wave][excited]Oh wow, that is great! [laugh]I'm so happy! [laughter]"
+  Bilingual:   "${bilingualExample}"
 </voice_tags>`;
 	}
 

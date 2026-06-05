@@ -47,7 +47,7 @@
 	import { initEmbeddingModel, subscribeToEmbeddingState, type EmbeddingState } from '$lib/services/embeddings';
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
 	import { allEvents } from '$lib/data/events';
-	import { splitIntoSegments, stripAllTags, isContinueRequest } from '$lib/utils/sentences';
+	import { splitIntoSegments, stripAllTags, stripForApiContext, isContinueRequest } from '$lib/utils/sentences';
 	import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
 	import type { ProviderConfig } from '$lib/types';
 
@@ -278,6 +278,7 @@
 			continueFromText: options?.continueFromText
 		};
 
+		console.log(`[Prompt] altEnabled=${ttsConfig?.omnivoiceAltEnabled} ttsAltVoiceEnabled=${activeTTSProvider === 'omnivoice' && !!(ttsConfig?.omnivoiceAltEnabled)}`);
 		return buildSystemPrompt(context);
 	}
 
@@ -472,7 +473,7 @@
 						{
 							messages: chatStore.messages.slice(0, -1).map((m) => ({
 								role: m.role as 'user' | 'assistant',
-								content: m.content
+								content: m.apiContent ?? m.content
 							})),
 							provider: provider as import('$lib/types').LLMProvider,
 							model: selectedModel,
@@ -482,7 +483,7 @@
 						},
 						(text) => {
 							fullContent += text;
-							chatStore.updateLastMessage(stripAllTags(fullContent));
+							chatStore.updateLastMessage(stripAllTags(fullContent), stripForApiContext(fullContent));
 							speechBuffer?.feed(text);
 						},
 						(error) => reject(new Error(error)),
@@ -493,7 +494,7 @@
 				const mcpEnabled = mcpStore.hasActiveTools && !isTauri();
 				const chatEndpoint = mcpEnabled ? '/api/mcp/chat' : '/api/chat';
 				const chatBody: Record<string, unknown> = {
-					messages: chatStore.messages.map((m) => ({ role: m.role, content: m.content })),
+					messages: chatStore.messages.map((m) => ({ role: m.role, content: m.apiContent ?? m.content })),
 					provider,
 					model: selectedModel,
 					apiKey: apiKey || undefined,
@@ -540,7 +541,7 @@
 						if (line.startsWith('0:')) {
 							const text = JSON.parse(line.slice(2));
 							fullContent += text;
-							chatStore.updateLastMessage(stripAllTags(fullContent));
+							chatStore.updateLastMessage(stripAllTags(fullContent), stripForApiContext(fullContent));
 							speechBuffer?.feed(text);
 						} else if (line.startsWith('e:')) {
 							const { error } = JSON.parse(line.slice(2));
@@ -554,7 +555,7 @@
 			isTyping = false;
 			const cleanedResponse = await processCompanionResponse(content, fullContent);
 			const displayText = stripAllTags(cleanedResponse);
-			chatStore.updateLastMessage(displayText);
+			chatStore.updateLastMessage(displayText, stripForApiContext(cleanedResponse));
 
 			if (ttsEnabled && !ttsStarted && cleanedResponse) {
 				// LLM response was too short to trigger speech buffer during streaming —
