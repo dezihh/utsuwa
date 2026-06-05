@@ -9,7 +9,7 @@ export interface PersonalityPreset {
 	systemPrompt: string;
 }
 
-const DEFAULT_PERSONALITY_PRESETS: PersonalityPreset[] = [
+export const DEFAULT_PERSONALITY_PRESETS: PersonalityPreset[] = [
 	{
 		id: 'standard',
 		name: 'Standard',

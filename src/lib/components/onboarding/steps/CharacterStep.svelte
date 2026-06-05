@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Icon } from '$lib/components/ui';
+	import { DEFAULT_PERSONALITY_PRESETS } from '$lib/stores/settings.svelte';
 
 	interface Props {
 		name: string;
@@ -38,7 +39,19 @@
 	</div>
 
 	<div class="form-group">
-		<label for="personality" class="label">Core Personality</label>
+		<div class="label-row">
+			<label for="personality" class="label">Core Personality</label>
+			<div class="preset-chips">
+				{#each DEFAULT_PERSONALITY_PRESETS.filter(p => p.id !== 'standard') as preset}
+					<button
+						class="preset-chip"
+						class:active={systemPrompt === preset.systemPrompt}
+						type="button"
+						onclick={() => onSystemPromptChange(preset.systemPrompt)}
+					>{preset.name}</button>
+				{/each}
+			</div>
+		</div>
 		<textarea
 			id="personality"
 			class="textarea"
@@ -131,6 +144,38 @@
 		font-size: 0.8rem;
 		font-weight: 500;
 		color: var(--text-primary);
+	}
+
+	.label-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.preset-chips {
+		display: flex;
+		gap: 0.3rem;
+		flex-wrap: wrap;
+	}
+
+	.preset-chip {
+		padding: 0.15rem 0.55rem;
+		border-radius: 20px;
+		border: 1px solid rgba(1, 178, 255, 0.4);
+		background: transparent;
+		font-size: 0.7rem;
+		color: #01B2FF;
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s;
+	}
+
+	.preset-chip:hover,
+	.preset-chip.active {
+		background: #01B2FF;
+		color: #fff;
+		border-color: #01B2FF;
 	}
 
 	.input {
