@@ -22,6 +22,8 @@ export interface SpeechSegment {
 	action?: string;
 	/** Optional speech speed override */
 	speed?: number;
+	/** Voice selector: 'default' | 'alt' | literal voice ID. Resolved by orchestrator. */
+	voiceId?: string;
 }
 
 /** Callbacks the orchestrator fires so the UI can react synchronously. */
@@ -316,16 +318,27 @@ export class VoiceOrchestrator {
 	 * Fetch and decode audio to an AudioBuffer (without starting playback).
 	 * Synthesis runs in the background while the previous segment plays.
 	 */
+	private resolveVoiceId(tag: string | undefined): string | undefined {
+		if (!tag || tag === 'default') return undefined;
+		if (tag === 'alt') return this.sessionOptions?.alternativeVoiceId || undefined;
+		return tag;
+	}
+
 	private async fetchBuffer(
 		provider: ITTSProvider,
 		segment: SpeechSegment,
 		signal: AbortSignal
 	): Promise<AudioBuffer | null> {
+		const baseSpeed =
+			segment.voiceId === 'alt'
+				? (this.sessionOptions?.alternativeSpeed ?? this.sessionOptions?.speed)
+				: this.sessionOptions?.speed;
 		const streamOpts: StreamOptions = {
 			emotion: segment.emotion,
 			exaggeration: segment.exaggeration,
 			language: segment.language,
-			speed: segment.speed,
+			speed: segment.speed ?? baseSpeed,
+			voiceId: this.resolveVoiceId(segment.voiceId),
 			signal
 		};
 
@@ -411,111 +424,6 @@ export class VoiceOrchestrator {
 			}
 		}
 		return audioBuffer;
-	}
-
-	/**
-	 * Collect all chunks from a streaming TTS segment, then play as a single
-	 * continuous AudioBuffer. Gapless by construction — no per-chunk scheduling.
-	 */
-	private async playStreamingSegment(
-		provider: ITTSProvider,
-		segment: SpeechSegment,
-		index: number,
-		opts: import('$lib/services/tts').StreamOptions,
-		callbacks?: OrchestratorCallbacks
-	): Promise<void> {
-		const audioContext = getSharedAudioContext();
-		// 'interrupted' is an iOS Safari-specific state (e.g. after a phone call).
-		if (audioContext.state === 'suspended' || audioContext.state === ('interrupted' as AudioContextState)) {
-			await audioContext.resume();
-		}
-
-		const analyser = audioContext.createAnalyser();
-		analyser.fftSize = 256;
-		analyser.connect(audioContext.destination);
-		this.currentAnalyser = analyser;
-
-		// Fire callbacks immediately so UI reacts before audio starts.
-		if (segment.emotion) callbacks?.onEmotionChange?.(segment.emotion);
-		if (segment.action) callbacks?.onAction?.(segment.action);
-		callbacks?.onSegmentStart?.(segment, index);
-		callbacks?.onAnalyserUpdate?.(analyser);
-
-		try {
-			// --- Collect all audio bytes from the stream ---
-			const chunks: Uint8Array[] = [];
-			const generator = provider.speakStreaming!(segment.text, opts);
-			for await (const chunk of generator) {
-				if (this.pipelineAbort?.signal.aborted || opts.signal?.aborted) break;
-				if (chunk.done) break;
-				if (chunk.data.byteLength > 0) chunks.push(new Uint8Array(chunk.data));
-			}
-
-			if (chunks.length === 0 || this.pipelineAbort?.signal.aborted || opts.signal?.aborted) return;
-
-			// --- Concatenate into one buffer ---
-			const totalBytes = chunks.reduce((sum, c) => sum + c.byteLength, 0);
-			const combined = new Uint8Array(totalBytes);
-			let off = 0;
-			for (const c of chunks) { combined.set(c, off); off += c.byteLength; }
-
-			// --- Parse the 44-byte WAV header ---
-			const PCM_HEADER_SIZE = 44;
-			if (combined.byteLength <= PCM_HEADER_SIZE) return;
-			const dv = new DataView(combined.buffer);
-			const audioFormat   = dv.getUint16(20, true); // 1 = PCM16, 3 = IEEE float32
-			const numChannels   = dv.getUint16(22, true);
-			const sampleRate    = dv.getUint32(24, true);
-			const bitsPerSample = dv.getUint16(34, true);
-			const bytesPerSample = bitsPerSample / 8;
-
-			// --- Decode audio payload ---
-			const payload = combined.slice(PCM_HEADER_SIZE);
-			const numSamples = Math.floor(payload.byteLength / bytesPerSample);
-			const samplesPerChannel = Math.floor(numSamples / numChannels);
-			if (samplesPerChannel === 0) return;
-
-			const float32 = new Float32Array(numSamples);
-			const pdv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-			if (audioFormat === 3) {
-				for (let i = 0; i < numSamples; i++) float32[i] = pdv.getFloat32(i * 4, true);
-			} else {
-				for (let i = 0; i < numSamples; i++) float32[i] = pdv.getInt16(i * 2, true) / 32768.0;
-			}
-
-			// --- Build single AudioBuffer and play ---
-			const audioBuffer = audioContext.createBuffer(numChannels, samplesPerChannel, sampleRate);
-			if (numChannels === 1) {
-				audioBuffer.getChannelData(0).set(float32);
-			} else {
-				for (let ch = 0; ch < numChannels; ch++) {
-					const chData = audioBuffer.getChannelData(ch);
-					for (let i = 0; i < samplesPerChannel; i++) chData[i] = float32[i * numChannels + ch];
-				}
-			}
-
-			const startTime = audioContext.currentTime + 0.05;
-			const source = audioContext.createBufferSource();
-			source.buffer = audioBuffer;
-			source.connect(analyser);
-			this.currentSource = source;
-			source.start(startTime);
-
-			// Wait for playback to complete.
-			const duration = audioBuffer.duration;
-			await new Promise<void>((resolve) => {
-				const id = setTimeout(resolve, (duration + 0.15) * 1000);
-				this.pipelineAbort?.signal.addEventListener('abort', () => {
-					clearTimeout(id);
-					try { source.stop(); } catch { /* already stopped */ }
-					resolve();
-				}, { once: true });
-			});
-		} catch (err) {
-			if ((err as Error).name !== 'AbortError' && !opts.signal?.aborted) {
-				console.error('[VoiceOrchestrator] Streaming segment error:', err);
-			}
-		}
 	}
 
 	private async playBuffer(

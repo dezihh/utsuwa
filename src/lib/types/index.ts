@@ -71,6 +71,33 @@ export interface ProviderConfig {
 	temperature?: number;
 	/** OmniVoice: diffusion steps — 16 (fast) or 32 (quality) */
 	omnivoiceNumStep?: number;
+	// OmniVoice voice profiles
+	/** OmniVoice default voice: 'internal' (voice design) or 'clone' (voice sample) */
+	omnivoiceDefaultVoiceType?: 'internal' | 'clone';
+	/** OmniVoice default internal voice — gender ('male' | 'female') */
+	omnivoiceDefaultGender?: string;
+	/** OmniVoice default internal voice — age group */
+	omnivoiceDefaultAge?: string;
+	/** OmniVoice default internal voice — pitch */
+	omnivoiceDefaultPitch?: string;
+	/** OmniVoice default voice — speech speed (0.25–4.0) */
+	omnivoiceDefaultSpeed?: number;
+	/** OmniVoice default clone voice — sample name */
+	omnivoiceDefaultCloneId?: string;
+	/** OmniVoice: enable alternative voice profile */
+	omnivoiceAltEnabled?: boolean;
+	/** OmniVoice alternative voice: 'internal' or 'clone' */
+	omnivoiceAltVoiceType?: 'internal' | 'clone';
+	/** OmniVoice alternative internal voice — gender */
+	omnivoiceAltGender?: string;
+	/** OmniVoice alternative internal voice — age group */
+	omnivoiceAltAge?: string;
+	/** OmniVoice alternative internal voice — pitch */
+	omnivoiceAltPitch?: string;
+	/** OmniVoice alternative voice — speech speed */
+	omnivoiceAltSpeed?: number;
+	/** OmniVoice alternative clone voice — sample name */
+	omnivoiceAltCloneId?: string;
 }
 
 // VRM types

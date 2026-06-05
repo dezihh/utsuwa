@@ -5,6 +5,8 @@ export interface TTSOptions {
 	provider: TTSProvider;
 	apiKey?: string;
 	voiceId?: string;
+	/** Second voice ID, resolved when LLM emits [voice:alt] tag */
+	alternativeVoiceId?: string;
 	rvcVoiceId?: string;
 	baseUrl?: string;
 	speed?: number;
@@ -20,6 +22,8 @@ export interface TTSOptions {
 	temperature?: number;
 	/** OmniVoice diffusion steps — 16 (fast) or 32 (quality) */
 	omnivoiceNumStep?: number;
+	/** Base speed for [voice:alt] segments (falls back to speed when unset) */
+	alternativeSpeed?: number;
 }
 
 // Result from TTS speak method
@@ -38,6 +42,8 @@ export interface StreamOptions {
 	language?: string;
 	/** Speech speed override (0.5-2.0, 1.0 = normal) */
 	speed?: number;
+	/** Per-segment voice ID override (overrides provider default for this segment) */
+	voiceId?: string;
 	/** AbortSignal for cancellation */
 	signal?: AbortSignal;
 }

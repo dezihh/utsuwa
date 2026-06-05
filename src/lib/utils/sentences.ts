@@ -239,6 +239,31 @@ const EMOTION_TAGS: Record<string, EmotionEntry> = {
 const ACTION_TAGS = new Set(['wave', 'nod', 'shake', 'jump', 'bow', 'think', 'clap', 'dance']);
 const ACTION_TAG_REGEX = /\[action:(\w+)\]/gi;
 
+// Single-word tags (matching \[(\w+)\]) that are NOT emotion tags but must pass
+// through to the TTS engine because they produce provider-native audio.
+// Tags with hyphens (e.g. [surprise-oh], [confirmation-en]) are unaffected by
+// the \[(\w+)\] regex and always pass through automatically.
+const PASSTHROUGH_TAGS = new Set(['laughter']);
+
+/**
+ * Resolve unknown single-word tags:
+ *   - Known emotion tags      → keep as [tag] (processed by emotion logic)
+ *   - Provider passthrough    → keep as [tag] (e.g. [laughter] for OmniVoice)
+ *   - Everything else         → replace with the tag word as spoken text
+ *                               ([haha] → "haha", [hmm] → "hmm")
+ * Tags with hyphens ([surprise-oh], [lang:xx] etc.) are untouched by this regex.
+ */
+function resolveUnknownTags(text: string): string {
+	return text
+		.replace(/\[(\w+)\]/g, (match, tag) => {
+			const lTag = tag.toLowerCase();
+			if (EMOTION_TAGS[lTag] || PASSTHROUGH_TAGS.has(lTag)) return match;
+			return ` ${lTag} `; // speak the tag word; surrounding spaces normalised below
+		})
+		.replace(/  +/g, ' ')
+		.trim();
+}
+
 function getEmotionTtsText(tag: string, language?: string): string {
 	const lang = language?.toLowerCase() ?? 'default';
 	const langMap = EMOTION_TTS_BY_LANG[lang] ?? EMOTION_TTS_BY_LANG.default;
@@ -304,25 +329,39 @@ export function splitIntoSegments(
 	ACTION_TAG_REGEX.lastIndex = 0;
 	const cleanText = text.replace(ACTION_TAG_REGEX, '');
 
-	const langTagRegex = /\[lang:([a-z]{2,3})\]/gi;
-	const parts = cleanText.split(langTagRegex);
+	// Tokenize [lang:xx] and [voice:xxx] tags together. Both are persistent-scope
+	// markers that apply to all following segments until the next tag of the same type.
+	const tagRegex = /\[lang:([a-z]{2,3})\]|\[voice:(default|alt)\]/gi;
+	const tokens: Array<{ type: 'text' | 'lang' | 'voice'; value: string }> = [];
+	let lastIdx = 0;
+	let tm: RegExpExecArray | null;
+	while ((tm = tagRegex.exec(cleanText)) !== null) {
+		if (tm.index > lastIdx) tokens.push({ type: 'text', value: cleanText.slice(lastIdx, tm.index) });
+		if (tm[1]) tokens.push({ type: 'lang', value: tm[1].toLowerCase() });
+		else if (tm[2]) tokens.push({ type: 'voice', value: tm[2].toLowerCase() });
+		lastIdx = tm.index + tm[0].length;
+	}
+	if (lastIdx < cleanText.length) tokens.push({ type: 'text', value: cleanText.slice(lastIdx) });
 
 	const segments: SpeechSegment[] = [];
 	let currentLang: string | undefined = defaultLanguage || undefined;
+	let currentVoiceId: string | undefined = undefined;
 
-	for (let i = 0; i < parts.length; i++) {
-		if (i % 2 === 1) {
-			currentLang = parts[i].toLowerCase();
+	for (const token of tokens) {
+		if (token.type === 'lang') {
+			currentLang = token.value;
+		} else if (token.type === 'voice') {
+			currentVoiceId = token.value === 'default' ? undefined : token.value;
 		} else {
-			const section = parts[i];
+			const section = token.value;
 			if (!section.trim()) continue;
 
-			if (streaming) {
-				segments.push(...extractEmotionBlock(section, currentLang));
-			} else {
-				for (const sentence of splitIntoSentences(section)) {
-					segments.push(...extractEmotionSegments(sentence, currentLang));
-				}
+			const sectionSegments = streaming
+				? extractEmotionBlock(section, currentLang)
+				: splitIntoSentences(section).flatMap((s) => extractEmotionSegments(s, currentLang));
+
+			for (const seg of sectionSegments) {
+				segments.push(currentVoiceId ? { ...seg, voiceId: currentVoiceId } : seg);
 			}
 		}
 	}
@@ -359,10 +398,9 @@ function extractEmotionBlock(block: string, language?: string): SpeechSegment[] 
 		}
 	}
 
-	let cleanText = block
-		.replace(/\[(\w+)\]/g, (_match, tag) => (EMOTION_TAGS[tag.toLowerCase()] ? '' : _match))
-		.replace(/  +/g, ' ')
-		.trim();
+	let cleanText = resolveUnknownTags(
+		block.replace(/\[(\w+)\]/g, (_match, tag) => (EMOTION_TAGS[tag.toLowerCase()] ? '' : _match))
+	);
 
 	if (prependTexts.length > 0) {
 		cleanText = `${prependTexts.join(' ')} ${cleanText}`.trim();
@@ -386,7 +424,10 @@ function extractEmotionSegments(sentence: string, language?: string): SpeechSegm
 		if (EMOTION_TAGS[key]) matches.push({ tag: key, index: m.index, length: m[0].length });
 	}
 
-	if (matches.length === 0) return [{ text: sentence.trim(), language }];
+	if (matches.length === 0) {
+		const cleaned = resolveUnknownTags(sentence);
+		return cleaned ? [{ text: cleaned, language }] : [];
+	}
 
 	const result: SpeechSegment[] = [];
 	let cursor = 0;
@@ -395,7 +436,7 @@ function extractEmotionSegments(sentence: string, language?: string): SpeechSegm
 	let currentSpeed: number | undefined;
 
 	for (const match of matches) {
-		const before = sentence.slice(cursor, match.index).trim();
+		const before = resolveUnknownTags(sentence.slice(cursor, match.index));
 		if (before) {
 			const seg: SpeechSegment = { text: before, language };
 			if (currentExaggeration !== undefined) seg.exaggeration = currentExaggeration;
@@ -420,7 +461,7 @@ function extractEmotionSegments(sentence: string, language?: string): SpeechSegm
 		cursor = match.index + match.length;
 	}
 
-	const remaining = sentence.slice(cursor).trim();
+	const remaining = resolveUnknownTags(sentence.slice(cursor));
 	if (remaining) {
 		const seg: SpeechSegment = { text: remaining, language };
 		if (currentExaggeration !== undefined) seg.exaggeration = currentExaggeration;

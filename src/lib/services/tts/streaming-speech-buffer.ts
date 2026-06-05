@@ -49,14 +49,16 @@ export class StreamingSpeechBuffer {
 	}
 
 	private tryEmitBlock(text: string): void {
-		const langMatch = /\[lang:[a-z]{2,3}\]/gi.exec(text);
-		if (langMatch && langMatch.index > 0) {
-			const block = text.slice(0, langMatch.index);
+		// Treat [lang:xx] and [voice:xxx] as block boundaries so the segment preceding
+		// the tag is emitted before the tag changes state for the next segment.
+		const tagBoundaryMatch = /\[lang:[a-z]{2,3}\]|\[voice:(?:default|alt)\]/gi.exec(text);
+		if (tagBoundaryMatch && tagBoundaryMatch.index > 0) {
+			const block = text.slice(0, tagBoundaryMatch.index);
 			if (block.trim()) {
 				for (const seg of splitIntoSegments(block, this.options.defaultLanguage, false)) {
 					this.options.onSegment(seg);
 				}
-				this.emittedLength += langMatch.index;
+				this.emittedLength += tagBoundaryMatch.index;
 			}
 			return;
 		}

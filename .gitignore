@@ -32,3 +32,9 @@ vite.config.ts.timestamp-*
 # Claude
 .claude/
 .refs
+.aider*
+
+# Personal profile/settings exports (contain API keys + core personality)
+utsuwa-save-*.json
+data/profile.json
+data/profile-pin.hash

@@ -13,6 +13,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const text = typeof body.text === 'string' ? body.text : '';
 	const voice = typeof body.voice === 'string' ? body.voice : 'female3';
 	const numStep = typeof body.numStep === 'number' ? body.numStep : 32;
+	const speed = typeof body.speed === 'number' ? body.speed : undefined;
 	const baseUrl = (
 		typeof body.baseUrl === 'string' && body.baseUrl.trim()
 			? body.baseUrl.trim()
@@ -33,7 +34,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		upstreamResponse = await fetch(upstream, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ text, voice, num_step: numStep })
+			body: JSON.stringify({ text, voice, num_step: numStep, ...(speed !== undefined ? { speed } : {}) })
 		});
 	} catch (err) {
 		return new Response(

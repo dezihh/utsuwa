@@ -49,6 +49,23 @@
 	import { allEvents } from '$lib/data/events';
 	import { splitIntoSegments, stripAllTags, isContinueRequest } from '$lib/utils/sentences';
 	import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
+	import type { ProviderConfig } from '$lib/types';
+
+	function buildOmniVoiceDescriptor(cfg: ProviderConfig, isAlt = false): string {
+		const type = isAlt ? cfg.omnivoiceAltVoiceType : cfg.omnivoiceDefaultVoiceType;
+		if (type === 'clone') {
+			return (isAlt ? cfg.omnivoiceAltCloneId : cfg.omnivoiceDefaultCloneId) || '';
+		}
+		if (type === 'internal') {
+			const gender = isAlt ? cfg.omnivoiceAltGender : cfg.omnivoiceDefaultGender;
+			const age    = isAlt ? cfg.omnivoiceAltAge    : cfg.omnivoiceDefaultAge;
+			const pitch  = isAlt ? cfg.omnivoiceAltPitch  : cfg.omnivoiceDefaultPitch;
+			const parts  = [gender, age, pitch].filter(Boolean);
+			return parts.length > 0 ? parts.join(', ') : 'female';
+		}
+		// Profile not yet configured — fall back to legacy voiceId
+		return '';
+	}
 
 	let canvasRef: HTMLCanvasElement | null = null;
 
@@ -319,10 +336,18 @@
 					? {
 							provider: ttsProvider,
 							apiKey: ttsConfig.apiKey,
-							voiceId: (speechSettings.activeVoiceId as string) || ttsConfig.voiceId,
+							voiceId: isOmniVoice
+								? (buildOmniVoiceDescriptor(ttsConfig) || (speechSettings.activeVoiceId as string) || ttsConfig.voiceId)
+								: ((speechSettings.activeVoiceId as string) || ttsConfig.voiceId),
+							alternativeVoiceId: isOmniVoice
+								? (ttsConfig.omnivoiceAltEnabled ? buildOmniVoiceDescriptor(ttsConfig, true) : undefined)
+								: ((ttsConfig.alternativeVoiceId as string) || undefined),
 							rvcVoiceId: (speechSettings.activeRvcVoiceId as string) || ttsConfig.rvcVoiceId,
 							baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
-							speed: (speechSettings.speed as number) ?? 1,
+							speed: isOmniVoice
+								? (ttsConfig.omnivoiceDefaultSpeed ?? (speechSettings.speed as number) ?? 1)
+								: ((speechSettings.speed as number) ?? 1),
+							alternativeSpeed: isOmniVoice ? ttsConfig.omnivoiceAltSpeed : undefined,
 							exaggeration: ttsConfig.exaggeration,
 							language: ttsConfig.language,
 							cfgWeight: ttsConfig.cfgWeight,
@@ -353,7 +378,7 @@
 			const speechBuffer = ttsOptions
 				? new StreamingSpeechBuffer({
 						defaultLanguage: ttsConfig?.language || undefined,
-						streaming: isChatterbox || isOmniVoice,
+						streaming: isChatterbox,
 						onSegment: (segment) => {
 							enqueueTTS(segment);
 						}

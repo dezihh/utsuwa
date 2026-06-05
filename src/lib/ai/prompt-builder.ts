@@ -444,6 +444,12 @@ SPEED TAGS:
   [slow]  — speak slowly and thoughtfully
   [fast]  — speak quickly or excitedly
 
+VOICE TAGS (switch between speakers — only relevant when two roles are active):
+  [voice:default]  — primary voice (your default speaking role)
+  [voice:alt]      — alternative voice (second role, e.g. student or dialogue partner)
+  Place [voice:xxx] at the very start of the turn or paragraph where the speaker changes.
+  Omit voice tags entirely if there is only one speaker.
+
 RULES:
 - Place emotion tags immediately before the affected word or sentence.
 - Never explain the tags to the user; never output them as visible text.

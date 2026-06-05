@@ -154,6 +154,11 @@
 	let chatterboxFetchError = $state<string | null>(null);
 	let lastChatterboxFetchSignature = '';
 
+	let omnivoiceClones = $state<{ id: string; name: string }[]>([]);
+	let omnivoiceClonesLoading = $state(false);
+	let omnivoiceClonesFetchError = $state<string | null>(null);
+	let lastOmnivoiceFetchSignature = '';
+
 	// Use dynamic models if available, otherwise static
 	const ttsModels = $derived(ttsDynamicModels ?? staticTTSModels);
 
@@ -346,6 +351,34 @@
 
 	const debouncedLoadChatterboxVoices = debounce(loadChatterboxVoices, 300);
 
+	async function loadOmniVoiceClones() {
+		const provider = speechSettings.activeProvider as string;
+		if (provider !== 'omnivoice') return;
+		const config = settingsStore.getProviderConfig('omnivoice');
+		const baseUrl = config.baseUrl || 'http://localhost:8766';
+		omnivoiceClonesLoading = true;
+		omnivoiceClonesFetchError = null;
+		try {
+			const res = await fetch(`/api/tts/omnivoice/voices?baseUrl=${encodeURIComponent(baseUrl)}`);
+			if ((speechSettings.activeProvider as string) !== 'omnivoice') { omnivoiceClonesLoading = false; return; }
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const data = await res.json();
+			// Response: {"voices": [{id, name, ...}]} or [{id, name}] or ["id", ...]
+			const list: unknown[] = Array.isArray(data) ? data : (Array.isArray(data?.voices) ? data.voices : []);
+			omnivoiceClones = list.map((v: unknown) => {
+				if (typeof v === 'string') return { id: v, name: v };
+				const obj = v as Record<string, string>;
+				return { id: obj.id ?? String(v), name: obj.name || obj.id || String(v) };
+			});
+		} catch (err) {
+			omnivoiceClonesFetchError = err instanceof Error ? err.message : String(err);
+		} finally {
+			omnivoiceClonesLoading = false;
+		}
+	}
+
+	const debouncedLoadOmniVoiceClones = debounce(loadOmniVoiceClones, 300);
+
 	$effect(() => {
 		const targetProvider = speechSettings.activeProvider as string;
 		if (targetProvider !== 'chatterbox') {
@@ -357,6 +390,20 @@
 		if (signature === lastChatterboxFetchSignature) return;
 		lastChatterboxFetchSignature = signature;
 		debouncedLoadChatterboxVoices();
+	});
+
+	$effect(() => {
+		const targetProvider = speechSettings.activeProvider as string;
+		if (targetProvider !== 'omnivoice') {
+			lastOmnivoiceFetchSignature = '';
+			omnivoiceClones = [];
+			return;
+		}
+		const config = settingsStore.getProviderConfig('omnivoice');
+		const sig = `omnivoice::${config.baseUrl ?? ''}`;
+		if (sig === lastOmnivoiceFetchSignature) return;
+		lastOmnivoiceFetchSignature = sig;
+		debouncedLoadOmniVoiceClones();
 	});
 
 	$effect(() => {
@@ -1007,7 +1054,7 @@
 
 								{#if speechSettings.activeProvider}
 									{@const provider = getTTSProvider(speechSettings.activeProvider as string)}
-									{#if provider?.isLocal && provider.id !== 'alltalk' && provider.id !== 'chatterbox'}
+									{#if provider?.isLocal && provider.id !== 'alltalk' && provider.id !== 'chatterbox' && provider.id !== 'omnivoice'}
 										<div class="api-key-row">
 											<input
 												type="text"
@@ -1032,17 +1079,7 @@
 								{/if}
 
 								{#if speechSettings.activeProvider === 'omnivoice'}
-									<div class="api-key-row">
-										<select
-											class="api-key-input"
-											value={speechSettings.activeVoiceId as string ?? 'female3'}
-											onchange={(e) => modulesStore.setModuleSetting('speech', 'activeVoiceId', e.currentTarget.value)}
-										>
-											{#each (getTTSProvider('omnivoice')?.voices ?? []) as voice}
-												<option value={voice.id}>{voice.name}</option>
-											{/each}
-										</select>
-									</div>
+									<!-- URL -->
 									<div class="api-key-row">
 										<input
 											type="text"
@@ -1056,6 +1093,7 @@
 										<Icon name="check-circle" size={14} />
 										Local provider - no API key needed
 									</p>
+									<!-- Diffusion quality -->
 									<div class="vad-sensitivity-row">
 										<label class="vad-sensitivity-label" for="ps-ov-numstep">
 											Quality
@@ -1075,6 +1113,213 @@
 											<option value="16">Fast — 16 steps</option>
 										</select>
 									</div>
+
+									<!-- ── Default Voice Profile ── -->
+									<div class="ov-profile-header">Default Voice</div>
+
+									<div class="vad-sensitivity-row">
+										<label class="vad-sensitivity-label" for="ps-ov-def-type">Voice Type</label>
+										<select
+											id="ps-ov-def-type"
+											class="api-key-input"
+											value={settingsStore.getProviderConfig('omnivoice').omnivoiceDefaultVoiceType ?? 'internal'}
+											onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceDefaultVoiceType: e.currentTarget.value as 'internal' | 'clone' })}
+										>
+											<option value="internal">Synthetic (voice design)</option>
+											<option value="clone">Voice Clone (sample)</option>
+										</select>
+									</div>
+
+									{#if (settingsStore.getProviderConfig('omnivoice').omnivoiceDefaultVoiceType ?? 'internal') === 'internal'}
+										<div class="vad-sensitivity-row">
+											<label class="vad-sensitivity-label" for="ps-ov-def-gender">Gender</label>
+											<select
+												id="ps-ov-def-gender"
+												class="api-key-input"
+												value={settingsStore.getProviderConfig('omnivoice').omnivoiceDefaultGender ?? 'female'}
+												onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceDefaultGender: e.currentTarget.value })}
+											>
+												<option value="female">Female</option>
+												<option value="male">Male</option>
+											</select>
+										</div>
+										<div class="vad-sensitivity-row">
+											<label class="vad-sensitivity-label" for="ps-ov-def-age">Age</label>
+											<select
+												id="ps-ov-def-age"
+												class="api-key-input"
+												value={settingsStore.getProviderConfig('omnivoice').omnivoiceDefaultAge ?? 'young adult'}
+												onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceDefaultAge: e.currentTarget.value })}
+											>
+												<option value="child">Child</option>
+												<option value="teenager">Teenager</option>
+												<option value="young adult">Young Adult</option>
+												<option value="middle-aged">Middle-aged</option>
+												<option value="elderly">Elderly</option>
+											</select>
+										</div>
+										<div class="vad-sensitivity-row">
+											<label class="vad-sensitivity-label" for="ps-ov-def-pitch">Pitch</label>
+											<select
+												id="ps-ov-def-pitch"
+												class="api-key-input"
+												value={settingsStore.getProviderConfig('omnivoice').omnivoiceDefaultPitch ?? 'moderate'}
+												onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceDefaultPitch: e.currentTarget.value })}
+											>
+												<option value="very low pitch">Very Low</option>
+												<option value="low pitch">Low</option>
+												<option value="moderate">Moderate</option>
+												<option value="high pitch">High</option>
+												<option value="very high pitch">Very High</option>
+											</select>
+										</div>
+									{:else}
+										<div class="vad-sensitivity-row">
+											<label class="vad-sensitivity-label" for="ps-ov-def-clone">Voice Sample</label>
+											<select
+												id="ps-ov-def-clone"
+												class="api-key-input"
+												disabled={omnivoiceClonesLoading}
+												value={settingsStore.getProviderConfig('omnivoice').omnivoiceDefaultCloneId ?? ''}
+												onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceDefaultCloneId: e.currentTarget.value })}
+											>
+												<option value="">{omnivoiceClonesLoading ? 'Loading...' : omnivoiceClones.length === 0 ? 'No clones found' : 'Select clone...'}</option>
+												{#each omnivoiceClones as clone}
+													<option value={clone.id}>{clone.name}</option>
+												{/each}
+											</select>
+										</div>
+										{#if omnivoiceClonesFetchError}
+											<p class="provider-note error">{omnivoiceClonesFetchError}</p>
+										{/if}
+									{/if}
+
+									<div class="vad-sensitivity-row">
+										<label class="vad-sensitivity-label" for="ps-ov-def-speed">
+											Speed
+											<span class="vad-value">{(settingsStore.getProviderConfig('omnivoice').omnivoiceDefaultSpeed ?? 1).toFixed(2)}×</span>
+										</label>
+										<input
+											id="ps-ov-def-speed"
+											type="range"
+											class="vad-slider"
+											min="0.5"
+											max="2"
+											step="0.05"
+											value={settingsStore.getProviderConfig('omnivoice').omnivoiceDefaultSpeed ?? 1}
+											oninput={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceDefaultSpeed: Number(e.currentTarget.value) })}
+										/>
+										<div class="vad-hint">Speech rate (0.5 = slow, 1.0 = normal, 2.0 = fast)</div>
+									</div>
+
+									<!-- ── Alternative Voice Profile ── -->
+									<div class="ov-profile-header ov-alt-header">
+										<label class="ov-alt-toggle">
+											<input
+												type="checkbox"
+												checked={settingsStore.getProviderConfig('omnivoice').omnivoiceAltEnabled ?? false}
+												onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceAltEnabled: e.currentTarget.checked })}
+											/>
+											Alternative Voice
+										</label>
+									</div>
+
+									{#if settingsStore.getProviderConfig('omnivoice').omnivoiceAltEnabled}
+										<div class="vad-sensitivity-row">
+											<label class="vad-sensitivity-label" for="ps-ov-alt-type">Voice Type</label>
+											<select
+												id="ps-ov-alt-type"
+												class="api-key-input"
+												value={settingsStore.getProviderConfig('omnivoice').omnivoiceAltVoiceType ?? 'internal'}
+												onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceAltVoiceType: e.currentTarget.value as 'internal' | 'clone' })}
+											>
+												<option value="internal">Synthetic (voice design)</option>
+												<option value="clone">Voice Clone (sample)</option>
+											</select>
+										</div>
+
+										{#if (settingsStore.getProviderConfig('omnivoice').omnivoiceAltVoiceType ?? 'internal') === 'internal'}
+											<div class="vad-sensitivity-row">
+												<label class="vad-sensitivity-label" for="ps-ov-alt-gender">Gender</label>
+												<select
+													id="ps-ov-alt-gender"
+													class="api-key-input"
+													value={settingsStore.getProviderConfig('omnivoice').omnivoiceAltGender ?? 'male'}
+													onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceAltGender: e.currentTarget.value })}
+												>
+													<option value="female">Female</option>
+													<option value="male">Male</option>
+												</select>
+											</div>
+											<div class="vad-sensitivity-row">
+												<label class="vad-sensitivity-label" for="ps-ov-alt-age">Age</label>
+												<select
+													id="ps-ov-alt-age"
+													class="api-key-input"
+													value={settingsStore.getProviderConfig('omnivoice').omnivoiceAltAge ?? 'young adult'}
+													onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceAltAge: e.currentTarget.value })}
+												>
+													<option value="child">Child</option>
+													<option value="teenager">Teenager</option>
+													<option value="young adult">Young Adult</option>
+													<option value="middle-aged">Middle-aged</option>
+													<option value="elderly">Elderly</option>
+												</select>
+											</div>
+											<div class="vad-sensitivity-row">
+												<label class="vad-sensitivity-label" for="ps-ov-alt-pitch">Pitch</label>
+												<select
+													id="ps-ov-alt-pitch"
+													class="api-key-input"
+													value={settingsStore.getProviderConfig('omnivoice').omnivoiceAltPitch ?? 'moderate'}
+													onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceAltPitch: e.currentTarget.value })}
+												>
+													<option value="very low pitch">Very Low</option>
+													<option value="low pitch">Low</option>
+													<option value="moderate">Moderate</option>
+													<option value="high pitch">High</option>
+													<option value="very high pitch">Very High</option>
+												</select>
+											</div>
+										{:else}
+											<div class="vad-sensitivity-row">
+												<label class="vad-sensitivity-label" for="ps-ov-alt-clone">Voice Sample</label>
+												<select
+													id="ps-ov-alt-clone"
+													class="api-key-input"
+													disabled={omnivoiceClonesLoading}
+													value={settingsStore.getProviderConfig('omnivoice').omnivoiceAltCloneId ?? ''}
+													onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceAltCloneId: e.currentTarget.value })}
+												>
+													<option value="">{omnivoiceClonesLoading ? 'Loading...' : omnivoiceClones.length === 0 ? 'No clones found' : 'Select clone...'}</option>
+													{#each omnivoiceClones as clone}
+														<option value={clone.id}>{clone.name}</option>
+													{/each}
+												</select>
+											</div>
+											{#if omnivoiceClonesFetchError}
+												<p class="provider-note error">{omnivoiceClonesFetchError}</p>
+											{/if}
+										{/if}
+
+										<div class="vad-sensitivity-row">
+											<label class="vad-sensitivity-label" for="ps-ov-alt-speed">
+												Speed
+												<span class="vad-value">{(settingsStore.getProviderConfig('omnivoice').omnivoiceAltSpeed ?? 1).toFixed(2)}×</span>
+											</label>
+											<input
+												id="ps-ov-alt-speed"
+												type="range"
+												class="vad-slider"
+												min="0.5"
+												max="2"
+												step="0.05"
+												value={settingsStore.getProviderConfig('omnivoice').omnivoiceAltSpeed ?? 1}
+												oninput={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceAltSpeed: Number(e.currentTarget.value) })}
+											/>
+											<div class="vad-hint">Speech rate for the alternative speaker</div>
+										</div>
+									{/if}
 								{/if}
 
 								{#if speechSettings.activeProvider === 'chatterbox'}
@@ -3390,6 +3635,38 @@
 	.vad-hint {
 		font-size: 0.7rem;
 		color: var(--text-tertiary);
+	}
+
+	.ov-profile-header {
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-secondary);
+		margin: 0.75rem 0 0.25rem 0;
+		padding-bottom: 0.25rem;
+		border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+	}
+
+	.ov-alt-header {
+		margin-top: 1rem;
+	}
+
+	.ov-alt-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		cursor: pointer;
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-secondary);
+	}
+
+	.ov-alt-toggle input[type='checkbox'] {
+		accent-color: #10b981;
+		cursor: pointer;
 	}
 
 	.chatterbox-tag-docs {

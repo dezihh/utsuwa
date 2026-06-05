@@ -23,7 +23,7 @@ export class OmniVoiceTTS implements ITTSProvider {
 	private numStep: number;
 
 	readonly capabilities: TTSCapabilities = {
-		streaming: true,
+		streaming: false,
 		emotion: false,
 		multilingual: true
 	};
@@ -110,10 +110,11 @@ export class OmniVoiceTTS implements ITTSProvider {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				text,
-				voice: this.voiceId,
+				voice: options?.voiceId ?? this.voiceId,
 				numStep: this.numStep,
 				baseUrl: this.baseUrl,
-				language: options?.language
+				language: options?.language,
+				...(options?.speed !== undefined ? { speed: options.speed } : {})
 			}),
 			signal: options?.signal
 		});
