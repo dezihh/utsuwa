@@ -278,7 +278,6 @@
 			continueFromText: options?.continueFromText
 		};
 
-		console.log(`[Prompt] altEnabled=${ttsConfig?.omnivoiceAltEnabled} ttsAltVoiceEnabled=${activeTTSProvider === 'omnivoice' && !!(ttsConfig?.omnivoiceAltEnabled)}`);
 		return buildSystemPrompt(context);
 	}
 

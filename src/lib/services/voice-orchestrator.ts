@@ -252,8 +252,6 @@ export class VoiceOrchestrator {
 		const signal = abort.signal;
 		const index = this.pipelineIndex++;
 
-		console.log(`[VoiceOrchestrator] pushSegment #${index}: ${JSON.stringify(segment.text.slice(0, 80))} (${segment.text.length} chars, lang=${segment.language ?? '-'}, voice=${segment.voiceId ?? '-'})`);
-
 		// For streaming providers (Chatterbox): buffer segments and combine into one
 		// request in endSession. This enables sentence_pipelining=true which drops
 		// RTF from 1.5 to ~1.0 and allows gapless progressive playback.
@@ -281,7 +279,6 @@ export class VoiceOrchestrator {
 			const provider = getTTSProvider(this.sessionOptions);
 			const signal = this.pipelineAbort.signal;
 			const index = this.pipelineIndex++;
-			console.log(`[VoiceOrchestrator] combining ${segments.length} segments into one stream`);
 			this.channel.push({
 				segment: segments[0],
 				index,
@@ -355,7 +352,6 @@ export class VoiceOrchestrator {
 					console.error('[VoiceOrchestrator] Synthesis failed for segment:', item.segment.text, err);
 					continue; // skip this segment
 				}
-				console.log(`[VoiceOrchestrator] segment #${item.index} buffer ready after ${((performance.now()-t0)/1000).toFixed(2)}s wait (${buffer ? buffer.duration.toFixed(2)+'s audio' : 'null'})`);
 
 				if (!buffer || this.pipelineAbort?.signal.aborted) continue;
 
@@ -506,8 +502,6 @@ export class VoiceOrchestrator {
 		callbacks?: OrchestratorCallbacks
 	): Promise<void> {
 		const audioContext = getSharedAudioContext();
-		console.log('[Orchestrator] playBuffer', index, 'ctx state:', audioContext.state, 'duration:', buffer.duration.toFixed(2) + 's');
-
 		if (audioContext.state === 'suspended') {
 			await audioContext.resume();
 		}
@@ -523,7 +517,6 @@ export class VoiceOrchestrator {
 		this.currentSource = source;
 		this.currentAnalyser = analyser;
 
-		console.log('[Orchestrator] firing onSegmentStart + onAnalyserUpdate for index', index);
 		callbacks?.onSegmentStart?.(segment, index);
 		callbacks?.onAnalyserUpdate?.(analyser);
 
