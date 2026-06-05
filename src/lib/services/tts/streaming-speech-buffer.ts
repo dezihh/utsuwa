@@ -49,9 +49,20 @@ export class StreamingSpeechBuffer {
 	}
 
 	private tryEmitBlock(text: string): void {
-		// Treat [lang:xx] and [voice:xxx] as block boundaries so the segment preceding
-		// the tag is emitted before the tag changes state for the next segment.
-		const tagBoundaryMatch = /\[lang:[a-z]{2,3}\]|\[voice:(?:default|alt)\]/gi.exec(text);
+		const TAG_RE = /\[lang:[a-z]{2,3}\]|\[voice:(?:default|alt)\]/gi;
+
+		// When a control tag sits at position 0, it's just a state-change marker —
+		// consume it immediately so it doesn't stall subsequent sentence detection.
+		const leadingTag = TAG_RE.exec(text);
+		TAG_RE.lastIndex = 0;
+		if (leadingTag && leadingTag.index === 0) {
+			this.emittedLength += leadingTag[0].length;
+			return; // tryEmit() will call us again with text after the tag
+		}
+
+		// Emit text that precedes a control tag as its own block so the tag's
+		// state change applies cleanly to the following content.
+		const tagBoundaryMatch = TAG_RE.exec(text);
 		if (tagBoundaryMatch && tagBoundaryMatch.index > 0) {
 			const block = text.slice(0, tagBoundaryMatch.index);
 			if (block.trim()) {
@@ -75,15 +86,14 @@ export class StreamingSpeechBuffer {
 			return;
 		}
 
-		// Emit only up to the FIRST sentence boundary so that Chatterbox can start
-		// synthesising sentence 1 immediately, without waiting for the last sentence.
-		// tryEmit() loops and calls us again for sentence 2, 3, … in sequence.
+		// Emit up to the first sentence boundary so TTS can start immediately.
+		// tryEmit() loops and calls us again for the next sentence.
 		const sentenceEnd = /([.!?…])\s+/;
 		const m = sentenceEnd.exec(text);
 		if (!m) return;
 
 		const firstEnd = m.index + m[0].length;
-		if (firstEnd < 20) return; // too short — wait for more text
+		if (firstEnd < 8) return; // too short — wait for more text
 
 		const block = text.slice(0, firstEnd);
 		if (block.trim()) {
