@@ -56,7 +56,9 @@ export class OmniVoiceTTS implements ITTSProvider {
 
 	async fetchAudioBuffer(text: string, options?: StreamOptions): Promise<AudioBuffer> {
 		const audioContext = this.getAudioContext();
-		if (audioContext.state === 'suspended') await audioContext.resume();
+		if (audioContext.state === 'suspended' || audioContext.state === ('interrupted' as AudioContextState)) {
+			await audioContext.resume();
+		}
 
 		const response = await this.requestStream(text, options);
 		if (!response.ok) {
