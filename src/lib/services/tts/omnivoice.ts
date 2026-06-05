@@ -25,7 +25,12 @@ export class OmniVoiceTTS implements ITTSProvider {
 	readonly capabilities: TTSCapabilities = {
 		streaming: false,
 		emotion: false,
-		multilingual: true
+		multilingual: true,
+		// OmniVoice is a diffusion model on a single GPU. Sending all segments in
+		// parallel causes the server to batch them → first audio arrives only after
+		// all segments are synthesised (~9s). Limiting to 2 concurrent requests
+		// keeps first-segment latency to ~1s while still pre-fetching the next one.
+		maxConcurrentSynthesis: 2
 	};
 
 	constructor(options: TTSOptions) {

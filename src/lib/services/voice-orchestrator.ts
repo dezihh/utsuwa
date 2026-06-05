@@ -41,6 +41,43 @@ export interface OrchestratorCallbacks {
 }
 
 // ---------------------------------------------------------------------------
+// Simple counting semaphore for limiting parallel TTS synthesis requests
+// ---------------------------------------------------------------------------
+
+class Semaphore {
+	private slots: number;
+	private queue: (() => void)[] = [];
+
+	constructor(limit: number) {
+		this.slots = limit;
+	}
+
+	acquire(): Promise<void> {
+		if (this.slots > 0) {
+			this.slots--;
+			return Promise.resolve();
+		}
+		return new Promise<void>((resolve) => this.queue.push(resolve));
+	}
+
+	release(): void {
+		const next = this.queue.shift();
+		if (next) {
+			next();
+		} else {
+			this.slots++;
+		}
+	}
+
+	/** Drain pending waiters (e.g. on interrupt) so they can check abort state. */
+	drainAndReset(limit: number): void {
+		this.slots = limit;
+		const pending = this.queue.splice(0);
+		for (const w of pending) w();
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Internal async producer-consumer queue for the pipeline
 // ---------------------------------------------------------------------------
 
@@ -121,6 +158,9 @@ export class VoiceOrchestrator {
 	private pipelineDone: Promise<void> = Promise.resolve();
 	private pipelineDoneResolved = true;
 
+	// Limits parallel TTS synthesis requests (important for single-GPU diffusion models)
+	private synthesisLimiter = new Semaphore(Infinity);
+
 	getAnalyser(): AnalyserNode | null {
 		return this.currentAnalyser;
 	}
@@ -161,6 +201,11 @@ export class VoiceOrchestrator {
 		this.pipelineIndex = 0;
 		this.bufferedStreamingSegments = [];
 		this.channel = new PipelineQueue();
+
+		// Apply provider-specific concurrency limit (e.g. OmniVoice = 2)
+		const provider = getTTSProvider(options);
+		const limit = provider.capabilities?.maxConcurrentSynthesis ?? Infinity;
+		this.synthesisLimiter.drainAndReset(limit);
 		this.pipelineDoneResolved = false;
 		this.pipelineDone = new Promise<void>((resolve) => {
 			this.pipelineDoneResolve = resolve;
@@ -236,6 +281,8 @@ export class VoiceOrchestrator {
 	interrupt(): void {
 		this.pipelineAbort?.abort();
 		this.pipelineAbort = null;
+
+		this.synthesisLimiter.drainAndReset(Infinity);
 
 		this.channel?.close();
 		this.channel = null;
@@ -344,6 +391,16 @@ export class VoiceOrchestrator {
 
 		if (signal.aborted) return null;
 
+		// Acquire a synthesis slot — limits parallel requests to the provider's
+		// maxConcurrentSynthesis cap (e.g. 2 for OmniVoice). This prevents all
+		// segments from being synthesised in one GPU batch, which would delay the
+		// first segment by the full batch duration instead of just one segment.
+		await this.synthesisLimiter.acquire();
+		if (signal.aborted) {
+			this.synthesisLimiter.release();
+			return null;
+		}
+
 		try {
 			// Preferred path: provider implements fetchAudioBuffer
 			if (provider.fetchAudioBuffer) {
@@ -361,6 +418,8 @@ export class VoiceOrchestrator {
 		} catch (err) {
 			if (signal.aborted || (err as Error).name === 'AbortError') return null;
 			throw err;
+		} finally {
+			this.synthesisLimiter.release();
 		}
 	}
 

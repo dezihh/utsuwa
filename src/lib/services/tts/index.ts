@@ -60,6 +60,13 @@ export interface TTSCapabilities {
 	streaming: boolean;
 	emotion: boolean;
 	multilingual: boolean;
+	/**
+	 * Max parallel synthesis requests for this provider.
+	 * Diffusion-based models (OmniVoice) saturate a single GPU when batched —
+	 * limiting concurrency keeps first-segment latency low.
+	 * Undefined = no limit (cloud APIs, streaming providers).
+	 */
+	maxConcurrentSynthesis?: number;
 }
 
 // Base TTS provider interface
