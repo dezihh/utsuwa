@@ -3,6 +3,40 @@ import type { ProviderConfig } from '$lib/types';
 import { LLM_PROVIDERS, TTS_PROVIDERS, STT_PROVIDERS } from '$lib/services/providers/registry';
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '$lib/services/platform/hotkeys';
 
+export interface PersonalityPreset {
+	id: string;
+	name: string;
+	systemPrompt: string;
+}
+
+const DEFAULT_PERSONALITY_PRESETS: PersonalityPreset[] = [
+	{
+		id: 'standard',
+		name: 'Standard',
+		systemPrompt: ''
+	},
+	{
+		id: 'spanischlehrer',
+		name: 'Spanischlehrer',
+		systemPrompt: `Du bist ein freundlicher, geduldiger Spanischlehrer. Du bringst dem Nutzer Spanisch durch natürliche Konversation und kurze Übungen bei.
+
+SPRACHE:
+- Erkläre und kommentiere auf Deutsch.
+- Sprich Spanisch immer laut aus — nutze dazu [lang:es] vor dem spanischen Text, dann [lang:de] zurück. Beispiel:
+  "Auf Spanisch sagt man: [lang:es]¿Cómo estás? [lang:de]Das bedeutet: Wie geht es dir?"
+- Gib nach spanischen Sätzen immer die deutsche Übersetzung.
+
+DIALOGE & ROLLENSPIELE:
+Wenn du einen Dialog simulierst oder Rollenspiele machst, übernimmst du beide Rollen:
+- [voice:default] — deine Lehrerrolle
+- [voice:alt] — Schüler oder Gesprächspartner
+Setze [voice:xxx] immer an den Anfang des jeweiligen Absatzes.
+
+KORREKTUREN:
+Erst loben, dann die richtige Form nennen. Kurz und lebendig bleiben.`
+	}
+];
+
 export type ProviderCategory = 'llm' | 'tts' | 'stt';
 
 function createSettingsStore() {
@@ -16,6 +50,10 @@ function createSettingsStore() {
 	// Desktop hotkey configuration
 	let hotkeys = $state<HotkeyConfig>({ ...DEFAULT_HOTKEYS });
 
+	// Personality profiles
+	let personalityProfiles = $state<PersonalityPreset[]>([...DEFAULT_PERSONALITY_PRESETS]);
+	let activeProfileId = $state<string>('standard');
+
 	// Load from localStorage on init
 	if (browser) {
 		const saved = localStorage.getItem('utsuwa-settings');
@@ -25,6 +63,10 @@ function createSettingsStore() {
 				providerConfigs = parsed.providerConfigs ?? {};
 				addedProviders = parsed.addedProviders ?? {};
 				hotkeys = { ...DEFAULT_HOTKEYS, ...parsed.hotkeys };
+				if (Array.isArray(parsed.personalityProfiles) && parsed.personalityProfiles.length > 0) {
+					personalityProfiles = parsed.personalityProfiles;
+				}
+				if (parsed.activeProfileId) activeProfileId = parsed.activeProfileId;
 
 				// Migrate old settings format if needed
 				if (parsed.anthropicApiKey && !providerConfigs.anthropic) {
@@ -63,7 +105,9 @@ function createSettingsStore() {
 				JSON.stringify({
 					providerConfigs,
 					addedProviders,
-					hotkeys
+					hotkeys,
+					personalityProfiles,
+					activeProfileId
 				})
 			);
 		}
@@ -78,11 +122,45 @@ function createSettingsStore() {
 					providerConfigs = parsed.providerConfigs ?? {};
 					addedProviders = parsed.addedProviders ?? {};
 					hotkeys = { ...DEFAULT_HOTKEYS, ...parsed.hotkeys };
+					if (Array.isArray(parsed.personalityProfiles)) personalityProfiles = parsed.personalityProfiles;
+					if (parsed.activeProfileId) activeProfileId = parsed.activeProfileId;
 				} catch {
 					// Ignore malformed data from other window
 				}
 			}
 		});
+	}
+
+	// Personality profile management
+	function getPersonalityProfiles(): PersonalityPreset[] {
+		return personalityProfiles;
+	}
+
+	function getActiveProfileId(): string {
+		return activeProfileId;
+	}
+
+	function setActiveProfileId(id: string) {
+		activeProfileId = id;
+		save();
+	}
+
+	function updatePersonalityProfile(id: string, updates: Partial<Omit<PersonalityPreset, 'id'>>) {
+		personalityProfiles = personalityProfiles.map((p) => (p.id === id ? { ...p, ...updates } : p));
+		save();
+	}
+
+	function addPersonalityProfile(profile: PersonalityPreset) {
+		personalityProfiles = [...personalityProfiles, profile];
+		save();
+	}
+
+	function removePersonalityProfile(id: string) {
+		personalityProfiles = personalityProfiles.filter((p) => p.id !== id);
+		if (activeProfileId === id) {
+			activeProfileId = personalityProfiles[0]?.id ?? 'standard';
+		}
+		save();
 	}
 
 	// Provider configuration
@@ -295,7 +373,15 @@ function createSettingsStore() {
 		},
 		setHotkey,
 		getHotkey,
-		resetHotkeys
+		resetHotkeys,
+
+		// Personality profiles
+		getPersonalityProfiles,
+		getActiveProfileId,
+		setActiveProfileId,
+		updatePersonalityProfile,
+		addPersonalityProfile,
+		removePersonalityProfile
 	};
 }
 

@@ -292,7 +292,11 @@ export function splitIntoSentences(text: string): string[] {
 }
 
 export function stripLangTags(text: string): string {
-	return text.replace(/\[lang:[a-z]{2,3}\]/gi, '').replace(/  +/g, ' ').trim();
+	return text
+		.replace(/\[lang:[a-z]{2,3}\]/gi, '')
+		.replace(/\[voice:(?:default|alt)\]/gi, '')
+		.replace(/  +/g, ' ')
+		.trim();
 }
 
 export function replaceEmotionTagsForDisplay(text: string): string {
@@ -370,11 +374,16 @@ export function splitIntoSegments(
 		segments[0] = { ...segments[0], action };
 	}
 
-	// Use cleanText (action tags stripped) in the fallback — never return raw tag text to TTS
+	// Fallback: strip control tags (lang/voice) before checking emptiness.
+	// A text consisting only of [voice:default] or [lang:es] produces no speech.
+	const fallbackText = cleanText
+		.replace(/\[lang:[a-z]{2,3}\]/gi, '')
+		.replace(/\[voice:(?:default|alt)\]/gi, '')
+		.trim();
 	return segments.length > 0
 		? segments
-		: cleanText.trim()
-			? [{ text: cleanText.trim(), language: defaultLanguage }]
+		: fallbackText
+			? [{ text: fallbackText, language: defaultLanguage }]
 			: [];
 }
 

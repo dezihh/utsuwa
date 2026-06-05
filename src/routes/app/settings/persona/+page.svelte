@@ -3,7 +3,7 @@
 	import { characterStore } from '$lib/stores/character.svelte';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 	import { modulesStore } from '$lib/stores/modules.svelte';
-	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { settingsStore, type PersonalityPreset } from '$lib/stores/settings.svelte';
 	import { getLLMProvider, getTTSProvider } from '$lib/services/providers/registry';
 
 	import { Icon, Progress, Tooltip, ProviderDropdown, ModelDropdown } from '$lib/components/ui';
@@ -84,6 +84,14 @@
 	let formName = $state('');
 	let formSystemPrompt = $state('');
 	let personalityExpanded = $state(false);
+
+	// Personality profiles
+	let editingProfileId = $state<string | null>(null);
+	let editingProfileName = $state('');
+
+	const activeProfileId = $derived(settingsStore.getActiveProfileId());
+	const personalityProfiles = $derived(settingsStore.getPersonalityProfiles());
+	const activeProfile = $derived(personalityProfiles.find((p) => p.id === activeProfileId) ?? personalityProfiles[0]);
 	let aiServicesExpanded = $state(false);
 	let expressionMappingExpanded = $state(false);
 	let eventsExpanded = $state(false);
@@ -442,7 +450,20 @@
 	$effect(() => {
 		if (characterStore.isReady) {
 			formName = personaStore.name;
-			formSystemPrompt = personaStore.systemPrompt;
+			// If the active "Standard" profile is still empty, seed it from the character store
+			const currentProfile = settingsStore.getPersonalityProfiles().find(
+				(p) => p.id === settingsStore.getActiveProfileId()
+			);
+			if (currentProfile) {
+				if (currentProfile.id === 'standard' && !currentProfile.systemPrompt && personaStore.systemPrompt) {
+					settingsStore.updatePersonalityProfile('standard', { systemPrompt: personaStore.systemPrompt });
+				}
+				formSystemPrompt = currentProfile.id === 'standard' && !currentProfile.systemPrompt
+					? personaStore.systemPrompt
+					: currentProfile.systemPrompt;
+			} else {
+				formSystemPrompt = personaStore.systemPrompt;
+			}
 		}
 	});
 
@@ -451,7 +472,64 @@
 	}
 
 	function saveSystemPrompt() {
+		const id = settingsStore.getActiveProfileId();
+		settingsStore.updatePersonalityProfile(id, { systemPrompt: formSystemPrompt });
 		personaStore.updateCard({ systemPrompt: formSystemPrompt });
+	}
+
+	function switchProfile(profileId: string) {
+		// Persist current textarea to current profile before switching
+		const currentId = settingsStore.getActiveProfileId();
+		settingsStore.updatePersonalityProfile(currentId, { systemPrompt: formSystemPrompt });
+		// Switch
+		settingsStore.setActiveProfileId(profileId);
+		const next = settingsStore.getPersonalityProfiles().find((p) => p.id === profileId);
+		if (next) {
+			formSystemPrompt = next.systemPrompt;
+			personaStore.updateCard({ systemPrompt: next.systemPrompt });
+		}
+	}
+
+	function addProfile() {
+		const id = crypto.randomUUID();
+		const newProfile: PersonalityPreset = { id, name: 'Neues Profil', systemPrompt: '' };
+		settingsStore.addPersonalityProfile(newProfile);
+		// Switch to it and open rename mode
+		settingsStore.updatePersonalityProfile(settingsStore.getActiveProfileId(), { systemPrompt: formSystemPrompt });
+		settingsStore.setActiveProfileId(id);
+		formSystemPrompt = '';
+		personaStore.updateCard({ systemPrompt: '' });
+		editingProfileId = id;
+		editingProfileName = newProfile.name;
+	}
+
+	function deleteProfile(id: string) {
+		const profiles = settingsStore.getPersonalityProfiles();
+		if (profiles.length <= 1) return;
+		const isActive = settingsStore.getActiveProfileId() === id;
+		settingsStore.removePersonalityProfile(id);
+		if (isActive) {
+			const remaining = settingsStore.getPersonalityProfiles();
+			const next = remaining[0];
+			if (next) {
+				settingsStore.setActiveProfileId(next.id);
+				formSystemPrompt = next.systemPrompt;
+				personaStore.updateCard({ systemPrompt: next.systemPrompt });
+			}
+		}
+	}
+
+	function startRename(profile: PersonalityPreset) {
+		editingProfileId = profile.id;
+		editingProfileName = profile.name;
+	}
+
+	function commitRename() {
+		if (editingProfileId && editingProfileName.trim()) {
+			settingsStore.updatePersonalityProfile(editingProfileId, { name: editingProfileName.trim() });
+		}
+		editingProfileId = null;
+		editingProfileName = '';
 	}
 
 	// AI Services handlers
@@ -839,6 +917,44 @@
 				</button>
 				{#if personalityExpanded}
 					<div class="personality-content">
+						<!-- Profile selector bar -->
+						<div class="profile-bar">
+							<div class="profile-selector">
+								{#each personalityProfiles as profile}
+									{#if editingProfileId === profile.id}
+										<input
+											class="profile-name-input"
+											type="text"
+											bind:value={editingProfileName}
+											onblur={commitRename}
+											onkeydown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') commitRename(); }}
+											autofocus
+										/>
+									{:else}
+										<button
+											class="profile-tab"
+											class:active={activeProfileId === profile.id}
+											onclick={() => switchProfile(profile.id)}
+											ondblclick={() => startRename(profile)}
+											title="Doppelklick zum Umbenennen"
+										>{profile.name}</button>
+									{/if}
+								{/each}
+							</div>
+							<div class="profile-actions">
+								<button class="profile-btn" onclick={addProfile} title="Neues Profil">
+									<Icon name="plus" size={13} />
+								</button>
+								<button
+									class="profile-btn danger"
+									onclick={() => activeProfile && deleteProfile(activeProfile.id)}
+									title="Profil löschen"
+									disabled={personalityProfiles.length <= 1}
+								>
+									<Icon name="trash" size={13} />
+								</button>
+							</div>
+						</div>
 						<textarea
 							class="personality-textarea"
 							bind:value={formSystemPrompt}
@@ -2404,6 +2520,89 @@
 
 	.personality-content {
 		padding: 0 1rem 1rem;
+	}
+
+	.profile-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.profile-selector {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		flex: 1;
+	}
+
+	.profile-tab {
+		padding: 0.2rem 0.6rem;
+		border-radius: 6px;
+		border: 1px solid var(--border-color, rgba(0,0,0,0.12));
+		background: transparent;
+		font-size: 0.72rem;
+		cursor: pointer;
+		color: var(--text-secondary);
+		transition: background 0.15s, color 0.15s;
+	}
+
+	.profile-tab:hover {
+		background: rgba(1, 178, 255, 0.08);
+		color: var(--text-primary);
+	}
+
+	.profile-tab.active {
+		background: #01B2FF;
+		color: #fff;
+		border-color: #01B2FF;
+		font-weight: 600;
+	}
+
+	.profile-name-input {
+		padding: 0.2rem 0.5rem;
+		border-radius: 6px;
+		border: 1px solid #01B2FF;
+		background: transparent;
+		font-size: 0.72rem;
+		color: var(--text-primary);
+		min-width: 80px;
+		outline: none;
+	}
+
+	.profile-actions {
+		display: flex;
+		gap: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	.profile-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px;
+		height: 22px;
+		border-radius: 5px;
+		border: 1px solid var(--border-color, rgba(0,0,0,0.12));
+		background: transparent;
+		cursor: pointer;
+		color: var(--text-secondary);
+		transition: background 0.15s;
+	}
+
+	.profile-btn:hover:not(:disabled) {
+		background: rgba(1, 178, 255, 0.1);
+		color: #01B2FF;
+	}
+
+	.profile-btn.danger:hover:not(:disabled) {
+		background: rgba(239, 68, 68, 0.1);
+		color: #ef4444;
+	}
+
+	.profile-btn:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
 	}
 
 	.personality-textarea {

@@ -440,6 +440,15 @@ BODY ACTIONS (trigger avatar animations — use sparingly):
   Place [action:xxx] at the start of the sentence where the animation should play.
   Use at most ONE action tag per response.
 
+LANGUAGE TAGS (switch spoken language mid-response):
+  [lang:de]  — switch to German
+  [lang:es]  — switch to Spanish
+  [lang:en]  — switch to English
+  [lang:fr]  — switch to French
+  (and any other ISO 639-1 code)
+  Place [lang:xx] immediately before the first word in the new language.
+  The tag applies to all following text until the next [lang:xx] tag.
+
 SPEED TAGS:
   [slow]  — speak slowly and thoughtfully
   [fast]  — speak quickly or excitedly
@@ -447,7 +456,7 @@ SPEED TAGS:
 VOICE TAGS (switch between speakers — only relevant when two roles are active):
   [voice:default]  — primary voice (your default speaking role)
   [voice:alt]      — alternative voice (second role, e.g. student or dialogue partner)
-  Place [voice:xxx] at the very start of the turn or paragraph where the speaker changes.
+  Place [voice:xxx] at the very start of the paragraph where the speaker changes.
   Omit voice tags entirely if there is only one speaker.
 
 RULES:
