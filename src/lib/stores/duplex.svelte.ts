@@ -82,6 +82,14 @@
 	/** Auto-dismiss the noise toast after 2s */
 	let noiseToastTimer: ReturnType<typeof setTimeout> | null = null;
 
+	/**
+	 * Hold-off before interrupting TTS on speech onset.
+	 * If onNoiseDetected fires before this timer, the interrupt is cancelled
+	 * (it was background noise, not real speech).
+	 */
+	let interruptHoldoff: ReturnType<typeof setTimeout> | null = null;
+	const INTERRUPT_HOLDOFF_MS = 250;
+
 	/** Watchdog: if stuck in thinking/transcribing, auto-return to listening. */
 	let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
 	const WATCHDOG_MS = 30_000;
@@ -226,23 +234,42 @@
 					duplexAudioLevel = level;
 				},
 				onSpeechStart: () => {
-					// Only interrupt active TTS playback.
-					// If we're still thinking, keep recording/transcribing so the
-					// next user turn can abort the request naturally.
-					if (ttsActive) {
-						onInterrupt?.();
-						ttsActive = false;
+					// Only interrupt active TTS playback. Use a short hold-off so that
+					// brief background-noise spikes (< INTERRUPT_HOLDOFF_MS) don't stop
+					// the TTS — onNoiseDetected will cancel the timer if it was just noise.
+					if (ttsActive && interruptHoldoff === null) {
+						interruptHoldoff = setTimeout(() => {
+							interruptHoldoff = null;
+							if (ttsActive) {
+								onInterrupt?.();
+								ttsActive = false;
+							}
+						}, INTERRUPT_HOLDOFF_MS);
 					}
 				},
 				onSegmentReady: (blob, mimeType) => {
 					console.debug(`[Duplex] Segment ready: ${blob.size} bytes, phase=${duplexPhase}, active=${isDuplexActive}`);
 					if (!isDuplexActive) return;
+					// Speech confirmed — fire any pending interrupt immediately.
+					if (interruptHoldoff !== null) {
+						clearTimeout(interruptHoldoff);
+						interruptHoldoff = null;
+						if (ttsActive) {
+							onInterrupt?.();
+							ttsActive = false;
+						}
+					}
 					// Skip if a transcription or LLM call is already in flight to avoid
 					// concurrent whisper requests which cause intermittent 500 errors.
 					if (duplexPhase === 'transcribing' || duplexPhase === 'thinking') return;
 					transcribeSegment(blob, mimeType);
 				},
 				onNoiseDetected: () => {
+					// Cancel pending TTS interrupt — the onset was just noise.
+					if (interruptHoldoff !== null) {
+						clearTimeout(interruptHoldoff);
+						interruptHoldoff = null;
+					}
 					triggerNoiseToast();
 				},
 				onError: (msg) => {
@@ -277,6 +304,7 @@
 
 	export function stopDuplex() {
 		clearWatchdog();
+		if (interruptHoldoff !== null) { clearTimeout(interruptHoldoff); interruptHoldoff = null; }
 		isDuplexActive = false;
 		ttsActive = false;
 		onTranscript = null;
@@ -298,6 +326,8 @@
 	export function onTTSDone() {
 		if (!isDuplexActive) return;
 		clearWatchdog();
+		// Cancel any pending interrupt — TTS finished naturally, no need to interrupt.
+		if (interruptHoldoff !== null) { clearTimeout(interruptHoldoff); interruptHoldoff = null; }
 		ttsActive = false;
 		// VAD is already running — just switch phase back to listening.
 		setPhase('listening');

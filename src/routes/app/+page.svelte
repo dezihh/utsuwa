@@ -89,6 +89,12 @@
 	let spokenSoFar = $state('');
 	let llmAbortController: AbortController | null = null;
 
+	// Replay tracking: all segments queued in the current TTS session and the
+	// orchestrator index of the last segment that started playing.
+	// Used by "setze fort" to replay unspoken content without a new LLM call.
+	let sessionSegments: SpeechSegment[] = [];
+	let lastPlayedSegmentIndex = -1;
+
 	// Chat sidebar state
 	let sidebarOpen = $state(displayStore.chatDisplayMode !== 'bubble');
 	const showBubble = $derived(
@@ -278,6 +284,66 @@
 		}
 
 		const continueMode = isContinueRequest(content);
+
+		// If TTS was interrupted and there are unplayed segments, replay them directly
+		// without calling the LLM — "setze fort" resumes exactly where audio stopped.
+		if (continueMode && lastPlayedSegmentIndex < sessionSegments.length - 1) {
+			const unplayed = sessionSegments.slice(lastPlayedSegmentIndex + 1);
+			if (unplayed.length > 0) {
+				const speechState = modulesStore.getModuleState('speech');
+				const speechSettings = modulesStore.getModuleSettings('speech');
+				const ttsEnabled = speechState?.enabled;
+				const ttsProvider = speechSettings?.activeProvider as TTSProvider | undefined;
+				const ttsConfig = ttsProvider ? settingsStore.getProviderConfig(ttsProvider) : null;
+				const isChatterbox = ttsProvider === 'chatterbox';
+				const isOmniVoice = ttsProvider === 'omnivoice';
+				const ttsMeta = ttsProvider ? getTTSProvider(ttsProvider) : null;
+				const ttsOptions = ttsEnabled && ttsProvider && ttsConfig ? {
+					provider: ttsProvider,
+					apiKey: ttsConfig.apiKey,
+					voiceId: isOmniVoice
+						? (buildOmniVoiceDescriptor(ttsConfig) || (speechSettings.activeVoiceId as string) || ttsConfig.voiceId)
+						: ((speechSettings.activeVoiceId as string) || ttsConfig.voiceId),
+					alternativeVoiceId: isOmniVoice
+						? (ttsConfig.omnivoiceAltEnabled ? buildOmniVoiceDescriptor(ttsConfig, true) : undefined)
+						: undefined,
+					rvcVoiceId: (speechSettings.activeRvcVoiceId as string) || ttsConfig.rvcVoiceId,
+					baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
+					speed: isOmniVoice
+						? (ttsConfig.omnivoiceDefaultSpeed ?? (speechSettings.speed as number) ?? 1)
+						: ((speechSettings.speed as number) ?? 1),
+					alternativeSpeed: isOmniVoice ? ttsConfig.omnivoiceAltSpeed : undefined,
+					exaggeration: ttsConfig.exaggeration,
+					language: ttsConfig.language,
+					cfgWeight: ttsConfig.cfgWeight,
+					temperature: ttsConfig.temperature,
+					omnivoiceNumStep: ttsConfig.omnivoiceNumStep
+				} : null;
+
+				if (ttsOptions) {
+					chatStore.addMessage('user', content);
+					sessionSegments = unplayed;
+					lastPlayedSegmentIndex = -1;
+					spokenSoFar = '';
+					latestResponse = '';
+					onTTSStarted();
+					vrmStore.startTalking(unplayed[0].text);
+					ttsStore.beginSpeechSession(ttsOptions, {
+						onSentenceStart: (sentence, index) => {
+							lastPlayedSegmentIndex = index;
+							isTyping = false;
+							latestResponse = sentence;
+							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
+						}
+					});
+					for (const seg of unplayed) ttsStore.pushSpeechSegment(seg);
+					await ttsStore.endSpeechSession();
+					onTTSDone();
+					return;
+				}
+			}
+		}
+
 		let continueFromText: string | undefined;
 		if (continueMode) {
 			for (let i = chatStore.messages.length - 1; i >= 0; i--) {
@@ -357,8 +423,13 @@
 					: null;
 
 			let ttsStarted = false;
+			// Reset replay tracking for this response
+			sessionSegments = [];
+			lastPlayedSegmentIndex = -1;
+
 			const enqueueTTS = (segment: SpeechSegment) => {
 				if (!ttsOptions) return;
+				sessionSegments.push(segment);
 				if (!ttsStarted) {
 					ttsStarted = true;
 					vrmStore.startTalking(segment.text);
@@ -366,7 +437,8 @@
 					// Open a pipeline session — synthesis of each segment starts immediately
 					// when pushSpeechSegment() is called, overlapping with playback.
 					ttsStore.beginSpeechSession(ttsOptions, {
-						onSentenceStart: (sentence) => {
+						onSentenceStart: (sentence, index) => {
+							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							latestResponse = sentence;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
