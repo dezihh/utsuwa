@@ -16,6 +16,8 @@ export interface PromptContext {
 	ttsProvider?: string;
 	/** Default language code for [lang:xx] hints (e.g. 'de', 'es') */
 	ttsLanguage?: string;
+	/** When true, an alternative voice is configured — LLM should use [voice:alt] for language switches */
+	ttsAltVoiceEnabled?: boolean;
 	/** Active MCP tools — when provided, injects a tool-use instruction block */
 	mcpTools?: McpTool[];
 	/** When true, continue a previously interrupted response */
@@ -453,11 +455,16 @@ SPEED TAGS:
   [slow]  — speak slowly and thoughtfully
   [fast]  — speak quickly or excitedly
 
-VOICE TAGS (switch between speakers — only relevant when two roles are active):
+${ctx.ttsAltVoiceEnabled ? `VOICE TAGS (two voices are configured — use them for language switches):
+  [voice:default]  — primary voice, use for the primary language
+  [voice:alt]      — alternative voice, use for ANY other language
+  Place [voice:xxx] immediately before the first word in the new language (together with [lang:xx]).
+  Always switch voice when switching language. Switch back with [voice:default][lang:xx] when returning.
+  EXAMPLE: "[voice:default][lang:de]Auf Deutsch: Wie geht es dir? [voice:alt][lang:es]¿Cómo estás? [voice:default][lang:de]Das war Spanisch."` : `VOICE TAGS (switch between speakers — only relevant when two roles are active):
   [voice:default]  — primary voice (your default speaking role)
   [voice:alt]      — alternative voice (second role, e.g. student or dialogue partner)
   Place [voice:xxx] at the very start of the paragraph where the speaker changes.
-  Omit voice tags entirely if there is only one speaker.
+  Omit voice tags entirely if there is only one speaker.`}
 
 RULES:
 - Place emotion tags immediately before the affected word or sentence.

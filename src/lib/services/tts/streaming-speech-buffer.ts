@@ -10,6 +10,11 @@ export interface StreamingSpeechBufferOptions {
 export class StreamingSpeechBuffer {
 	private buffer = '';
 	private emittedLength = 0;
+	// Accumulates [lang:xx] / [voice:xxx] tags that were consumed at position 0
+	// so they can be prepended to the next emitted text block. Without this,
+	// a leading [lang:es] would be discarded and the following text would be
+	// synthesised with the wrong language.
+	private pendingStatePrefix = '';
 	private readonly options: StreamingSpeechBufferOptions;
 
 	constructor(options: StreamingSpeechBufferOptions) {
@@ -22,18 +27,20 @@ export class StreamingSpeechBuffer {
 	}
 
 	flush(): void {
-		const remaining = this.buffer.slice(this.emittedLength).trim();
+		const remaining = (this.pendingStatePrefix + this.buffer.slice(this.emittedLength)).trim();
 		if (!remaining) return;
 
 		for (const seg of splitIntoSegments(remaining, this.options.defaultLanguage, false)) {
 			this.options.onSegment(seg);
 		}
 		this.emittedLength = this.buffer.length;
+		this.pendingStatePrefix = '';
 	}
 
 	reset(): void {
 		this.buffer = '';
 		this.emittedLength = 0;
+		this.pendingStatePrefix = '';
 	}
 
 	private tryEmit(): void {
@@ -48,14 +55,24 @@ export class StreamingSpeechBuffer {
 		}
 	}
 
+	private emit(block: string): void {
+		const textWithState = this.pendingStatePrefix + block;
+		this.pendingStatePrefix = '';
+		for (const seg of splitIntoSegments(textWithState, this.options.defaultLanguage, false)) {
+			this.options.onSegment(seg);
+		}
+	}
+
 	private tryEmitBlock(text: string): void {
 		const TAG_RE = /\[lang:[a-z]{2,3}\]|\[voice:(?:default|alt)\]/gi;
 
-		// When a control tag sits at position 0, it's just a state-change marker —
-		// consume it immediately so it doesn't stall subsequent sentence detection.
+		// When a control tag sits at position 0, accumulate it in pendingStatePrefix
+		// instead of discarding it — it will be prepended to the next text block so
+		// splitIntoSegments assigns the correct language/voice to those segments.
 		const leadingTag = TAG_RE.exec(text);
 		TAG_RE.lastIndex = 0;
 		if (leadingTag && leadingTag.index === 0) {
+			this.pendingStatePrefix += leadingTag[0];
 			this.emittedLength += leadingTag[0].length;
 			return; // tryEmit() will call us again with text after the tag
 		}
@@ -66,9 +83,7 @@ export class StreamingSpeechBuffer {
 		if (tagBoundaryMatch && tagBoundaryMatch.index > 0) {
 			const block = text.slice(0, tagBoundaryMatch.index);
 			if (block.trim()) {
-				for (const seg of splitIntoSegments(block, this.options.defaultLanguage, false)) {
-					this.options.onSegment(seg);
-				}
+				this.emit(block);
 				this.emittedLength += tagBoundaryMatch.index;
 			}
 			return;
@@ -78,9 +93,7 @@ export class StreamingSpeechBuffer {
 		if (paraBreak > 0) {
 			const block = text.slice(0, paraBreak);
 			if (block.trim()) {
-				for (const seg of splitIntoSegments(block, this.options.defaultLanguage, false)) {
-					this.options.onSegment(seg);
-				}
+				this.emit(block);
 				this.emittedLength += paraBreak + 2;
 			}
 			return;
@@ -97,9 +110,7 @@ export class StreamingSpeechBuffer {
 
 		const block = text.slice(0, firstEnd);
 		if (block.trim()) {
-			for (const seg of splitIntoSegments(block, this.options.defaultLanguage, false)) {
-				this.options.onSegment(seg);
-			}
+			this.emit(block);
 			this.emittedLength += firstEnd;
 		}
 	}

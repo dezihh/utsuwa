@@ -112,12 +112,18 @@ export class OmniVoiceTTS implements ITTSProvider {
 	}
 
 	private async requestStream(text: string, options?: StreamOptions): Promise<Response> {
+		const rawVoice = options?.voiceId ?? this.voiceId;
+		// "instruct:<desc>" → OmniVoice design mode (text descriptor).
+		// Anything else → clone mode (voice ID lookup).
+		const isInstruct = rawVoice?.startsWith('instruct:');
+		const voiceValue = isInstruct ? rawVoice.slice('instruct:'.length) : rawVoice;
+
 		return fetch('/api/tts/omnivoice/stream', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				text,
-				voice: options?.voiceId ?? this.voiceId,
+				...(isInstruct ? { instruct: voiceValue } : { voice: voiceValue }),
 				numStep: this.numStep,
 				baseUrl: this.baseUrl,
 				language: options?.language,

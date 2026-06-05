@@ -56,14 +56,20 @@
 		if (type === 'clone') {
 			return (isAlt ? cfg.omnivoiceAltCloneId : cfg.omnivoiceDefaultCloneId) || '';
 		}
-		if (type === 'internal') {
+		// 'internal' or undefined → design mode with text descriptor.
+		// undefined happens when the user never explicitly touched the Voice Type dropdown
+		// but the UI shows "Synthetic" as default via ?? 'internal'.
+		if (type === 'internal' || type === undefined) {
 			const gender = isAlt ? cfg.omnivoiceAltGender : cfg.omnivoiceDefaultGender;
 			const age    = isAlt ? cfg.omnivoiceAltAge    : cfg.omnivoiceDefaultAge;
 			const pitch  = isAlt ? cfg.omnivoiceAltPitch  : cfg.omnivoiceDefaultPitch;
 			const parts  = [gender, age, pitch].filter(Boolean);
-			return parts.length > 0 ? parts.join(', ') : 'female';
+			const desc = parts.length > 0 ? parts.join(', ') : 'female';
+			// Prefix "instruct:" signals OmniVoice design mode (text descriptor → instruct param)
+			// vs clone mode (voice ID lookup). Detected in OmniVoiceTTS.requestStream.
+			return `instruct:${desc}`;
 		}
-		// Profile not yet configured — fall back to legacy voiceId
+		// Alt voice not configured — let caller decide fallback
 		return '';
 	}
 
@@ -266,6 +272,7 @@
 			systemTime: new Date(),
 			ttsProvider: activeTTSProvider,
 			ttsLanguage: ttsConfig?.language || undefined,
+			ttsAltVoiceEnabled: activeTTSProvider === 'omnivoice' && !!(ttsConfig?.omnivoiceAltEnabled),
 			mcpTools: activeMcpTools,
 			continueMode: options?.continueMode,
 			continueFromText: options?.continueFromText

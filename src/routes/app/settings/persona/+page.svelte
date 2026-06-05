@@ -1279,12 +1279,12 @@
 											<select
 												id="ps-ov-def-pitch"
 												class="api-key-input"
-												value={settingsStore.getProviderConfig('omnivoice').omnivoiceDefaultPitch ?? 'moderate'}
+												value={settingsStore.getProviderConfig('omnivoice').omnivoiceDefaultPitch ?? 'moderate pitch'}
 												onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceDefaultPitch: e.currentTarget.value })}
 											>
 												<option value="very low pitch">Very Low</option>
 												<option value="low pitch">Low</option>
-												<option value="moderate">Moderate</option>
+												<option value="moderate pitch">Moderate</option>
 												<option value="high pitch">High</option>
 												<option value="very high pitch">Very High</option>
 											</select>
@@ -1387,12 +1387,12 @@
 												<select
 													id="ps-ov-alt-pitch"
 													class="api-key-input"
-													value={settingsStore.getProviderConfig('omnivoice').omnivoiceAltPitch ?? 'moderate'}
+													value={settingsStore.getProviderConfig('omnivoice').omnivoiceAltPitch ?? 'moderate pitch'}
 													onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceAltPitch: e.currentTarget.value })}
 												>
 													<option value="very low pitch">Very Low</option>
 													<option value="low pitch">Low</option>
-													<option value="moderate">Moderate</option>
+													<option value="moderate pitch">Moderate</option>
 													<option value="high pitch">High</option>
 													<option value="very high pitch">Very High</option>
 												</select>
