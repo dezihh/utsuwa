@@ -482,7 +482,9 @@ function extractEmotionSegments(sentence: string, language?: string): SpeechSegm
 	return result.filter((s) => s.text.length > 0);
 }
 
-const CONTINUE_PATTERNS = /^(weiter|sprich weiter|setz(e)? fort|erzähl(e?)? weiter|mach weiter|continue|go on|keep going|and then\??|und dann\??)$/i;
+// Multilingual "continue" phrases — exact whole-message match, case-insensitive.
+// de, en, es, fr, it, pt, nl, pl, ru, ja, zh, ko
+const CONTINUE_PATTERNS = /^(weiter|sprich weiter|setz(e)? fort|erzähl(e?)? weiter|mach weiter|und dann|continue|continues|go on|keep going|and then|please continue|continúa|continuar|sigue|sigue adelante|adelante|poursuis|vas-y|continua|vai avanti|avanti|prossegue|vai em frente|ga door|verder|kontynuuj|dalej|продолжай|дальше|続けて|続き|继续|계속)$/iu;
 
 export function isContinueRequest(text: string): boolean {
 	return CONTINUE_PATTERNS.test(text.trim());
