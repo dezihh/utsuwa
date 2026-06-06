@@ -20,16 +20,17 @@
 - **VRM Model Viewer**: Load and display VRM 3D avatar models with orbit controls
 - **Model-Centric UI**: Full-screen 3D model with unobtrusive overlay controls
 - **3D Speech Bubbles**: Chat responses appear as bubbles that track the model's head in 3D space
+- **Chat Display Modes**: Choose Bubble, Sidebar, Both, or Off — with configurable typing indicator delay and optional wait tone
 - **Chat Interface**: Bottom-centered input bar with streaming responses and sentence-by-sentence TTS delivery
 - **Dockable Chat Sidebar**: Collapsible sidebar showing full conversation history alongside the 3D view
 - **Voice Input**: Speech-to-text via Groq (Whisper), local Whisper server, or Web Speech API with real-time audio visualization
 - **Duplex / VOX Mode**: Hands-free conversation — the companion listens continuously, detects speech automatically using voice activity detection (VAD), transcribes, responds, and returns to listening. Includes noise rejection, background-noise toast notifications, and live sensitivity controls.
 - **LLM Integration**: Support for 9 LLM providers including OpenAI, Anthropic, Google, xAI, DeepSeek, OpenRouter, Ollama, LM Studio, and llama.cpp
 - **Local Model Discovery**: Ollama and LM Studio discover installed local models directly from your device
-- **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, AllTalk, and Chatterbox (with per-segment language + expression tags)
+- **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, AllTalk, Chatterbox, and OmniVoice (with per-segment language + expression tags)
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
 - **Animations**: VRMA-based idle and talking animations with automatic blinking
-- **Character Customization**: Customize your companion's name, personality, and system prompt
+- **Character Customization**: Customize your companion's name, personality, and system prompt with saveable presets
 - **Companion System**: Multi-axis relationship tracking with mood, events, and semantic memory
 - **Semantic Memory**: Local AI-powered memory search using Transformers.js - finds memories by meaning, not just keywords
 - **Memory Graph**: Interactive visualization showing how memories connect semantically
@@ -82,12 +83,29 @@ The desktop app uses the same codebase as the web version — your save files ar
 | **Cloud** | OpenAI, Anthropic, Google Gemini, DeepSeek, xAI (Grok), OpenRouter |
 | **Local** | Ollama, LM Studio, llama.cpp |
 
-### TTS Providers (4)
+### TTS Providers (5)
 
 | Category | Providers |
 |----------|-----------|
 | **Cloud** | ElevenLabs, OpenAI TTS |
-| **Local** | AllTalk, Chatterbox |
+| **Local** | AllTalk, Chatterbox, OmniVoice |
+
+#### OmniVoice TTS
+
+OmniVoice is a local diffusion-based TTS engine with 600+ language support and real-time factor ~0.5. Configure it under **Settings > AI Services > Speech TTS**.
+
+- Set the **API base URL** to your local OmniVoice container, for example `http://localhost:8766/`
+- Choose **Diffusion steps**: 16 (fast) or 32 (higher quality)
+- **Default Voice** profile — two modes:
+  - *Synthetic*: design a voice by selecting gender, age group, and pitch
+  - *Voice Clone*: select a voice sample loaded from the OmniVoice server
+  - Adjust per-voice **speed** (0.25–4.0×)
+- **Alternative Voice** profile (enable via checkbox) — same fields as Default, activated by `[voice:alt]` tags in responses
+  - When the LLM outputs `[voice:alt]`, OmniVoice switches to the alt profile for that block
+  - `[voice:default]` switches back to the main voice
+- Language tags `[lang:xx]` are forwarded to OmniVoice so the correct phoneme set is used per segment
+
+OmniVoice passes through the same action and emotion control tags as other providers; see the Chatterbox section for the full tag reference.
 
 #### AllTalk TTS
 
@@ -133,7 +151,7 @@ Processing rules:
 | **Local** | Whisper (local HTTP server) |
 | **Browser** | Web Speech API (no API key required) |
 
-Voice input is accessed via the microphone button in the chat bar. Groq STT uses Whisper for accurate transcription on any platform (including desktop). **Local Whisper** connects to a self-hosted whisper.cpp or faster-whisper server — configure the base URL under **Settings > STT Providers**. Web Speech API works without an API key in Chrome, Edge, and Safari. If a Groq API key is configured, it takes priority automatically.
+Voice input is accessed via the microphone button in the chat bar. Groq STT uses Whisper for accurate transcription on any platform (including desktop). **Local Whisper** connects to a self-hosted whisper.cpp or faster-whisper server (tested with `deepdml/faster-whisper-large-v3-turbo-ct2` via [speaches](https://github.com/speaches-ai/speaches)) — configure the base URL under **Settings > STT Providers**. Web Speech API works without an API key in Chrome, Edge, and Safari. If a Groq API key is configured, it takes priority automatically.
 
 ### Duplex / VOX Mode
 
@@ -148,6 +166,8 @@ Hands-free, continuous conversation without pressing any buttons:
 
 Duplex mode requires both an STT provider and a TTS provider to be configured.
 
+**Noise handling improvements**: A 250 ms hold-off prevents brief noise spikes from interrupting TTS. Only confirmed speech (VAD segment ready) triggers an interrupt. If TTS is interrupted mid-response, saying "setze fort" / "continue" / "continuer" / or the equivalent in any of 12 supported languages replays the unspoken tail without a new LLM call.
+
 ### Scene Backgrounds
 
 Choose a background for your 3D companion scene under **Settings > Display > Background**:
@@ -156,6 +176,33 @@ Choose a background for your 3D companion scene under **Settings > Display > Bac
 - **Custom Image**: Upload a PNG/JPG/WEBP file via drag & drop or file picker
 - **HDRI / EXR**: Enter a `.hdr` or `.exr` URL (e.g. from [Poly Haven](https://polyhaven.com/hdris)) for realistic environment-based lighting — the image illuminates the VRM character with accurate PBR reflections
 - Settings are persisted locally and restored on next launch
+
+### Personality Presets
+
+Save and switch between multiple system prompt configurations under **Settings > Character > Personality**:
+
+- A tab-bar above the system prompt textarea lists all saved presets
+- **Rename** a preset by double-clicking its tab; **add** with `+`; **delete** with the trash icon
+- Two built-in presets ship with Utsuwa:
+  - *Standard* — blank template, seeded from your current system prompt on first load
+  - *Spanischlehrer* — example dual-voice Spanish teacher preset demonstrating `[voice:default]` / `[voice:alt]` and `[lang:es]` / `[lang:de]` tag usage
+- Presets are available during the **onboarding** CharacterStep as one-click chips
+- All presets are persisted in localStorage and included in save/export files automatically
+
+### Chat Display Settings
+
+Under **Settings > Display > Chat Display**, control how the companion's responses appear:
+
+| Mode | Behaviour |
+|------|-----------|
+| **Bubble** | Floating speech bubble next to the companion's head |
+| **Sidebar** | Collapsible chat history panel |
+| **Both** | Bubble and sidebar simultaneously |
+| **Aus** | Text completely hidden; only the typing indicator and voice remain active |
+
+**Typing Indicator Delay** — set how many seconds pass before the animated dots appear after a message is sent (0.0–10.0 s, step 0.1 s). Useful to avoid a distracting flash for short responses.
+
+**Wait tone** — optional soft audio ping (two-tone descending, 400/300 Hz) that plays while the LLM is thinking, starting after the same delay as the typing dots.
 
 ### MCP Tool Integration
 
@@ -339,9 +386,9 @@ pnpm tauri build  # Build desktop app installer
 
 - [x] VRM model loading and display with orbit controls
 - [x] 3D speech bubbles tracking model head position
-- [x] Multi-provider LLM support (8 providers)
-- [x] Multi-provider TTS support (3 providers: ElevenLabs, OpenAI TTS, AllTalk)
-- [x] Multi-provider STT support (3 providers: Groq Whisper, local Whisper server, Web Speech API)
+- [x] Multi-provider LLM support (9 providers)
+- [x] Multi-provider TTS support (5 providers: ElevenLabs, OpenAI TTS, AllTalk, Chatterbox, OmniVoice)
+- [x] Multi-provider STT support (3 providers: Groq Whisper, local Whisper/speaches server, Web Speech API)
 - [x] Audio-driven lip-sync
 - [x] Sentence-by-sentence TTS streaming (responses spoken as they arrive, not after full generation)
 - [x] VRMA-based animations (idle, talking, blinking)
@@ -359,6 +406,10 @@ pnpm tauri build  # Build desktop app installer
 - [x] Scene backgrounds (9 presets + custom image upload + HDR/EXR environment maps)
 - [x] Desktop application with transparent overlay mode (macOS only, Windows/Linux planned)
 - [x] MCP server integration (HTTP/SSE + stdio transports, agentic tool loop, no CORS restrictions)
+- [x] OmniVoice local TTS with dual-voice profiles and 600+ language support
+- [x] Personality presets (save/switch/rename system prompts, available during onboarding)
+- [x] Chat display modes (Bubble / Sidebar / Both / Off) with typing indicator delay and wait tone
+- [x] Duplex noise hold-off and unspoken-segment replay on continue command (12 languages)
 
 ### In Progress / Planned
 
