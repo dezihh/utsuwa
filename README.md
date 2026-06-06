@@ -17,7 +17,7 @@
 
 ## Features
 
-- **VRM Model Viewer**: Load and display VRM 3D avatar models with orbit controls
+- **VRM Model Viewer**: Load and display VRM 3D avatar models with orbit controls and configurable camera position
 - **Model-Centric UI**: Full-screen 3D model with unobtrusive overlay controls
 - **3D Speech Bubbles**: Chat responses appear as bubbles that track the model's head in 3D space
 - **Chat Display Modes**: Choose Bubble, Sidebar, Both, or Off — with configurable typing indicator delay and optional wait tone
@@ -188,6 +188,18 @@ Save and switch between multiple system prompt configurations under **Settings >
   - *Spanischlehrer* — example dual-voice Spanish teacher preset demonstrating `[voice:default]` / `[voice:alt]` and `[lang:es]` / `[lang:de]` tag usage
 - Presets are available during the **onboarding** CharacterStep as one-click chips
 - All presets are persisted in localStorage and included in save/export files automatically
+
+### Camera Settings
+
+Under **Settings > Display > Camera**, adjust how the scene is framed:
+
+| Setting | Range | Description |
+|---------|-------|-------------|
+| **Starting Zoom** | 1.0 – 4.0 | Camera distance from the model (close → far) |
+| **Horizontal** | −2.0 – +2.0 | Pan the view left (negative) or right (positive) |
+| **Vertical** | −1.5 – +1.5 | Pan the view down (negative) or up (positive) |
+
+Each slider shows its current numeric value so settings can be noted and re-entered precisely. A **Reset Position** button appears whenever Horizontal or Vertical deviates from centre. All values persist across sessions.
 
 ### Chat Display Settings
 

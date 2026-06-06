@@ -358,6 +358,8 @@ import { EffectComposer, RenderPass, EffectPass, BloomEffect } from 'postprocess
 	// Camera always centered (no sidebar offset needed with new bottom chat bar layout)
 	const cameraTargetX = $derived(0);
 	const cameraDistance = $derived(displayStore.cameraDistance);
+	const cameraOffsetX = $derived(displayStore.cameraOffsetX);
+	const cameraOffsetY = $derived(displayStore.cameraOffsetY);
 
 	// Setup OrbitControls (skip when locked)
 	$effect(() => {
@@ -366,7 +368,7 @@ import { EffectComposer, RenderPass, EffectPass, BloomEffect } from 'postprocess
 		if (camera.current && renderer) {
 			controls = new OrbitControls(camera.current, renderer.domElement);
 			controls.enableDamping = true;
-			controls.target.set(cameraTargetX, 1, 0);
+			controls.target.set(cameraTargetX + cameraOffsetX, 1 + cameraOffsetY, 0);
 			controls.minDistance = 0.5;
 			controls.maxDistance = 5;
 			controls.update();
@@ -377,11 +379,13 @@ import { EffectComposer, RenderPass, EffectPass, BloomEffect } from 'postprocess
 		}
 	});
 
-	// Update controls target and camera position when desktop state changes
+	// Update controls target and camera position when offset or desktop state changes
 	$effect(() => {
 		if (controls && camera.current) {
-			controls.target.setX(cameraTargetX);
-			camera.current.position.setX(cameraTargetX);
+			const tx = cameraTargetX + cameraOffsetX;
+			const ty = 1 + cameraOffsetY;
+			controls.target.set(tx, ty, 0);
+			camera.current.position.set(tx, ty + 0.15, cameraDistance);
 			controls.update();
 		}
 	});
@@ -412,8 +416,8 @@ import { EffectComposer, RenderPass, EffectPass, BloomEffect } from 'postprocess
 	});
 </script>
 
-<!-- Camera - view with model centered, distance from display settings -->
-<T.PerspectiveCamera makeDefault position={[cameraTargetX, 1.15, cameraDistance]} fov={30} near={0.1} far={20} />
+<!-- Camera - view with model centered, distance/offset from display settings -->
+<T.PerspectiveCamera makeDefault position={[cameraTargetX + cameraOffsetX, 1.15 + cameraOffsetY, cameraDistance]} fov={30} near={0.1} far={20} />
 
 <!-- Overlay mode: enable raycast for click-through detection -->
 {#if overlay}

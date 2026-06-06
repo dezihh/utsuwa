@@ -166,8 +166,56 @@
 						class="zoom-slider"
 					/>
 					<span class="slider-label">Far</span>
+					<span class="slider-value">{displayStore.cameraDistance.toFixed(1)}</span>
 				</div>
 			</div>
+			<div class="setting-row">
+				<div class="setting-info">
+					<span class="setting-label">Horizontal</span>
+					<span class="setting-desc">Shift the camera view left or right</span>
+				</div>
+				<div class="slider-container">
+					<span class="slider-label">L</span>
+					<input
+						type="range"
+						min="-2"
+						max="2"
+						step="0.05"
+						value={displayStore.cameraOffsetX}
+						oninput={(e) => displayStore.setCameraOffsetX(parseFloat(e.currentTarget.value))}
+						class="zoom-slider"
+					/>
+					<span class="slider-label">R</span>
+					<span class="slider-value">{displayStore.cameraOffsetX.toFixed(2)}</span>
+				</div>
+			</div>
+			<div class="setting-row">
+				<div class="setting-info">
+					<span class="setting-label">Vertical</span>
+					<span class="setting-desc">Shift the camera view up or down</span>
+				</div>
+				<div class="slider-container">
+					<span class="slider-label">D</span>
+					<input
+						type="range"
+						min="-1.5"
+						max="1.5"
+						step="0.05"
+						value={displayStore.cameraOffsetY}
+						oninput={(e) => displayStore.setCameraOffsetY(parseFloat(e.currentTarget.value))}
+						class="zoom-slider"
+					/>
+					<span class="slider-label">U</span>
+					<span class="slider-value">{displayStore.cameraOffsetY.toFixed(2)}</span>
+				</div>
+			</div>
+			{#if displayStore.cameraOffsetX !== 0 || displayStore.cameraOffsetY !== 0}
+				<div class="setting-row camera-reset-row">
+					<button class="camera-reset-btn" onclick={() => displayStore.resetCameraPosition()}>
+						Reset Position
+					</button>
+				</div>
+			{/if}
 		</section>
 
 		<!-- Chat Display Mode -->
@@ -615,6 +663,32 @@
 		font-size: 0.75rem;
 		color: var(--text-tertiary);
 		white-space: nowrap;
+	}
+
+	.slider-value {
+		font-size: 0.75rem;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-secondary);
+		min-width: 2.8rem;
+		text-align: right;
+	}
+
+	.camera-reset-row {
+		justify-content: flex-end;
+	}
+
+	.camera-reset-btn {
+		font-size: 0.78rem;
+		padding: 0.25rem 0.75rem;
+		border-radius: 6px;
+		border: 1px solid var(--color-border, #ccc);
+		background: var(--bg-secondary);
+		color: var(--text-secondary);
+		cursor: pointer;
+	}
+
+	.camera-reset-btn:hover {
+		background: var(--bg-tertiary);
 	}
 
 	.zoom-slider {

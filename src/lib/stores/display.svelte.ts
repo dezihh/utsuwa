@@ -2,12 +2,16 @@ import { browser } from '$app/environment';
 
 const STORAGE_KEY = 'utsuwa-display';
 const DEFAULT_CAMERA_DISTANCE = 2.0;
+const DEFAULT_CAMERA_OFFSET_X = 0;
+const DEFAULT_CAMERA_OFFSET_Y = 0;
 
 export type ChatDisplayMode = 'bubble' | 'sidebar' | 'both' | 'off';
 export type SidebarPosition = 'left' | 'right';
 
 function createDisplayStore() {
 	let cameraDistance = $state(DEFAULT_CAMERA_DISTANCE);
+	let cameraOffsetX = $state(DEFAULT_CAMERA_OFFSET_X);
+	let cameraOffsetY = $state(DEFAULT_CAMERA_OFFSET_Y);
 	let chatDisplayMode = $state<ChatDisplayMode>('bubble');
 	let sidebarPosition = $state<SidebarPosition>('right');
 	let typingIndicatorDelayMs = $state(0);
@@ -19,6 +23,8 @@ function createDisplayStore() {
 			try {
 				const parsed = JSON.parse(saved);
 				cameraDistance = parsed.cameraDistance ?? DEFAULT_CAMERA_DISTANCE;
+				cameraOffsetX = parsed.cameraOffsetX ?? DEFAULT_CAMERA_OFFSET_X;
+				cameraOffsetY = parsed.cameraOffsetY ?? DEFAULT_CAMERA_OFFSET_Y;
 				chatDisplayMode = parsed.chatDisplayMode ?? 'bubble';
 				sidebarPosition = parsed.sidebarPosition ?? 'right';
 				typingIndicatorDelayMs = parsed.typingIndicatorDelayMs ?? 0;
@@ -33,13 +39,29 @@ function createDisplayStore() {
 		if (browser) {
 			localStorage.setItem(
 				STORAGE_KEY,
-				JSON.stringify({ cameraDistance, chatDisplayMode, sidebarPosition, typingIndicatorDelayMs, waitToneEnabled })
+				JSON.stringify({ cameraDistance, cameraOffsetX, cameraOffsetY, chatDisplayMode, sidebarPosition, typingIndicatorDelayMs, waitToneEnabled })
 			);
 		}
 	}
 
 	function setCameraDistance(distance: number) {
 		cameraDistance = Math.max(1.0, Math.min(4.0, distance));
+		save();
+	}
+
+	function setCameraOffsetX(x: number) {
+		cameraOffsetX = Math.max(-2.0, Math.min(2.0, x));
+		save();
+	}
+
+	function setCameraOffsetY(y: number) {
+		cameraOffsetY = Math.max(-1.5, Math.min(1.5, y));
+		save();
+	}
+
+	function resetCameraPosition() {
+		cameraOffsetX = DEFAULT_CAMERA_OFFSET_X;
+		cameraOffsetY = DEFAULT_CAMERA_OFFSET_Y;
 		save();
 	}
 
@@ -64,22 +86,17 @@ function createDisplayStore() {
 	}
 
 	return {
-		get cameraDistance() {
-			return cameraDistance;
-		},
-		get chatDisplayMode() {
-			return chatDisplayMode;
-		},
-		get sidebarPosition() {
-			return sidebarPosition;
-		},
-		get typingIndicatorDelayMs() {
-			return typingIndicatorDelayMs;
-		},
-		get waitToneEnabled() {
-			return waitToneEnabled;
-		},
+		get cameraDistance() { return cameraDistance; },
+		get cameraOffsetX() { return cameraOffsetX; },
+		get cameraOffsetY() { return cameraOffsetY; },
+		get chatDisplayMode() { return chatDisplayMode; },
+		get sidebarPosition() { return sidebarPosition; },
+		get typingIndicatorDelayMs() { return typingIndicatorDelayMs; },
+		get waitToneEnabled() { return waitToneEnabled; },
 		setCameraDistance,
+		setCameraOffsetX,
+		setCameraOffsetY,
+		resetCameraPosition,
 		setChatDisplayMode,
 		setSidebarPosition,
 		setTypingIndicatorDelayMs,
