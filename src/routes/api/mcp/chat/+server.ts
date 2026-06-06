@@ -84,7 +84,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		apiKey,
 		systemPrompt,
 		tools,
-		servers
+		servers,
+		continueMode,
+		continueFromText
 	} = (await request.json()) as {
 		messages: Array<{ role: 'user' | 'assistant'; content: string }>;
 		provider: string;
@@ -94,6 +96,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		systemPrompt?: string;
 		tools: McpTool[];
 		servers: McpServerConfig[];
+		continueMode?: boolean;
+		continueFromText?: string;
 	};
 
 	// Resolve the OpenAI-compatible /chat/completions URL the same way /api/chat does
@@ -114,20 +118,37 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (server) toolServerMap.set(tool.name, server);
 	}
 
+	// Build continue-mode layer (mirrors prompt-builder.ts logic)
+	let continueLayer = '';
+	if (continueMode && continueFromText) {
+		continueLayer = `\n\n<continue_mode>
+The user asked you to continue your previous response.
+
+CRITICAL RULES FOR CONTINUATION:
+- Continue exactly from where your last response stopped
+- Do not repeat, restart, summarize, or rephrase already written text
+- Do not say things like "Okay, let's continue" or "Lass uns weitermachen"
+- Start with the next word or sentence only
+- Produce a substantial continuation when the request needs it
+
+Already written (do not repeat):
+"${continueFromText.slice(-500)}"
+</continue_mode>`;
+	}
+
 	// Build initial message list
+	const baseSystem =
+		systemPrompt ??
+		'You are a helpful AI assistant. Use the available tools when they help answer the question.';
 	const llmMessages: ChatMessage[] = [
-		{
-			role: 'system',
-			content:
-				systemPrompt ??
-				'You are a helpful AI assistant. Use the available tools when they help answer the question.'
-		},
+		{ role: 'system', content: baseSystem + continueLayer },
 		...messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 	];
 
 	let finalText = '';
 	let toolCallSummary: string[] = [];
 
+	try {
 	// Agentic loop
 	for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
 		const response = await llmRequest(chatUrl, model, llmMessages, tools, apiKey);
@@ -194,26 +215,49 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (!finalText) {
 		finalText = 'I was unable to complete the request after using the available tools.';
 	}
+	} catch (err) {
+		return new Response(
+			JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
+			{ status: 500, headers: { 'Content-Type': 'application/json' } }
+		);
+	}
 
-	// Stream the final text in the same SSE format as /api/chat
-	// so the frontend needs no changes
+	// Stream the final text in the same SSE format as /api/chat.
+	// async start() with await between chunks causes Node.js to flush each chunk
+	// to the HTTP socket individually — the browser receives them progressively,
+	// so StreamingSpeechBuffer can detect sentence boundaries and start TTS
+	// after the first sentence instead of waiting for the full response.
 	const encoder = new TextEncoder();
+	const yield_ = () => new Promise<void>((r) => setTimeout(r, 0));
 	const stream = new ReadableStream({
-		start(controller) {
-			// Optionally prepend tool call summary as a collapsible section
+		async start(controller) {
+			// Prepend tool call summary if present
 			if (toolCallSummary.length > 0) {
 				const summaryBlock =
 					`<details><summary>🔧 ${toolCallSummary.length} tool call(s)</summary>\n\n` +
 					toolCallSummary.join('\n\n') +
 					`\n\n</details>\n\n`;
-				// Emit summary as first chunk
 				controller.enqueue(encoder.encode(`0:${JSON.stringify(summaryBlock)}\n`));
+				await yield_();
 			}
 
-			// Emit final text word by word for a streaming feel
-			const words = finalText.split(' ');
-			for (const word of words) {
-				controller.enqueue(encoder.encode(`0:${JSON.stringify(word + ' ')}\n`));
+			// Emit sentence-by-sentence so the client can start TTS after the first sentence.
+			// Each await yields to the event loop, letting Node.js flush the write buffer.
+			const sentenceRe = /[^.!?…\n]*[.!?…]+[ \t]*/g;
+			let last = 0;
+			let match: RegExpExecArray | null;
+			while ((match = sentenceRe.exec(finalText)) !== null) {
+				const chunk = match[0];
+				if (chunk.trim()) {
+					controller.enqueue(encoder.encode(`0:${JSON.stringify(chunk)}\n`));
+					await yield_();
+				}
+				last = match.index + chunk.length;
+			}
+			// Remaining text (e.g. a sentence without terminal punctuation)
+			const tail = finalText.slice(last);
+			if (tail.trim()) {
+				controller.enqueue(encoder.encode(`0:${JSON.stringify(tail)}\n`));
 			}
 			controller.close();
 		}

@@ -165,6 +165,13 @@
 		})();
 	});
 
+	// Fetch MCP tools on start so hasActiveTools is correct before first send
+	$effect(() => {
+		if (mcpStore.enabledServers.length > 0) {
+			mcpStore.refreshTools();
+		}
+	});
+
 	// Initialize embedding model and backfill any facts without embeddings
 	$effect(() => {
 		const unsub = subscribeToEmbeddingState((state) => {

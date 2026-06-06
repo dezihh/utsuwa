@@ -19,10 +19,10 @@ function playPing() {
 	const t = ac.currentTime;
 
 	function note(freq: number, startOffset: number, peak: number) {
-		const osc = ac.createOscillator();
-		const gain = ac.createGain();
+		const osc = ac!.createOscillator();
+		const gain = ac!.createGain();
 		osc.connect(gain);
-		gain.connect(ac.destination);
+		gain.connect(ac!.destination);
 		osc.type = 'triangle'; // richer harmonics than sine → clearer at any volume
 		osc.frequency.value = freq;
 		gain.gain.setValueAtTime(0, t + startOffset);

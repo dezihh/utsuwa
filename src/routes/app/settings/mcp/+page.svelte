@@ -3,8 +3,9 @@
 	import type { McpTransport, McpServerConfig } from '$lib/types/mcp';
 	import { onMount } from 'svelte';
 
-	// ── Add-server form state ────────────────────────────────────────────────
+	// ── Form state (shared for add + edit) ──────────────────────────────────
 	let showForm = $state(false);
+	let editingId = $state<string | null>(null);
 	let formTransport = $state<McpTransport>('http');
 	let formName = $state('');
 	let formUrl = $state('');
@@ -13,6 +14,8 @@
 	let formEnv = $state('');
 	let formError = $state('');
 
+	const isEditing = $derived(editingId !== null);
+
 	function resetForm() {
 		formName = '';
 		formUrl = '';
@@ -20,7 +23,34 @@
 		formArgs = '';
 		formEnv = '';
 		formError = '';
+		editingId = null;
 		showForm = false;
+	}
+
+	function openAddForm() {
+		editingId = null;
+		formTransport = 'http';
+		formName = '';
+		formUrl = '';
+		formCommand = '';
+		formArgs = '';
+		formEnv = '';
+		formError = '';
+		showForm = true;
+	}
+
+	function openEditForm(server: McpServerConfig) {
+		editingId = server.id;
+		formTransport = server.transport;
+		formName = server.name;
+		formUrl = server.url ?? '';
+		formCommand = server.command ?? '';
+		formArgs = (server.args ?? []).join(' ');
+		formEnv = server.env
+			? Object.entries(server.env).map(([k, v]) => `${k}=${v}`).join('\n')
+			: '';
+		formError = '';
+		showForm = true;
 	}
 
 	function parseEnv(raw: string): Record<string, string> {
@@ -35,27 +65,29 @@
 		return result;
 	}
 
-	function addServer() {
+	function submitForm() {
 		formError = '';
 		if (!formName.trim()) { formError = 'Name is required'; return; }
 		if (formTransport === 'http' && !formUrl.trim()) { formError = 'URL is required'; return; }
 		if (formTransport === 'stdio' && !formCommand.trim()) { formError = 'Command is required'; return; }
 
-		const args = formArgs.trim()
-			? formArgs.trim().split(/\s+/)
-			: [];
-
+		const args = formArgs.trim() ? formArgs.trim().split(/\s+/) : [];
 		const env = formEnv.trim() ? parseEnv(formEnv) : undefined;
 
-		mcpStore.addServer({
+		const data = {
 			name: formName.trim(),
 			transport: formTransport,
 			url: formTransport === 'http' ? formUrl.trim() : undefined,
 			command: formTransport === 'stdio' ? formCommand.trim() : undefined,
 			args: formTransport === 'stdio' ? args : undefined,
 			env: formTransport === 'stdio' ? env : undefined,
-			enabled: true
-		});
+		};
+
+		if (isEditing) {
+			mcpStore.updateServer(editingId!, data);
+		} else {
+			mcpStore.addServer({ ...data, enabled: true });
+		}
 		resetForm();
 	}
 
@@ -75,13 +107,14 @@
 		<section class="section">
 			<div class="section-header">
 				<h3>Connected Servers</h3>
-				<button class="add-btn" onclick={() => (showForm = !showForm)}>
-					{showForm ? '✕ Cancel' : '＋ Add Server'}
+				<button class="add-btn" onclick={() => showForm && !isEditing ? resetForm() : openAddForm()}>
+					{showForm && !isEditing ? '✕ Cancel' : '＋ Add Server'}
 				</button>
 			</div>
 
 			{#if showForm}
 				<div class="form-card">
+					<div class="form-title">{isEditing ? 'Edit Server' : 'New Server'}</div>
 					<div class="form-row">
 						<label class="form-label" for="mcp-name">Name</label>
 						<input id="mcp-name" class="form-input" bind:value={formName} placeholder="My MCP Server" />
@@ -142,7 +175,14 @@
 						<p class="form-error">{formError}</p>
 					{/if}
 
-					<button class="save-btn" onclick={addServer}>Add Server</button>
+					<div class="form-actions">
+						{#if isEditing}
+							<button class="cancel-edit-btn" onclick={resetForm}>Cancel</button>
+						{/if}
+						<button class="save-btn" onclick={submitForm}>
+							{isEditing ? 'Save Changes' : 'Add Server'}
+						</button>
+					</div>
 				</div>
 			{/if}
 
@@ -170,6 +210,11 @@
 								>
 									{server.enabled ? 'On' : 'Off'}
 								</button>
+								<button
+									class="edit-btn"
+									onclick={() => openEditForm(server)}
+									title="Edit server"
+								>✎</button>
 								<button
 									class="remove-btn"
 									onclick={() => mcpStore.removeServer(server.id)}
@@ -481,6 +526,21 @@
 		color: #fff;
 	}
 
+	.edit-btn {
+		font-size: 0.85rem;
+		padding: 0.25rem 0.5rem;
+		border-radius: 5px;
+		border: 1px solid var(--color-border, #ccc);
+		background: var(--bg-secondary);
+		color: var(--text-tertiary);
+		cursor: pointer;
+	}
+
+	.edit-btn:hover {
+		color: var(--color-primary, #6c63ff);
+		border-color: var(--color-primary, #6c63ff);
+	}
+
 	.remove-btn {
 		font-size: 0.8rem;
 		padding: 0.25rem 0.5rem;
@@ -494,6 +554,35 @@
 	.remove-btn:hover {
 		color: #e55;
 		border-color: #e55;
+	}
+
+	.form-title {
+		font-size: 0.8rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-secondary);
+		margin-bottom: 0.25rem;
+	}
+
+	.form-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.5rem;
+	}
+
+	.cancel-edit-btn {
+		padding: 0.4rem 1rem;
+		border-radius: 7px;
+		border: 1px solid var(--color-border, #ccc);
+		background: var(--bg-secondary);
+		color: var(--text-secondary);
+		font-size: 0.85rem;
+		cursor: pointer;
+	}
+
+	.cancel-edit-btn:hover {
+		background: var(--bg-tertiary);
 	}
 
 	/* Tool list */
