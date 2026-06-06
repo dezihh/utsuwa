@@ -20,6 +20,7 @@ services:
       NODE_ENV: production
       UTSUWA_PROFILE_SYNC_ENABLED: "true"
       UTSUWA_DATA_DIR: "/data"
+      BODY_SIZE_LIMIT: "209715200"  # 200 MB — save files include VRM binary assets
     volumes:
       - utsuwa-prod-data:/data
     restart: unless-stopped
