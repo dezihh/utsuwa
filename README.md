@@ -422,6 +422,10 @@ pnpm tauri build  # Build desktop app installer
 - [x] Personality presets (save/switch/rename system prompts, available during onboarding)
 - [x] Chat display modes (Bubble / Sidebar / Both / Off) with typing indicator delay and wait tone
 - [x] Duplex noise hold-off and unspoken-segment replay on continue command (12 languages)
+- [x] Configurable camera position (horizontal/vertical pan sliders with live numeric readout and reset)
+- [x] MCP server edit form (add, edit, delete, enable/disable MCP servers in settings)
+- [x] MCP continue-mode support and progressive TTS streaming for tool-augmented responses
+- [x] VRM skeleton optimisation updated to combineSkeletons; LookAt proxy pre-registered to suppress library warnings
 
 ### In Progress / Planned
 
