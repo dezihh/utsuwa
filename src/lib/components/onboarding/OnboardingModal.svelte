@@ -40,7 +40,7 @@
 
 	onMount(async () => {
 		const status = await getSyncStatus();
-		syncAvailable = status.enabled && status.profileExists;
+		syncAvailable = status.enabled;
 	});
 
 	function goNext() {
@@ -108,7 +108,9 @@
 		const result = await pullProfile(cloudPin.trim(), 'replace');
 		cloudLoading = false;
 		if (!result.ok) {
-			importError = result.error ?? 'Cloud restore failed.';
+			importError = result.error === 'No profile found on server'
+				? 'Kein Profil auf dem Server. Zuerst unter Einstellungen → Daten ein Profil speichern.'
+				: (result.error ?? 'Cloud restore failed.');
 			return;
 		}
 		rememberPin(cloudPin.trim());
