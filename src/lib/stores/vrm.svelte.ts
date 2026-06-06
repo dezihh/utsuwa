@@ -93,6 +93,8 @@ function createVrmStore() {
 	let headPosition = $state<[number, number, number]>([0, 1.6, 0]);
 	// Screen-space position (x, y as percentages 0-100)
 	let headScreenPosition = $state<{ x: number; y: number } | null>(null);
+	// Screen-space position well above the head top — used for typing indicator only
+	let headTopScreenPosition = $state<{ x: number; y: number } | null>(null);
 	// Default animations
 	const idleAnimationUrl = '/animations/idle.vrma';
 	const talkingAnimationUrl = '/animations/talking.vrma';
@@ -324,6 +326,10 @@ function createVrmStore() {
 
 	function setHeadScreenPosition(pos: { x: number; y: number } | null) {
 		headScreenPosition = pos;
+	}
+
+	function setHeadTopScreenPosition(pos: { x: number; y: number } | null) {
+		headTopScreenPosition = pos;
 	}
 
 	function setCurrentAnimation(animationIdOrPath: string | null) {
@@ -579,9 +585,13 @@ function createVrmStore() {
 		get headScreenPosition() {
 			return headScreenPosition;
 		},
+		get headTopScreenPosition() {
+			return headTopScreenPosition;
+		},
 		setModelUrl,
 		setHeadPosition,
 		setHeadScreenPosition,
+		setHeadTopScreenPosition,
 		setVrm,
 		setLoading,
 		setError,

@@ -64,24 +64,21 @@
 		return isDark ? BUBBLE_COLORS.dark.dots : BUBBLE_COLORS.light.dots;
 	});
 
-	// Get screen position from VRM store for 3D tracking
+	// Get screen positions from VRM store
 	const screenPos = $derived(vrmStore.headScreenPosition);
+	const headTopPos = $derived(vrmStore.headTopScreenPosition);
 
-	// Calculate bubble position (offset to the right of head)
-	// Typing indicator appears closer to model, message bubble has more offset
+	// Calculate bubble position
 	const bubbleStyle = $derived(() => {
-		if (!screenPos) {
-			// Fallback to fixed position if no tracking available
-			return isTyping ? 'top: 25%; right: 25%;' : 'top: 22%; right: 15%;';
-		}
-
 		if (isTyping) {
-			// Typing indicator: closer to the head
-			const x = Math.min(Math.max(screenPos.x - 2, 5), 75);
-			const y = Math.min(Math.max(screenPos.y - 6, 5), 60);
+			// Head may be cropped at top, so "above head" can be off-screen.
+			// Instead: offset to the right of the face so dots never overlap it.
+			if (!screenPos) return 'top: 18%; right: 20%;';
+			const x = Math.min(Math.max(screenPos.x + 14, 25), 88);
+			const y = Math.min(Math.max(screenPos.y - 8, 3), 55);
 			return `top: ${y}%; left: ${x}%;`;
 		} else {
-			// Message: current position with more offset
+			if (!screenPos) return 'top: 22%; right: 15%;';
 			const x = Math.min(Math.max(screenPos.x + 3, 5), 80);
 			const y = Math.min(Math.max(screenPos.y - 8, 5), 65);
 			return `top: ${y}%; left: ${x}%;`;

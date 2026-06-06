@@ -609,7 +609,7 @@
 		const headBone = vrm.humanoid.getNormalizedBoneNode('head');
 		if (headBone && camera.current) {
 			const worldPos = headBone.getWorldPosition(new THREE.Vector3());
-			// Offset above and slightly in front of head
+			// Offset above and slightly in front of head (used for text bubble)
 			const offsetPos = new THREE.Vector3(worldPos.x, worldPos.y + 0.25, worldPos.z + 0.1);
 			vrmStore.setHeadPosition([offsetPos.x, offsetPos.y, offsetPos.z]);
 
@@ -619,6 +619,14 @@
 			const x = (screenPos.x + 1) * 50;
 			const y = (-screenPos.y + 1) * 50;
 			vrmStore.setHeadScreenPosition({ x, y });
+
+			// Separate anchor well above the head top — for typing indicator only
+			const abovePos = new THREE.Vector3(worldPos.x, worldPos.y + 0.5, worldPos.z + 0.1);
+			const aboveScreen = abovePos.clone().project(camera.current);
+			vrmStore.setHeadTopScreenPosition({
+				x: (aboveScreen.x + 1) * 50,
+				y: (-aboveScreen.y + 1) * 50
+			});
 		}
 
 		const expressionManager = vrm.expressionManager;

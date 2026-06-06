@@ -3,13 +3,15 @@ import { browser } from '$app/environment';
 const STORAGE_KEY = 'utsuwa-display';
 const DEFAULT_CAMERA_DISTANCE = 2.0;
 
-export type ChatDisplayMode = 'bubble' | 'sidebar' | 'both';
+export type ChatDisplayMode = 'bubble' | 'sidebar' | 'both' | 'off';
 export type SidebarPosition = 'left' | 'right';
 
 function createDisplayStore() {
 	let cameraDistance = $state(DEFAULT_CAMERA_DISTANCE);
 	let chatDisplayMode = $state<ChatDisplayMode>('bubble');
 	let sidebarPosition = $state<SidebarPosition>('right');
+	let typingIndicatorDelayMs = $state(0);
+	let waitToneEnabled = $state(false);
 
 	if (browser) {
 		const saved = localStorage.getItem(STORAGE_KEY);
@@ -19,6 +21,8 @@ function createDisplayStore() {
 				cameraDistance = parsed.cameraDistance ?? DEFAULT_CAMERA_DISTANCE;
 				chatDisplayMode = parsed.chatDisplayMode ?? 'bubble';
 				sidebarPosition = parsed.sidebarPosition ?? 'right';
+				typingIndicatorDelayMs = parsed.typingIndicatorDelayMs ?? 0;
+				waitToneEnabled = parsed.waitToneEnabled ?? false;
 			} catch (e) {
 				console.error('Failed to load display settings:', e);
 			}
@@ -29,7 +33,7 @@ function createDisplayStore() {
 		if (browser) {
 			localStorage.setItem(
 				STORAGE_KEY,
-				JSON.stringify({ cameraDistance, chatDisplayMode, sidebarPosition })
+				JSON.stringify({ cameraDistance, chatDisplayMode, sidebarPosition, typingIndicatorDelayMs, waitToneEnabled })
 			);
 		}
 	}
@@ -49,6 +53,16 @@ function createDisplayStore() {
 		save();
 	}
 
+	function setTypingIndicatorDelayMs(ms: number) {
+		typingIndicatorDelayMs = Math.max(0, ms);
+		save();
+	}
+
+	function setWaitToneEnabled(enabled: boolean) {
+		waitToneEnabled = enabled;
+		save();
+	}
+
 	return {
 		get cameraDistance() {
 			return cameraDistance;
@@ -59,9 +73,17 @@ function createDisplayStore() {
 		get sidebarPosition() {
 			return sidebarPosition;
 		},
+		get typingIndicatorDelayMs() {
+			return typingIndicatorDelayMs;
+		},
+		get waitToneEnabled() {
+			return waitToneEnabled;
+		},
 		setCameraDistance,
 		setChatDisplayMode,
-		setSidebarPosition
+		setSidebarPosition,
+		setTypingIndicatorDelayMs,
+		setWaitToneEnabled
 	};
 }
 

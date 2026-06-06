@@ -16,6 +16,7 @@
 	import { ttsStore } from '$lib/stores/tts.svelte';
 	import { duplexStore, startDuplex, stopDuplex, onTTSStarted, onTTSDone } from '$lib/stores/duplex.svelte';
 	import { displayStore } from '$lib/stores/display.svelte';
+	import { startWaitTone, stopWaitTone } from '$lib/utils/wait-tone';
 	import { characterStore } from '$lib/stores/character.svelte';
 	import { personaStore } from '$lib/stores/persona.svelte';
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
@@ -109,6 +110,32 @@
 	const showSidebarBtn = $derived(
 		displayStore.chatDisplayMode === 'sidebar' || displayStore.chatDisplayMode === 'both'
 	);
+
+	// Typing dots visibility — delayed by typingIndicatorDelayMs
+	let typingDotsVisible = $state(false);
+	$effect(() => {
+		if (!isTyping) {
+			typingDotsVisible = false;
+			return;
+		}
+		typingDotsVisible = false;
+		const delay = displayStore.typingIndicatorDelayMs;
+		if (delay <= 0) {
+			typingDotsVisible = true;
+			return;
+		}
+		const timer = setTimeout(() => { typingDotsVisible = true; }, delay);
+		return () => clearTimeout(timer);
+	});
+
+	// Wait tone — starts/stops with typing dots
+	$effect(() => {
+		if (typingDotsVisible && displayStore.waitToneEnabled) {
+			startWaitTone();
+		} else {
+			stopWaitTone();
+		}
+	});
 	const SIDEBAR_WIDTH = 320;
 	const sidebarEffective = $derived(sidebarOpen && showSidebarBtn);
 	const leftOffset = $derived(
@@ -690,10 +717,10 @@
 		<FloatingStatIndicators />
 
 		<!-- Speech Bubble (shows latest response, click to dismiss) -->
-		{#if showBubble}
+		{#if showBubble || (typingDotsVisible && isTyping)}
 			<SpeechBubble
-				message={latestResponse}
-				isTyping={isTyping}
+				message={displayStore.chatDisplayMode === 'off' ? '' : latestResponse}
+				isTyping={isTyping && typingDotsVisible}
 				onHide={handleBubbleHide}
 			/>
 		{/if}

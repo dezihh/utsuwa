@@ -94,6 +94,12 @@
 		dragOver = false;
 		const file = e.dataTransfer?.files?.[0];
 		if (file) handleFileInput(file);
+	}
+
+	function stepDelay(delta: number) {
+		const current = displayStore.typingIndicatorDelayMs / 1000;
+		const next = Math.round((current + delta) * 10) / 10;
+		displayStore.setTypingIndicatorDelayMs(Math.max(0, Math.min(10, next)) * 1000);
 	}</script>
 
 <div class="page">
@@ -197,7 +203,51 @@
 						<Icon name="layout" size={16} />
 						<span>Both</span>
 					</button>
+					<button
+						class="mode-option"
+						class:active={displayStore.chatDisplayMode === 'off'}
+						onclick={() => displayStore.setChatDisplayMode('off')}
+					>
+						<Icon name="eye-slash" size={16} />
+						<span>Aus</span>
+					</button>
 				</div>
+			</div>
+			<div class="setting-row">
+				<div class="setting-info">
+					<span class="setting-label">Typing Indicator Delay</span>
+					<span class="setting-desc">Wartezeit bevor die 3 Punkte erscheinen</span>
+				</div>
+				<div class="delay-input-container">
+					<button class="delay-step" onclick={() => stepDelay(-0.1)} disabled={displayStore.typingIndicatorDelayMs <= 0}>−</button>
+					<input
+						type="number"
+						class="delay-input"
+						min="0"
+						max="10"
+						step="0.1"
+						value={(displayStore.typingIndicatorDelayMs / 1000).toFixed(1)}
+						oninput={(e) => displayStore.setTypingIndicatorDelayMs(parseFloat(e.currentTarget.value) * 1000)}
+					/>
+					<span class="delay-unit">s</span>
+					<button class="delay-step" onclick={() => stepDelay(0.1)} disabled={displayStore.typingIndicatorDelayMs >= 10000}>+</button>
+				</div>
+			</div>
+			<div class="setting-row">
+				<div class="setting-info">
+					<span class="setting-label">Wait tone</span>
+					<span class="setting-desc">Sanfter Ton während der Companion denkt</span>
+				</div>
+				<label class="toggle">
+					<input
+						type="checkbox"
+						checked={displayStore.waitToneEnabled}
+						onchange={(e) => displayStore.setWaitToneEnabled(e.currentTarget.checked)}
+					/>
+					<span class="toggle-track">
+						<span class="toggle-thumb"></span>
+					</span>
+				</label>
 			</div>
 		</section>
 
@@ -411,6 +461,147 @@
 			0 2px 6px rgba(0, 0, 0, 0.3),
 			0 1px 2px rgba(0, 0, 0, 0.2),
 			inset 0 1px 0 rgba(255, 255, 255, 0.08);
+	}
+
+	/* Delay Input */
+	.delay-input-container {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.delay-step {
+		width: 2rem;
+		height: 2rem;
+		border-radius: 8px;
+		border: 1px solid rgba(0, 0, 0, 0.12);
+		background: linear-gradient(180deg, #ffffff 0%, #ebebeb 100%);
+		color: var(--text-primary);
+		font-size: 1rem;
+		line-height: 1;
+		cursor: pointer;
+		box-shadow:
+			0 2px 4px rgba(0, 0, 0, 0.08),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9);
+		transition: box-shadow 0.1s, transform 0.1s;
+	}
+
+	.delay-step:hover:not(:disabled) {
+		background: linear-gradient(180deg, #f5f5f5 0%, #e0e0e0 100%);
+	}
+
+	.delay-step:active:not(:disabled) {
+		transform: translateY(1px);
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 3px rgba(0, 0, 0, 0.1);
+	}
+
+	.delay-step:disabled {
+		opacity: 0.35;
+		cursor: default;
+	}
+
+	:global(.dark) .delay-step {
+		background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
+		border-color: rgba(255, 255, 255, 0.12);
+		box-shadow:
+			0 2px 4px rgba(0, 0, 0, 0.25),
+			inset 0 1px 0 rgba(255, 255, 255, 0.06);
+	}
+
+	:global(.dark) .delay-step:hover:not(:disabled) {
+		background: linear-gradient(180deg, #444 0%, #333 100%);
+	}
+
+	.delay-input {
+		width: 3.5rem;
+		padding: 0.35rem 0.5rem;
+		border-radius: 8px;
+		border: 1px solid rgba(0, 0, 0, 0.12);
+		background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
+		font-size: 0.875rem;
+		color: var(--text-primary);
+		text-align: center;
+		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+		-moz-appearance: textfield;
+	}
+
+	.delay-input::-webkit-outer-spin-button,
+	.delay-input::-webkit-inner-spin-button {
+		-webkit-appearance: none;
+	}
+
+	:global(.dark) .delay-input {
+		background: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
+		border-color: rgba(255, 255, 255, 0.12);
+		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+	}
+
+	.delay-unit {
+		font-size: 0.8rem;
+		color: var(--text-tertiary);
+	}
+
+	/* Toggle switch */
+	.toggle {
+		position: relative;
+		display: inline-block;
+		width: 40px;
+		height: 22px;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.toggle input {
+		opacity: 0;
+		width: 0;
+		height: 0;
+		position: absolute;
+	}
+
+	.toggle-track {
+		display: block;
+		width: 100%;
+		height: 100%;
+		background: linear-gradient(180deg, #d0d0d0 0%, #e0e0e0 100%);
+		border-radius: 11px;
+		transition: all 0.2s ease-out;
+		box-shadow:
+			inset 0 1px 3px rgba(0, 0, 0, 0.15),
+			0 1px 0 rgba(255, 255, 255, 0.8);
+	}
+
+	:global(.dark) .toggle-track {
+		background: linear-gradient(180deg, #1a1a1a 0%, #252525 100%);
+		box-shadow:
+			inset 0 1px 3px rgba(0, 0, 0, 0.4),
+			0 1px 0 rgba(255, 255, 255, 0.05);
+	}
+
+	.toggle input:checked ~ .toggle-track {
+		background: linear-gradient(180deg, #4dd0ff 0%, #01B2FF 100%);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.2),
+			0 1px 0 rgba(255, 255, 255, 0.8),
+			0 2px 8px rgba(1, 178, 255, 0.3);
+	}
+
+	.toggle-thumb {
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 18px;
+		height: 18px;
+		background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
+		border-radius: 50%;
+		transition: transform 0.2s ease-out;
+		box-shadow:
+			0 2px 4px rgba(0, 0, 0, 0.2),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9);
+		pointer-events: none;
+	}
+
+	.toggle input:checked ~ .toggle-track .toggle-thumb {
+		transform: translateX(18px);
 	}
 
 	/* Slider - Skeuomorphic */
