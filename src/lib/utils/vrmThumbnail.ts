@@ -51,7 +51,7 @@ export async function generateVrmThumbnail(url: string): Promise<string | null> 
 
 					// Optimize
 					VRMUtils.removeUnnecessaryVertices(vrm.scene);
-					VRMUtils.removeUnnecessaryJoints(vrm.scene);
+					VRMUtils.combineSkeletons(vrm.scene);
 
 					// Rotate to face camera
 					vrm.scene.rotation.y = Math.PI;

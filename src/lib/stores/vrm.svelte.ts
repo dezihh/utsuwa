@@ -241,13 +241,14 @@ function createVrmStore() {
 	async function saveToStorage() {
 		if (!vrmStorage || !storageReady) return;
 		try {
-			// Save custom models (not defaults) — strip blob URLs since they're ephemeral
+			// Save custom models (not defaults) — strip blob URLs since they're ephemeral.
+			// JSON round-trip strips Svelte 5 reactive Proxies so IndexedDB structuredClone works.
 			const customModels = models
 				.filter((m) => !m.isDefault)
 				.map(({ url, previewUrl, ...rest }) => rest);
-			await vrmStorage.setItem('model-list', customModels);
+			await vrmStorage.setItem('model-list', JSON.parse(JSON.stringify(customModels)));
 			await vrmStorage.setItem('active-model-id', activeModelId);
-			await vrmStorage.setItem('expression-profiles-by-model', emotionProfilesByModel);
+			await vrmStorage.setItem('expression-profiles-by-model', JSON.parse(JSON.stringify(emotionProfilesByModel)));
 		} catch (e) {
 			console.error('Failed to save VRM storage:', e);
 		}

@@ -2,7 +2,7 @@
 	import { T, useThrelte, useTask } from '@threlte/core';
 	import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 	import { VRMLoaderPlugin, VRM, VRMUtils } from '@pixiv/three-vrm';
-	import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
+	import { VRMAnimationLoaderPlugin, createVRMAnimationClip, VRMLookAtQuaternionProxy } from '@pixiv/three-vrm-animation';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 	import { ttsStore } from '$lib/stores/tts.svelte';
 	import { lipSyncAnalyzer } from '$lib/services/lipsync/analyzer';
@@ -473,7 +473,7 @@
 
 				// Optimize VRM
 				VRMUtils.removeUnnecessaryVertices(loadedVrm.scene);
-				VRMUtils.removeUnnecessaryJoints(loadedVrm.scene);
+				VRMUtils.combineSkeletons(loadedVrm.scene);
 
 				// Configure rendering settings for all meshes
 				loadedVrm.scene.traverse((obj) => {
@@ -497,6 +497,13 @@
 				mixer = newMixer;
 				vrmStore.setVrm(loadedVrm);
 				vrmStore.setLoading(false);
+
+				// Add LookAt proxy so createVRMAnimationClip doesn't warn about missing one
+				if (loadedVrm.lookAt) {
+					const lookAtProxy = new VRMLookAtQuaternionProxy(loadedVrm.lookAt);
+					lookAtProxy.name = 'VRMLookAtQuaternionProxy';
+					loadedVrm.scene.add(lookAtProxy);
+				}
 
 				// Start the looping idle animation
 				startIdleAnimation(loadedVrm, newMixer);
