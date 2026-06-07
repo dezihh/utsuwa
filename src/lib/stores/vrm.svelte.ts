@@ -651,6 +651,9 @@ function createVrmStore() {
 		get availableAnimations() {
 			return [...STATIC_ANIMATIONS, ...customAnimations];
 		},
+		get customAnimations() {
+			return customAnimations;
+		},
 		get idleAnimationUrl() {
 			return idleAnimationUrl;
 		},

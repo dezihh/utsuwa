@@ -277,12 +277,6 @@
 	// ── Custom Animation Upload ──
 
 	let uploadingAnimation = $state(false);
-	let customAnimations = $state<{ id: string; name: string; url: string }[]>([]);
-
-	// Sync local list with store whenever availableAnimations changes
-	$effect(() => {
-		customAnimations = vrmStore.availableAnimations.filter((a) => a.id.startsWith('anim-'));
-	});
 
 	async function handleAnimationUpload(e: Event) {
 		const input = e.target as HTMLInputElement;
@@ -375,11 +369,11 @@
 				</div>
 
 				<!-- Custom Animation List -->
-				{#if customAnimations.length > 0}
+				{#if vrmStore.customAnimations.length > 0}
 					<div class="custom-animations">
 						<p class="hint">Your uploaded animations:</p>
 						<div class="anim-list">
-							{#each customAnimations as anim}
+							{#each vrmStore.customAnimations as anim}
 								<div class="anim-row">
 									<span class="anim-name">{anim.name}</span>
 									<button
