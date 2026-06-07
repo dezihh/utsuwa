@@ -242,7 +242,7 @@
 
 	function isActionAvailable(action: string): boolean {
 		const anim = vrmStore.availableAnimations.find((a) => a.id === action);
-		return !anim?.missing;
+		return anim?.missing !== true;
 	}
 
 	function testAction(action: string) {
@@ -272,6 +272,39 @@
 		debugEventsStore.trigger(event);
 		// Navigate to home to show the event
 		await goto('/app');
+	}
+
+	// ── Custom Animation Upload ──
+
+	let uploadingAnimation = $state(false);
+	let customAnimations = $state<{ id: string; name: string; url: string }[]>([]);
+
+	// Sync local list with store whenever availableAnimations changes
+	$effect(() => {
+		customAnimations = vrmStore.availableAnimations.filter((a) => a.id.startsWith('anim-'));
+	});
+
+	async function handleAnimationUpload(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file || !file.name.endsWith('.vrma')) return;
+
+		uploadingAnimation = true;
+		try {
+			await vrmStore.addAnimation(file);
+		} catch (err) {
+			console.error('Failed to upload animation:', err);
+		}
+		uploadingAnimation = false;
+		input.value = ''; // reset so same file can be selected again
+	}
+
+	async function removeCustomAnimation(id: string) {
+		try {
+			await vrmStore.removeAnimation(id);
+		} catch (err) {
+			console.error('Failed to remove animation:', err);
+		}
 	}
 
 	// Clear all character data
@@ -319,11 +352,48 @@
 						onchange={(e) => vrmStore.setCurrentAnimation(e.currentTarget.value === 'none' ? null : e.currentTarget.value)}
 					>
 						<option value="none">— None (Idle) —</option>
-						{#each vrmStore.availableAnimations.filter((a) => !a.missing && !a.id.startsWith('idle') && a.id !== 'talking') as anim}
+						{#each vrmStore.availableAnimations.filter((a) => a.missing !== true && !a.id.startsWith('idle') && a.id !== 'talking') as anim}
 							<option value={anim.id}>{anim.name}</option>
 						{/each}
 					</select>
 				</div>
+
+				<!-- Custom Animation Upload -->
+				<div class="upload-section">
+					<p class="hint">Upload your own .vrma files to extend the animation library.</p>
+					<label class="upload-btn">
+						<Icon name="upload" size={14} />
+						{uploadingAnimation ? 'Uploading...' : 'Upload VRMA'}
+						<input
+							type="file"
+							accept=".vrma"
+							disabled={uploadingAnimation}
+							onchange={handleAnimationUpload}
+							style="display: none;"
+						/>
+					</label>
+				</div>
+
+				<!-- Custom Animation List -->
+				{#if customAnimations.length > 0}
+					<div class="custom-animations">
+						<p class="hint">Your uploaded animations:</p>
+						<div class="anim-list">
+							{#each customAnimations as anim}
+								<div class="anim-row">
+									<span class="anim-name">{anim.name}</span>
+									<button
+										class="anim-remove"
+										onclick={() => removeCustomAnimation(anim.id)}
+										title="Remove"
+									>
+										×
+									</button>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
 			</section>
 
 			<!-- Material Debug -->
@@ -906,6 +976,117 @@
 		font-family: 'Share Tech Mono', monospace;
 		color: var(--text-tertiary);
 		text-align: right;
+	}
+
+	/* ── Upload & Custom Animation List ── */
+
+	.upload-section {
+		margin-top: 0.75rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid rgba(0, 0, 0, 0.06);
+	}
+
+	:global(.dark) .upload-section {
+		border-top-color: rgba(255, 255, 255, 0.06);
+	}
+
+	.upload-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 1rem;
+		background: linear-gradient(180deg, #e8f7ff 0%, #d8f0ff 100%);
+		border: 1px solid rgba(1, 178, 255, 0.3);
+		border-radius: 10px;
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: #01B2FF;
+		cursor: pointer;
+		transition: all 0.15s ease-out;
+		box-shadow:
+			0 2px 6px rgba(1, 178, 255, 0.1),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9);
+	}
+
+	:global(.dark) .upload-btn {
+		background: linear-gradient(180deg, #1a3040 0%, #152530 100%);
+		border-color: rgba(1, 178, 255, 0.35);
+		box-shadow:
+			0 2px 6px rgba(1, 178, 255, 0.15),
+			inset 0 1px 0 rgba(255, 255, 255, 0.05);
+	}
+
+	.upload-btn:hover {
+		transform: translateY(-1px);
+		box-shadow:
+			0 4px 10px rgba(1, 178, 255, 0.2),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9);
+	}
+
+	:global(.dark) .upload-btn:hover {
+		box-shadow:
+			0 4px 10px rgba(1, 178, 255, 0.25),
+			inset 0 1px 0 rgba(255, 255, 255, 0.08);
+	}
+
+	.upload-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+		transform: none;
+	}
+
+	.custom-animations {
+		margin-top: 0.75rem;
+	}
+
+	.anim-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.anim-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.4rem 0.6rem;
+		background: linear-gradient(180deg, #f8f8f8 0%, #f0f0f0 100%);
+		border: 1px solid rgba(0, 0, 0, 0.06);
+		border-radius: 8px;
+		font-size: 0.8125rem;
+		font-family: 'Share Tech Mono', monospace;
+		color: var(--text-secondary);
+	}
+
+	:global(.dark) .anim-row {
+		background: linear-gradient(180deg, #252525 0%, #1f1f1f 100%);
+		border-color: rgba(255, 255, 255, 0.06);
+	}
+
+	.anim-remove {
+		width: 22px;
+		height: 22px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: linear-gradient(180deg, #fff0f0 0%, #ffe5e5 100%);
+		border: 1px solid rgba(220, 38, 38, 0.2);
+		border-radius: 6px;
+		font-size: 1rem;
+		line-height: 1;
+		color: var(--color-red-700);
+		cursor: pointer;
+		transition: all 0.15s ease-out;
+	}
+
+	:global(.dark) .anim-remove {
+		background: linear-gradient(180deg, #3a2020 0%, #2a1515 100%);
+		border-color: rgba(220, 38, 38, 0.3);
+		color: var(--color-red-300);
+	}
+
+	.anim-remove:hover {
+		transform: scale(1.1);
 	}
 
 	@media (max-width: 900px) {

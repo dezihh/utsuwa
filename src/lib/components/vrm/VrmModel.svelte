@@ -63,6 +63,7 @@
 	let isEmotePlaying = $state(false); // True when an emote is playing (disables blinking)
 	let lastIdleIndex = $state(-1); // Track last played idle to avoid repeats
 	let activeLipSyncAnalyser: AnalyserNode | null = null;
+	let emoteFinishedListener: ((e: { action: THREE.AnimationAction }) => void) | null = null;
 	const currentAnimation = $derived(vrmStore.currentAnimation);
 	// Talking animation plays when TTS is speaking OR when text-based talking is triggered
 	const shouldTalk = $derived(ttsStore.isSpeaking || vrmStore.isTalking);
@@ -179,6 +180,16 @@
 	// Idle animation cycling timer
 	let idleCycleTimeout: ReturnType<typeof setTimeout> | null = null;
 
+	/** Dispose an animation action and its clip to prevent mixer bloat. */
+	function disposeAction(action: THREE.AnimationAction | null) {
+		if (!action) return;
+		const m = action.getMixer();
+		const clip = action.getClip();
+		action.stop();
+		m.uncacheAction(clip);
+		m.uncacheClip(clip);
+	}
+
 	// Load and start the looping idle animation
 	function startIdleAnimation(targetVrm: VRM, targetMixer: THREE.AnimationMixer) {
 		const urls = vrmStore.idleAnimationUrls;
@@ -205,7 +216,6 @@
 				action.setLoop(THREE.LoopRepeat, Infinity);
 				action.play();
 				idleAction = action;
-
 
 				// Schedule next animation change
 				scheduleIdleCycle(targetVrm, targetMixer, clip.duration);
@@ -253,9 +263,11 @@
 				const vrmAnimations = gltf.userData.vrmAnimations;
 				if (!vrmAnimations || vrmAnimations.length === 0) return;
 
-				// Fade out current idle
-				if (idleAction) {
-					idleAction.fadeOut(1.2);
+				// Fade out and dispose current idle after crossfade
+				const oldIdle = idleAction;
+				if (oldIdle) {
+					oldIdle.fadeOut(1.2);
+					setTimeout(() => disposeAction(oldIdle), 1500);
 				}
 
 				const clip = createVRMAnimationClip(vrmAnimations[0], targetVrm);
@@ -263,7 +275,6 @@
 				action.setLoop(THREE.LoopRepeat, Infinity);
 				action.reset().fadeIn(1.2).play();
 				idleAction = action;
-
 
 				// Schedule next change
 				scheduleIdleCycle(targetVrm, targetMixer, clip.duration);
@@ -317,13 +328,13 @@
 		if (!action) return;
 
 		const actionAnimations: Record<string, string> = {
-			wave: '/animations/wave.vrma',
+			wave: '/animations/Goodbye.vrma',
 			nod: '/animations/nod.vrma',
 			shake: '/animations/shake.vrma',
-			jump: '/animations/jump.vrma',
+			jump: '/animations/Jump.vrma',
 			bow: '/animations/bow.vrma',
-			think: '/animations/think.vrma',
-			clap: '/animations/clap.vrma',
+			think: '/animations/Thinking.vrma',
+			clap: '/animations/Clapping.vrma',
 			dance: '/animations/dance.vrma'
 		};
 
@@ -355,10 +366,17 @@
 
 		if (!currentVrm || !currentMixer) return;
 
-		// Stop any current emote
+		// Stop and clean up any current emote before starting a new one
 		const prevEmote = untrack(() => emoteAction);
 		if (prevEmote) {
-			prevEmote.fadeOut(0.3);
+			disposeAction(prevEmote);
+			emoteAction = null;
+			isEmotePlaying = false;
+		}
+		// Remove stale finished listener so it doesn't fire after the emote is gone
+		if (emoteFinishedListener && currentMixer) {
+			currentMixer.removeEventListener('finished', emoteFinishedListener);
+			emoteFinishedListener = null;
 		}
 
 		// If no emote selected, just ensure idle is playing
@@ -414,30 +432,35 @@
 						vrm.expressionManager?.setValue(happyExpr, 0.7);
 					}
 
-					// When emote finishes, return to idle
-					const capturedMixer = mixer;
-					const capturedVrm = vrm;
-					const capturedIdleAction = currentIdle;
-					const onFinished = (e: { action: THREE.AnimationAction }) => {
-						if (e.action === action) {
-							capturedMixer.removeEventListener('finished', onFinished);
-							isEmotePlaying = false;
-							emoteAction = null;
+						// When emote finishes, return to idle and dispose the emote
+						const capturedMixer = mixer;
+						const capturedVrm = vrm;
+						const capturedIdleAction = currentIdle;
+						const onFinished = (e: { action: THREE.AnimationAction }) => {
+							if (e.action === action) {
+								capturedMixer.removeEventListener('finished', onFinished);
+								emoteFinishedListener = null;
+								isEmotePlaying = false;
+								emoteAction = null;
 
-							// Clear happy expression
-							if (happyExpr) {
-								capturedVrm.expressionManager?.setValue(happyExpr, 0);
+								// Dispose the finished emote action and its clip
+								disposeAction(e.action);
+
+								// Clear happy expression
+								if (happyExpr) {
+									capturedVrm.expressionManager?.setValue(happyExpr, 0);
+								}
+
+								// Resume idle animation
+								if (capturedIdleAction) {
+									capturedIdleAction.reset().fadeIn(0.3).play();
+								}
+
+								vrmStore.setCurrentAnimation(null);
 							}
-
-							// Resume idle animation
-							if (capturedIdleAction) {
-								capturedIdleAction.reset().fadeIn(0.3).play();
-							}
-
-							vrmStore.setCurrentAnimation(null);
-						}
-					};
-					capturedMixer.addEventListener('finished', onFinished);
+						};
+						emoteFinishedListener = onFinished;
+						capturedMixer.addEventListener('finished', onFinished);
 
 				});
 			},

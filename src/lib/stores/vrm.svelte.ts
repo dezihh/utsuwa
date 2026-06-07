@@ -52,6 +52,14 @@ const vrmStorage = browser
 		})
 	: null;
 
+// Configure localforage for custom animation storage
+const animationStorage = browser
+	? localforage.createInstance({
+			name: 'utsuwa-vrm',
+			storeName: 'animations'
+		})
+	: null;
+
 function normalizeExpressionName(name: string): string {
 	return name.toLowerCase().replace(/[\s_-]+/g, '');
 }
@@ -108,27 +116,41 @@ function createVrmStore() {
 		'/animations/idle_5.vrma'
 	];
 
-	// Animation registry — motions that exist as files in static/animations/
-	// Actions (wave, nod, etc.) are referenced in code but may not have VRMA files.
-	const availableAnimations: { id: string; name: string; url: string; missing?: boolean }[] = [
-		// Motion clips
-		{ id: 'VRMA_01', name: 'Motion 1', url: '/animations/VRMA_01.vrma' },
-		{ id: 'VRMA_02', name: 'Motion 2', url: '/animations/VRMA_02.vrma' },
-		{ id: 'VRMA_03', name: 'Motion 3', url: '/animations/VRMA_03.vrma' },
-		{ id: 'VRMA_04', name: 'Motion 4', url: '/animations/VRMA_04.vrma' },
-		{ id: 'VRMA_05', name: 'Motion 5', url: '/animations/VRMA_05.vrma' },
-		{ id: 'VRMA_06', name: 'Motion 6', url: '/animations/VRMA_06.vrma' },
-		{ id: 'VRMA_07', name: 'Motion 7', url: '/animations/VRMA_07.vrma' },
-		// Actions (body animations triggered by [action:xxx] tags)
-		{ id: 'wave', name: 'Wave', url: '/animations/wave.vrma', missing: true },
+	// Static animation registry — built-in VRMA files shipped with the app
+	const STATIC_ANIMATIONS: { id: string; name: string; url: string; missing?: boolean }[] = [
+		// Motion clips — VRoid Motion Pack (pixiv Inc. VRoid Project)
+		{ id: 'VRMA_01', name: 'Show Full Body', url: '/animations/VRMA_01.vrma' },
+		{ id: 'VRMA_02', name: 'Greeting', url: '/animations/VRMA_02.vrma' },
+		{ id: 'VRMA_03', name: 'Peace Sign', url: '/animations/VRMA_03.vrma' },
+		{ id: 'VRMA_04', name: 'Shoot', url: '/animations/VRMA_04.vrma' },
+		{ id: 'VRMA_05', name: 'Spin', url: '/animations/VRMA_05.vrma' },
+		{ id: 'VRMA_06', name: 'Model Pose', url: '/animations/VRMA_06.vrma' },
+		{ id: 'VRMA_07', name: 'Squat', url: '/animations/VRMA_07.vrma' },
+		// Emotion / pose VRMAs — tk256ailab/vrm-viewer (demo animations)
+		{ id: 'angry', name: 'Angry', url: '/animations/Angry.vrma' },
+		{ id: 'blush', name: 'Blush', url: '/animations/Blush.vrma' },
+		{ id: 'clapping', name: 'Clapping', url: '/animations/Clapping.vrma' },
+		{ id: 'goodbye', name: 'Goodbye', url: '/animations/Goodbye.vrma' },
+		{ id: 'jump', name: 'Jump', url: '/animations/Jump.vrma' },
+		{ id: 'lookaround', name: 'Look Around', url: '/animations/LookAround.vrma' },
+		{ id: 'relax', name: 'Relax', url: '/animations/Relax.vrma' },
+		{ id: 'sad-pose', name: 'Sad', url: '/animations/Sad.vrma' },
+		{ id: 'sleepy', name: 'Sleepy', url: '/animations/Sleepy.vrma' },
+		{ id: 'surprised-pose', name: 'Surprised', url: '/animations/Surprised.vrma' },
+		{ id: 'thinking-pose', name: 'Thinking', url: '/animations/Thinking.vrma' },
+		// Actions mapped to available VRMA files (LLM [action:xxx] tags)
+		{ id: 'wave', name: 'Wave', url: '/animations/Goodbye.vrma' },
 		{ id: 'nod', name: 'Nod', url: '/animations/nod.vrma', missing: true },
 		{ id: 'shake', name: 'Shake Head', url: '/animations/shake.vrma', missing: true },
-		{ id: 'jump', name: 'Jump', url: '/animations/jump.vrma', missing: true },
+		{ id: 'jump', name: 'Jump', url: '/animations/Jump.vrma' },
 		{ id: 'bow', name: 'Bow', url: '/animations/bow.vrma', missing: true },
-		{ id: 'think', name: 'Think', url: '/animations/think.vrma', missing: true },
-		{ id: 'clap', name: 'Clap', url: '/animations/clap.vrma', missing: true },
+		{ id: 'think', name: 'Think', url: '/animations/Thinking.vrma' },
+		{ id: 'clap', name: 'Clap', url: '/animations/Clapping.vrma' },
 		{ id: 'dance', name: 'Dance', url: '/animations/dance.vrma', missing: true }
 	];
+
+	// User-uploaded custom VRMA animations (persisted in IndexedDB)
+	let customAnimations = $state<{ id: string; name: string; url: string }[]>([]);
 
 	// Guard against saveToStorage running before init completes
 	let storageReady = false;
@@ -248,6 +270,23 @@ function createVrmStore() {
 				activeModelId = DEFAULT_MODELS[0].id;
 				modelUrl = DEFAULT_MODELS[0].url;
 			}
+
+			// Load custom animations
+			const savedAnims = await animationStorage?.getItem<{ id: string; name: string }[]>('custom-animation-list');
+			if (savedAnims && savedAnims.length > 0) {
+				const restored: { id: string; name: string; url: string }[] = [];
+				for (const anim of savedAnims) {
+					const blob = await animationStorage?.getItem<Blob>(`animation-blob-${anim.id}`);
+					if (blob) {
+						restored.push({
+							id: anim.id,
+							name: anim.name,
+							url: URL.createObjectURL(blob)
+						});
+					}
+				}
+				customAnimations = restored;
+			}
 		} catch (e) {
 			console.error('Failed to load VRM storage:', e);
 			activeModelId = DEFAULT_MODELS[0].id;
@@ -363,8 +402,8 @@ function createVrmStore() {
 			// Direct path - use as-is
 			currentAnimation = animationIdOrPath;
 		} else {
-			// Look up by ID in availableAnimations
-			const anim = availableAnimations.find((a) => a.id === animationIdOrPath);
+			// Look up by ID in all available animations (static + custom)
+			const anim = [...STATIC_ANIMATIONS, ...customAnimations].find((a) => a.id === animationIdOrPath);
 			currentAnimation = anim?.url || null;
 		}
 	}
@@ -532,6 +571,39 @@ function createVrmStore() {
 		return null;
 	}
 
+	// ── Custom Animation Management ──
+
+	async function addAnimation(file: File): Promise<void> {
+		const id = `anim-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+		const name = file.name.replace(/\.vrma$/i, '');
+
+		const blob = new Blob([await file.arrayBuffer()], { type: 'model/vrm-animation' });
+		await animationStorage?.setItem(`animation-blob-${id}`, blob);
+
+		const url = URL.createObjectURL(blob);
+		customAnimations = [...customAnimations, { id, name, url }];
+
+		// Persist list (without blob URLs — they are ephemeral)
+		const list = customAnimations.map(({ url, ...rest }) => rest);
+		await animationStorage?.setItem('custom-animation-list', JSON.parse(JSON.stringify(list)));
+	}
+
+	async function removeAnimation(id: string): Promise<void> {
+		const anim = customAnimations.find((a) => a.id === id);
+		if (!anim) return;
+
+		// Revoke blob URL to free memory
+		if (anim.url.startsWith('blob:')) {
+			URL.revokeObjectURL(anim.url);
+		}
+
+		await animationStorage?.removeItem(`animation-blob-${id}`);
+		customAnimations = customAnimations.filter((a) => a.id !== id);
+
+		const list = customAnimations.map(({ url, ...rest }) => rest);
+		await animationStorage?.setItem('custom-animation-list', JSON.parse(JSON.stringify(list)));
+	}
+
 	function getActiveModel(): VrmModel | null {
 		return models.find((m) => m.id === activeModelId) || null;
 	}
@@ -577,7 +649,7 @@ function createVrmStore() {
 			return currentAnimation;
 		},
 		get availableAnimations() {
-			return availableAnimations;
+			return [...STATIC_ANIMATIONS, ...customAnimations];
 		},
 		get idleAnimationUrl() {
 			return idleAnimationUrl;
@@ -629,7 +701,9 @@ function createVrmStore() {
 		removeModel,
 		loadModelBlob,
 		getActiveModel,
-		setModelPreview
+		setModelPreview,
+		addAnimation,
+		removeAnimation
 	};
 }
 
