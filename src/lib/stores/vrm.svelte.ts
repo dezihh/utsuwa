@@ -108,7 +108,27 @@ function createVrmStore() {
 		'/animations/idle_5.vrma'
 	];
 
-	const availableAnimations: { id: string; name: string; url: string }[] = [];
+	// Animation registry — motions that exist as files in static/animations/
+	// Actions (wave, nod, etc.) are referenced in code but may not have VRMA files.
+	const availableAnimations: { id: string; name: string; url: string; missing?: boolean }[] = [
+		// Motion clips
+		{ id: 'VRMA_01', name: 'Motion 1', url: '/animations/VRMA_01.vrma' },
+		{ id: 'VRMA_02', name: 'Motion 2', url: '/animations/VRMA_02.vrma' },
+		{ id: 'VRMA_03', name: 'Motion 3', url: '/animations/VRMA_03.vrma' },
+		{ id: 'VRMA_04', name: 'Motion 4', url: '/animations/VRMA_04.vrma' },
+		{ id: 'VRMA_05', name: 'Motion 5', url: '/animations/VRMA_05.vrma' },
+		{ id: 'VRMA_06', name: 'Motion 6', url: '/animations/VRMA_06.vrma' },
+		{ id: 'VRMA_07', name: 'Motion 7', url: '/animations/VRMA_07.vrma' },
+		// Actions (body animations triggered by [action:xxx] tags)
+		{ id: 'wave', name: 'Wave', url: '/animations/wave.vrma', missing: true },
+		{ id: 'nod', name: 'Nod', url: '/animations/nod.vrma', missing: true },
+		{ id: 'shake', name: 'Shake Head', url: '/animations/shake.vrma', missing: true },
+		{ id: 'jump', name: 'Jump', url: '/animations/jump.vrma', missing: true },
+		{ id: 'bow', name: 'Bow', url: '/animations/bow.vrma', missing: true },
+		{ id: 'think', name: 'Think', url: '/animations/think.vrma', missing: true },
+		{ id: 'clap', name: 'Clap', url: '/animations/clap.vrma', missing: true },
+		{ id: 'dance', name: 'Dance', url: '/animations/dance.vrma', missing: true }
+	];
 
 	// Guard against saveToStorage running before init completes
 	let storageReady = false;

@@ -6,6 +6,12 @@
 	import localforage from 'localforage';
 	import { debugEventsStore, testEvents } from '$lib/stores/debugEvents.svelte';
 	import { goto } from '$app/navigation';
+	import {
+		EMOTION_TAGS,
+		getEmotionVrmExpression,
+		getKnownActionTags
+	} from '$lib/utils/sentences';
+	import { DEFAULT_EMOTION_MAPPINGS } from '$lib/services/vrm/expression-controller';
 
 	// Material debug modes from @pixiv/three-vrm-materials-mtoon
 	const materialDebugModes = [
@@ -144,70 +150,103 @@
 		}
 	}
 
-	// Test blink
-	function testBlink() {
-		setExpression('eyeBlinkLeft', 1);
-		setExpression('eyeBlinkRight', 1);
-		setTimeout(() => {
-			setExpression('eyeBlinkLeft', 0);
-			setExpression('eyeBlinkRight', 0);
-		}, 150);
+	// ── Expression Presets ──
+
+	interface Preset {
+		name: string;
+		exprs: Record<string, number>;
+		duration: number;
 	}
 
-	// Test smile
-	function testSmile() {
-		setExpression('mouthSmileLeft', 0.8);
-		setExpression('mouthSmileRight', 0.8);
-		setExpression('cheekSquintLeft', 0.3);
-		setExpression('cheekSquintRight', 0.3);
-		setTimeout(() => {
-			setExpression('mouthSmileLeft', 0);
-			setExpression('mouthSmileRight', 0);
-			setExpression('cheekSquintLeft', 0);
-			setExpression('cheekSquintRight', 0);
-		}, 1000);
+	const presets: Preset[] = [
+		{
+			name: 'Test Blink',
+			exprs: { eyeBlinkLeft: 1, eyeBlinkRight: 1 },
+			duration: 150
+		},
+		{
+			name: 'Test Smile',
+			exprs: { mouthSmileLeft: 0.8, mouthSmileRight: 0.8, cheekSquintLeft: 0.3, cheekSquintRight: 0.3 },
+			duration: 1000
+		},
+		{
+			name: 'Test Surprised',
+			exprs: { eyeWideLeft: 0.8, eyeWideRight: 0.8, browInnerUp: 0.7, browOuterUpLeft: 0.5, browOuterUpRight: 0.5, jawOpen: 0.4 },
+			duration: 1000
+		},
+		{
+			name: 'Test Sad',
+			exprs: { browInnerUp: 0.6, browDownLeft: 0.3, browDownRight: 0.3, mouthFrownLeft: 0.5, mouthFrownRight: 0.5 },
+			duration: 1000
+		},
+		{
+			name: 'Test Mouth Open',
+			exprs: { jawOpen: 0.7 },
+			duration: 500
+		}
+	];
+
+	function isPresetAvailable(preset: Preset): boolean {
+		return Object.keys(preset.exprs).every((name) => availableExpressions.includes(name));
 	}
 
-	// Test surprised
-	function testSurprised() {
-		setExpression('eyeWideLeft', 0.8);
-		setExpression('eyeWideRight', 0.8);
-		setExpression('browInnerUp', 0.7);
-		setExpression('browOuterUpLeft', 0.5);
-		setExpression('browOuterUpRight', 0.5);
-		setExpression('jawOpen', 0.4);
+	function runPreset(preset: Preset) {
+		for (const [name, value] of Object.entries(preset.exprs)) {
+			setExpression(name, value);
+		}
 		setTimeout(() => {
-			setExpression('eyeWideLeft', 0);
-			setExpression('eyeWideRight', 0);
-			setExpression('browInnerUp', 0);
-			setExpression('browOuterUpLeft', 0);
-			setExpression('browOuterUpRight', 0);
-			setExpression('jawOpen', 0);
-		}, 1000);
+			for (const name of Object.keys(preset.exprs)) {
+				setExpression(name, 0);
+			}
+		}, preset.duration);
 	}
 
-	// Test sad
-	function testSad() {
-		setExpression('browInnerUp', 0.6);
-		setExpression('browDownLeft', 0.3);
-		setExpression('browDownRight', 0.3);
-		setExpression('mouthFrownLeft', 0.5);
-		setExpression('mouthFrownRight', 0.5);
-		setTimeout(() => {
-			setExpression('browInnerUp', 0);
-			setExpression('browDownLeft', 0);
-			setExpression('browDownRight', 0);
-			setExpression('mouthFrownLeft', 0);
-			setExpression('mouthFrownRight', 0);
-		}, 1000);
+	// ── Emotion Tag Tests (dynamic, based on loaded model) ──
+
+	/** Check whether the VRM expression mapped to an emotion tag is available on the current model.
+	 *  Respects the active per-model emotion profile first, then falls back to default mappings. */
+	function isEmotionAvailable(emotion: string): boolean {
+		const profile = vrmStore.emotionProfile;
+		const mappedExpr = profile?.[emotion]?.expression;
+		if (mappedExpr) return availableExpressions.includes(mappedExpr);
+		const expr = getEmotionVrmExpression(emotion);
+		return !!expr && availableExpressions.includes(expr);
 	}
 
-	// Open mouth for testing
-	function testMouthOpen() {
-		setExpression('jawOpen', 0.7);
+	/** Get intensity for an emotion (from active profile or defaults). */
+	function getEmotionIntensity(emotion: string): number {
+		const profile = vrmStore.emotionProfile;
+		return profile?.[emotion]?.intensity ?? DEFAULT_EMOTION_MAPPINGS[emotion]?.intensity ?? 0.7;
+	}
+
+	/** Play a single emotion expression for a short time, then reset.
+	 *  Uses the per-model emotion profile so custom mappings are honoured. */
+	function testEmotion(emotion: string) {
+		const profile = vrmStore.emotionProfile;
+		const mapping = profile?.[emotion];
+		const expr = mapping?.expression || getEmotionVrmExpression(emotion);
+		if (!expr || !availableExpressions.includes(expr)) return;
+		const intensity = mapping?.intensity ?? DEFAULT_EMOTION_MAPPINGS[emotion]?.intensity ?? 0.7;
+		setExpression(expr, intensity);
 		setTimeout(() => {
-			setExpression('jawOpen', 0);
-		}, 500);
+			setExpression(expr, 0);
+		}, 1500);
+	}
+
+	/** All known emotion tags, sorted alphabetically. */
+	const knownEmotions = Object.keys(EMOTION_TAGS).sort();
+
+	// ── Action Tests ──
+
+	const knownActions = getKnownActionTags().sort();
+
+	function isActionAvailable(action: string): boolean {
+		const anim = vrmStore.availableAnimations.find((a) => a.id === action);
+		return !anim?.missing;
+	}
+
+	function testAction(action: string) {
+		vrmStore.triggerAction(action);
 	}
 
 	// Clear all VRM storage (IndexedDB)
@@ -220,7 +259,6 @@
 				storeName: 'models'
 			});
 			await vrmStorage.clear();
-			// console.log('VRM storage cleared');
 			// Reload to reset state
 			window.location.reload();
 		} catch (e) {
@@ -240,7 +278,6 @@
 	async function clearCharacterData() {
 		try {
 			indexedDB.deleteDatabase('utsuwa-db');
-			// console.log('Character database cleared');
 			window.location.reload();
 		} catch (e) {
 			console.error('Failed to clear character data:', e);
@@ -273,115 +310,171 @@
 		<!-- Controls Panel -->
 		<div class="controls-panel">
 			<!-- Animation Selection -->
-		<section class="section">
-			<h3>Animation</h3>
-			<p class="hint">Select an animation to play on the model.</p>
-			<div class="animation-select">
-				<select
-					value={vrmStore.currentAnimation || 'none'}
-					onchange={(e) => vrmStore.setCurrentAnimation(e.currentTarget.value === 'none' ? null : e.currentTarget.value)}
-				>
-					{#each vrmStore.availableAnimations as anim}
-						<option value={anim.id}>{anim.name}</option>
-					{/each}
-				</select>
-			</div>
-		</section>
-
-		<!-- Material Debug -->
-		<section class="section">
-			<h3>Material Debug</h3>
-			<p class="hint">Visualize different material properties (MToon).</p>
-			<div class="animation-select">
-				<select
-					value={currentDebugMode}
-					onchange={(e) => setMaterialDebugMode(e.currentTarget.value)}
-				>
-					{#each materialDebugModes as mode}
-						<option value={mode.id}>{mode.name}</option>
-					{/each}
-				</select>
-			</div>
-		</section>
-
-		<!-- Quick Actions -->
-		<section class="section">
-			<h3>Quick Tests</h3>
-			<div class="quick-actions">
-				<button class="action-btn" onclick={testBlink}>Test Blink</button>
-				<button class="action-btn" onclick={testSmile}>Test Smile</button>
-				<button class="action-btn" onclick={testSurprised}>Test Surprised</button>
-				<button class="action-btn" onclick={testSad}>Test Sad</button>
-				<button class="action-btn" onclick={testMouthOpen}>Test Mouth Open</button>
-				<button class="action-btn reset" onclick={resetAll}>Reset All</button>
-			</div>
-		</section>
-
-		<!-- Events Debug -->
-		<section class="section">
-			<h3>Event System</h3>
-			<p class="hint">Trigger test events to preview the event modal styling.</p>
-			<div class="event-buttons">
-				{#each testEvents as event}
-					<button class="event-btn" onclick={() => triggerEvent(event)}>
-						<Icon name={event.type === 'milestone' ? 'sparkles' : event.type === 'anniversary' ? 'calendar' : event.type === 'conditional' ? 'heart' : 'shuffle'} size={14} />
-						{event.name}
-					</button>
-				{/each}
-			</div>
-		</section>
-
-		<!-- Storage -->
-		<section class="section">
-			<h3>Storage</h3>
-			<p class="hint">Clear cached data from browser storage.</p>
-			<div class="quick-actions">
-				<button class="action-btn reset" onclick={clearVrmStorage} disabled={clearingStorage}>
-					{clearingStorage ? 'Clearing...' : 'Clear VRM Storage'}
-				</button>
-				<button class="action-btn reset" onclick={clearCharacterData}>
-					Reset Character Data
-				</button>
-			</div>
-		</section>
-
-		<!-- Available Expressions Info -->
-		<section class="section">
-			<h3>Available Expressions ({availableExpressions.length})</h3>
-			<p class="hint">This model supports the following expressions:</p>
-			<div class="expression-tags">
-				{#each availableExpressions as expr}
-					<span class="tag">{expr}</span>
-				{/each}
-			</div>
-		</section>
-
-		<!-- Expression Sliders by Category -->
-		{#each Object.entries(expressionCategories) as [category, expressions]}
-			{@const available = getAvailableInCategory(expressions)}
-			{#if available.length > 0}
-				<section class="section">
-					<h3>{category.charAt(0).toUpperCase() + category.slice(1)}</h3>
-					<div class="sliders">
-						{#each available as expr}
-							<div class="slider-row">
-								<label for={expr}>{expr}</label>
-								<input
-									type="range"
-									id={expr}
-									min="0"
-									max="1"
-									step="0.01"
-									value={expressionValues[expr] || 0}
-									oninput={(e) => setExpression(expr, parseFloat(e.currentTarget.value))}
-								/>
-								<span class="value">{(expressionValues[expr] || 0).toFixed(2)}</span>
-							</div>
+			<section class="section">
+				<h3>Animation</h3>
+				<p class="hint">Select a motion clip to play on the model. Idle animations run automatically.</p>
+				<div class="animation-select">
+					<select
+						value={vrmStore.currentAnimation || 'none'}
+						onchange={(e) => vrmStore.setCurrentAnimation(e.currentTarget.value === 'none' ? null : e.currentTarget.value)}
+					>
+						<option value="none">— None (Idle) —</option>
+						{#each vrmStore.availableAnimations.filter((a) => !a.missing && !a.id.startsWith('idle') && a.id !== 'talking') as anim}
+							<option value={anim.id}>{anim.name}</option>
 						{/each}
-					</div>
-				</section>
-			{/if}
-		{/each}
+					</select>
+				</div>
+			</section>
+
+			<!-- Material Debug -->
+			<section class="section">
+				<h3>Material Debug</h3>
+				<p class="hint">Visualize different material properties (MToon).</p>
+				<div class="animation-select">
+					<select
+						value={currentDebugMode}
+						onchange={(e) => setMaterialDebugMode(e.currentTarget.value)}
+					>
+						{#each materialDebugModes as mode}
+							<option value={mode.id}>{mode.name}</option>
+						{/each}
+					</select>
+				</div>
+			</section>
+
+			<!-- Expression Presets (formerly Quick Tests) -->
+			<section class="section">
+				<h3>Expression Presets</h3>
+				<p class="hint">Pre-configured combinations of multiple expressions that create a recognizable overall expression. Presets are disabled when this model lacks a required expression.</p>
+				<div class="quick-actions">
+					{#each presets as preset}
+						{@const available = isPresetAvailable(preset)}
+						<button
+							class="action-btn"
+							class:disabled={!available}
+							onclick={() => runPreset(preset)}
+							disabled={!available}
+							title={available ? preset.name : `Missing expressions: ${Object.keys(preset.exprs).filter((n) => !availableExpressions.includes(n)).join(', ')}`}
+						>
+							{preset.name}
+						</button>
+					{/each}
+					<button class="action-btn reset" onclick={resetAll}>Reset All</button>
+				</div>
+			</section>
+
+			<!-- Emotion Tags (dynamic, model-specific) -->
+			<section class="section">
+				<h3>Emotion Tags</h3>
+				<p class="hint">Test each emotion the LLM can use. Only emotions whose underlying VRM expression is available on this model are enabled.</p>
+				<div class="quick-actions">
+					{#each knownEmotions as emotion}
+						{@const available = isEmotionAvailable(emotion)}
+						<button
+							class="action-btn"
+							class:disabled={!available}
+							onclick={() => testEmotion(emotion)}
+							disabled={!available}
+							title={available ? `Test ${emotion}` : `Expression '${getEmotionVrmExpression(emotion) ?? '?'}' not available on this model`}
+						>
+							{EMOTION_TAGS[emotion].displayText ?? ''} {emotion}
+						</button>
+					{/each}
+				</div>
+			</section>
+
+			<!-- Action Tests -->
+			<section class="section">
+				<h3>Action Tests</h3>
+				<p class="hint">Trigger body animations. Actions without a VRMA file are shown as unavailable.</p>
+				<div class="quick-actions">
+					{#each knownActions as action}
+						{@const available = isActionAvailable(action)}
+						<button
+							class="action-btn"
+							class:disabled={!available}
+							onclick={() => testAction(action)}
+							disabled={!available}
+							title={available ? `Trigger ${action}` : `Animation file for '${action}' not found`}
+						>
+							{action}
+						</button>
+					{/each}
+				</div>
+			</section>
+
+			<!-- Events Debug -->
+			<section class="section">
+				<h3>Event System</h3>
+				<p class="hint">Trigger test events to preview the event modal styling.</p>
+				<div class="event-buttons">
+					{#each testEvents as event}
+						<button class="event-btn" onclick={() => triggerEvent(event)}>
+							<Icon name={event.type === 'milestone' ? 'sparkles' : event.type === 'anniversary' ? 'calendar' : event.type === 'conditional' ? 'heart' : 'shuffle'} size={14} />
+							{event.name}
+						</button>
+					{/each}
+				</div>
+			</section>
+
+			<!-- Storage -->
+			<section class="section">
+				<h3>Storage</h3>
+				<p class="hint">Clear cached data from browser storage.</p>
+				<div class="quick-actions">
+					<button class="action-btn reset" onclick={clearVrmStorage} disabled={clearingStorage}>
+						{clearingStorage ? 'Clearing...' : 'Clear VRM Storage'}
+					</button>
+					<button class="action-btn reset" onclick={clearCharacterData}>
+						Reset Character Data
+					</button>
+				</div>
+			</section>
+
+			<!-- Detected Model Expressions (formerly Available Expressions) -->
+			<section class="section">
+				<h3>Detected Model Expressions ({availableExpressions.length})</h3>
+				<p class="hint">Click any expression to preview it at full intensity. Click Reset to clear.</p>
+				<div class="expression-tags">
+					{#each availableExpressions as expr}
+						<button
+							class="tag clickable"
+							onclick={() => setExpression(expr, 1)}
+							title="Preview {expr}"
+							type="button"
+						>
+							{expr}
+						</button>
+					{/each}
+				</div>
+			</section>
+
+			<!-- Expression Sliders by Category -->
+			{#each Object.entries(expressionCategories) as [category, expressions]}
+				{@const available = getAvailableInCategory(expressions)}
+				{#if available.length > 0}
+					<section class="section">
+						<h3>{category.charAt(0).toUpperCase() + category.slice(1)}</h3>
+						<div class="sliders">
+							{#each available as expr}
+								<div class="slider-row">
+									<label for={expr}>{expr}</label>
+									<input
+										type="range"
+										id={expr}
+										min="0"
+										max="1"
+										step="0.01"
+										value={expressionValues[expr] || 0}
+										oninput={(e) => setExpression(expr, parseFloat(e.currentTarget.value))}
+									/>
+									<span class="value">{(expressionValues[expr] || 0).toFixed(2)}</span>
+								</div>
+							{/each}
+						</div>
+					</section>
+				{/if}
+			{/each}
 		</div>
 	</div>
 </div>
@@ -406,12 +499,10 @@
 		color: var(--text-primary);
 	}
 
-
 	.description {
 		margin: 0;
 		color: var(--text-secondary);
 	}
-
 
 	.dev-layout {
 		display: grid;
@@ -492,7 +583,6 @@
 			inset 0 1px 0 rgba(255, 255, 255, 0.08);
 	}
 
-
 	.controls-panel {
 		overflow-y: auto;
 		min-height: 0;
@@ -521,14 +611,12 @@
 			inset 0 1px 0 rgba(255, 255, 255, 0.05);
 	}
 
-
 	.section h3 {
 		margin: 0 0 0.75rem;
 		font-size: 1rem;
 		font-weight: 600;
 		color: var(--text-primary);
 	}
-
 
 	.hint {
 		margin: 0 0 0.75rem;
@@ -539,6 +627,7 @@
 	.animation-select select {
 		width: 100%;
 		padding: 0.75rem 1rem;
+		padding-right: 2rem;
 		background: linear-gradient(180deg, #f8f8f8 0%, #f0f0f0 100%);
 		border: 1px solid rgba(0, 0, 0, 0.1);
 		border-radius: 10px;
@@ -546,19 +635,35 @@
 		color: var(--text-primary);
 		cursor: pointer;
 		transition: all 0.15s ease-out;
+		appearance: none;
+		-webkit-appearance: none;
+		-moz-appearance: none;
+		background-clip: padding-box;
+		color-scheme: light;
 		box-shadow:
 			inset 0 1px 2px rgba(0, 0, 0, 0.05),
 			0 1px 0 rgba(255, 255, 255, 0.8);
 	}
 
 	:global(.dark) .animation-select select {
-		background: linear-gradient(180deg, #1a1a1a 0%, #141414 100%);
-		border-color: rgba(255, 255, 255, 0.1);
+		background: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
+		border-color: rgba(255, 255, 255, 0.12);
+		color: var(--text-primary);
+		color-scheme: dark;
 		box-shadow:
-			inset 0 1px 2px rgba(0, 0, 0, 0.2),
+			inset 0 1px 2px rgba(0, 0, 0, 0.3),
 			0 1px 0 rgba(255, 255, 255, 0.03);
 	}
 
+	.animation-select select option {
+		color: var(--text-primary);
+		background: var(--bg-secondary);
+	}
+
+	:global(.dark) .animation-select select option {
+		color: var(--text-primary);
+		background: var(--bg-secondary);
+	}
 
 	.animation-select select:hover {
 		border-color: rgba(1, 178, 255, 0.4);
@@ -599,7 +704,6 @@
 			inset 0 1px 0 rgba(255, 255, 255, 0.05);
 	}
 
-
 	.action-btn:hover {
 		transform: translateY(-1px);
 		box-shadow:
@@ -612,7 +716,6 @@
 			0 4px 10px rgba(0, 0, 0, 0.3),
 			inset 0 1px 0 rgba(255, 255, 255, 0.08);
 	}
-
 
 	.action-btn.reset {
 		background: linear-gradient(180deg, #fff0f0 0%, #ffe5e5 100%);
@@ -633,6 +736,21 @@
 
 	:global(.dark) .action-btn.reset:hover {
 		background: linear-gradient(180deg, #4a2525 0%, #3a1a1a 100%);
+	}
+
+	.action-btn.disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+		transform: none !important;
+		box-shadow:
+			0 2px 6px rgba(0, 0, 0, 0.06),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+	}
+
+	:global(.dark) .action-btn.disabled {
+		box-shadow:
+			0 2px 6px rgba(0, 0, 0, 0.2),
+			inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
 	}
 
 	.event-buttons {
@@ -707,6 +825,26 @@
 			inset 0 1px 0 rgba(255, 255, 255, 0.05);
 	}
 
+	.tag.clickable {
+		cursor: pointer;
+		transition: all 0.15s ease-out;
+	}
+
+	.tag.clickable:hover {
+		transform: translateY(-1px);
+		box-shadow:
+			0 3px 6px rgba(0, 0, 0, 0.08),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9);
+		border-color: rgba(1, 178, 255, 0.35);
+		color: #01B2FF;
+	}
+
+	:global(.dark) .tag.clickable:hover {
+		box-shadow:
+			0 3px 6px rgba(0, 0, 0, 0.25),
+			inset 0 1px 0 rgba(255, 255, 255, 0.05);
+		border-color: rgba(1, 178, 255, 0.45);
+	}
 
 	.sliders {
 		display: flex;
@@ -727,7 +865,6 @@
 		color: var(--text-secondary);
 	}
 
-
 	.slider-row input[type='range'] {
 		width: 100%;
 		height: 8px;
@@ -746,7 +883,6 @@
 			inset 0 1px 3px rgba(0, 0, 0, 0.4),
 			0 1px 0 rgba(255, 255, 255, 0.05);
 	}
-
 
 	.slider-row input[type='range']::-webkit-slider-thumb {
 		-webkit-appearance: none;

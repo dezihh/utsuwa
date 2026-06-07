@@ -200,7 +200,7 @@ const EMOTION_TTS_BY_LANG: Record<string, Partial<Record<string, string>>> = {
 	}
 };
 
-const EMOTION_TAGS: Record<string, EmotionEntry> = {
+export const EMOTION_TAGS: Record<string, EmotionEntry> = {
 	laugh: { ttsText: 'Hahaha,', exaggeration: 0.9, displayText: '😄', vrmExpression: 'happy' },
 	giggle: { ttsText: 'Hehehe,', exaggeration: 0.85, displayText: '🙈', vrmExpression: 'happy' },
 	chuckle: { ttsText: 'Hm, haha,', exaggeration: 0.75, displayText: '😏', vrmExpression: 'happy' },

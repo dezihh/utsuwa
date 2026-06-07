@@ -201,6 +201,16 @@
 		const activeTTSProvider = speechSettings?.activeProvider as string | undefined;
 		const ttsConfig = activeTTSProvider ? settingsStore.getProviderConfig(activeTTSProvider) : null;
 
+		// Build emotion mappings for the current VRM model
+		const emotionProfile = vrmStore.emotionProfile;
+		const emotionMappings = emotionProfile
+			? Object.fromEntries(
+					Object.entries(emotionProfile)
+						.filter(([, m]) => m.expression)
+						.map(([tag, m]) => [tag, m.expression])
+				)
+			: undefined;
+
 		const context: PromptContext = {
 			persona,
 			state,
@@ -208,7 +218,12 @@
 			userMessage,
 			systemTime: new Date(),
 			ttsProvider: activeTTSProvider,
-			ttsLanguage: ttsConfig?.language || undefined
+			ttsLanguage: ttsConfig?.language || undefined,
+			availableExpressions: vrmStore.availableExpressions,
+			availableActions: vrmStore.availableAnimations
+				.filter((a) => !a.missing)
+				.map((a) => a.id),
+			emotionMappings
 		};
 
 		return buildSystemPrompt(context);

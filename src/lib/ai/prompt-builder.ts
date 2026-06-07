@@ -4,6 +4,7 @@ import type { PersonaCard } from '$lib/stores/persona.svelte';
 import type { McpTool } from '$lib/types/mcp';
 import { STAGE_BEHAVIORS, STAGE_INSTRUCTIONS } from '$lib/engine/stages';
 import { inferResponseLengthMode } from './response-length.ts';
+import { getEmotionVrmExpression, getKnownActionTags } from '$lib/utils/sentences';
 
 // Prompt context for building
 export interface PromptContext {
@@ -24,6 +25,12 @@ export interface PromptContext {
 	continueMode?: boolean;
 	/** Previously written assistant text used for continue-mode guidance */
 	continueFromText?: string;
+	/** VRM expressions available on the currently loaded model */
+	availableExpressions?: string[];
+	/** Body actions (animations) available for the current model */
+	availableActions?: string[];
+	/** Emotion-to-expression mappings active for the current model (tag → expressionName) */
+	emotionMappings?: Record<string, string>;
 }
 
 // Build the complete system prompt
@@ -42,6 +49,9 @@ export function buildSystemPrompt(context: PromptContext): string {
 
 	const voiceTags = buildVoiceTagLayer(context);
 	if (voiceTags) layers.push(voiceTags);
+
+	const avatarLayer = buildAvatarCapabilityLayer(context);
+	if (avatarLayer) layers.push(avatarLayer);
 
 	const mcpLayer = buildMcpToolLayer(context);
 	if (mcpLayer) layers.push(mcpLayer);
@@ -125,6 +135,9 @@ NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affecti
 
 	const voiceTags = buildVoiceTagLayer(ctx);
 	if (voiceTags) parts.push(voiceTags);
+
+	const avatarLayer = buildAvatarCapabilityLayer(ctx);
+	if (avatarLayer) parts.push(avatarLayer);
 
 	const mcpLayer = buildMcpToolLayer(ctx);
 	if (mcpLayer) parts.push(mcpLayer);
@@ -478,6 +491,45 @@ EXAMPLES:
 	}
 
 	return null;
+}
+
+// Avatar capability layer — informs the LLM which expressions and animations
+// the currently loaded VRM model actually supports, so it does not waste tags
+// on missing capabilities.
+function buildAvatarCapabilityLayer(ctx: PromptContext): string | null {
+	const expressions = ctx.availableExpressions;
+	if (!expressions || expressions.length === 0) return null;
+
+	const parts: string[] = [];
+
+	// Supported expressions
+	parts.push(`Supported facial expressions on this model:\n  ${expressions.join(', ')}`);
+
+	// Emotion tag mappings
+	const mappings = ctx.emotionMappings;
+	if (mappings && Object.keys(mappings).length > 0) {
+		const mapped = Object.entries(mappings)
+			.filter(([, expr]) => expr && expressions.includes(expr))
+			.map(([tag, expr]) => `  [${tag}] → ${expr}`);
+		if (mapped.length > 0) {
+			parts.push(`Active emotion tag mappings (use only these):\n${mapped.join('\n')}`);
+		}
+	}
+
+	// Available actions
+	const actions = ctx.availableActions;
+	if (actions && actions.length > 0) {
+		const actionList = actions.map((a) => `  [action:${a}]`).join('\n');
+		parts.push(`Available body animations:\n${actionList}`);
+	}
+
+	parts.push(
+		`IMPORTANT: Only use emotion tags and actions listed above. ` +
+		`Tags without a mapped expression on this model will not produce any visual facial reaction, ` +
+		`though spoken sound effects may still play.`
+	);
+
+	return `<avatar_capabilities>\n${parts.join('\n\n')}\n</avatar_capabilities>`;
 }
 
 function buildContinueLayer(ctx: PromptContext): string | null {

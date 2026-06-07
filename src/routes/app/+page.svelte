@@ -298,6 +298,16 @@
 		const ttsConfig = activeTTSProvider ? settingsStore.getProviderConfig(activeTTSProvider) : null;
 		const activeMcpTools = mcpStore.hasActiveTools && !isTauri() ? mcpStore.tools : undefined;
 
+		// Build emotion mappings for the current VRM model
+		const emotionProfile = vrmStore.emotionProfile;
+		const emotionMappings = emotionProfile
+			? Object.fromEntries(
+					Object.entries(emotionProfile)
+						.filter(([, m]) => m.expression)
+						.map(([tag, m]) => [tag, m.expression])
+				)
+			: undefined;
+
 		const context: PromptContext = {
 			persona,
 			state,
@@ -309,7 +319,12 @@
 			ttsAltVoiceEnabled: activeTTSProvider === 'omnivoice' && !!(ttsConfig?.omnivoiceAltEnabled),
 			mcpTools: activeMcpTools,
 			continueMode: options?.continueMode,
-			continueFromText: options?.continueFromText
+			continueFromText: options?.continueFromText,
+			availableExpressions: vrmStore.availableExpressions,
+			availableActions: vrmStore.availableAnimations
+				.filter((a) => !a.missing)
+				.map((a) => a.id),
+			emotionMappings
 		};
 
 		return buildSystemPrompt(context);
