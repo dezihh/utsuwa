@@ -101,12 +101,14 @@ export class StreamingSpeechBuffer {
 
 		// Emit up to the first sentence boundary so TTS can start immediately.
 		// tryEmit() loops and calls us again for the next sentence.
-		const sentenceEnd = /([.!?…])\s+/;
+		// Match sentence-ending punctuation followed by whitespace OR end-of-string,
+		// so a sentence that ends at the current buffer tail is emitted right away
+		// instead of waiting indefinitely for more text that may never arrive.
+		const sentenceEnd = /([.!?…])(\s+|$)/;
 		const m = sentenceEnd.exec(text);
 		if (!m) return;
 
 		const firstEnd = m.index + m[0].length;
-		if (firstEnd < 8) return; // too short — wait for more text
 
 		const block = text.slice(0, firstEnd);
 		if (block.trim()) {
