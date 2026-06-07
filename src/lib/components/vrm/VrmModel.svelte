@@ -180,14 +180,18 @@
 	// Idle animation cycling timer
 	let idleCycleTimeout: ReturnType<typeof setTimeout> | null = null;
 
-	/** Dispose an animation action and its clip to prevent mixer bloat. */
+	/** Dispose an animation action to prevent mixer bloat.
+	 *  Uses a microtask to avoid race conditions during mixer.update(). */
 	function disposeAction(action: THREE.AnimationAction | null) {
 		if (!action) return;
 		const m = action.getMixer();
 		const clip = action.getClip();
 		action.stop();
-		m.uncacheAction(clip);
-		m.uncacheClip(clip);
+		// Defer uncache to next tick so mixer.update() in the current frame
+		// never touches a partially-removed action/clip.
+		queueMicrotask(() => {
+			m.uncacheAction(clip);
+		});
 	}
 
 	// Load and start the looping idle animation
