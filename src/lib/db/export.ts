@@ -13,15 +13,7 @@ import type {
 import type { Fact, SessionSummary, ConversationTurn } from '$lib/types/memory';
 import type { CompletedEventRecord } from '$lib/types/events';
 
-export const SAVE_FILE_VERSION = '3.1';
-
-// localStorage keys that should be included in export/import
-const SETTINGS_KEYS = [
-	'utsuwa-settings',
-	'utsuwa-mcp-v1',
-	'utsuwa-bg-v1',
-	'utsuwa-overlay-position'
-] as const;
+export const SAVE_FILE_VERSION = '3.2';
 
 // Localforage instance for VRM storage (mirrors vrm.svelte.ts)
 const vrmStorage = browser
@@ -47,7 +39,7 @@ export interface ExportedVrmModel {
 }
 
 export interface ExportedSettings {
-	/** Raw localStorage values (JSON strings) for utsuwa-* keys */
+	/** Raw localStorage values (JSON strings) for all utsuwa-* keys */
 	localStorage: Record<string, string>;
 	/** All utsuwa-module-* localStorage keys */
 	moduleSettings: Record<string, string>;
@@ -55,6 +47,12 @@ export interface ExportedSettings {
 	vrmModels: ExportedVrmModel[];
 	/** Per-avatar emotion expression mappings */
 	expressionProfilesByModel: Record<string, Record<string, EmotionMapping>>;
+	/** Theme preference (not prefixed with utsuwa-) */
+	colorMode?: string;
+	/** Active VRM model ID from localforage */
+	activeModelId?: string;
+	/** Large background image from localforage (too big for localStorage) */
+	bgCustomUrlFromForage?: string;
 }
 
 // V3 SaveFile - includes settings + VRM models
@@ -128,7 +126,7 @@ export async function exportSave(): Promise<SaveFile> {
 		({ id: _id, ...rest }) => rest
 	) as CompletedEventRecord[];
 
-	// Collect settings from localStorage
+	// Collect settings from localStorage and localforage
 	const settings = await collectSettings();
 
 	return {
@@ -146,16 +144,23 @@ export async function exportSave(): Promise<SaveFile> {
 	};
 }
 
-/** Collect all settings from localStorage and VRM localforage */
+/** Collect all settings from localStorage and localforage */
 async function collectSettings(): Promise<ExportedSettings> {
 	const localStorage_: Record<string, string> = {};
 	const moduleSettings: Record<string, string> = {};
 
 	if (browser) {
-		// Fixed keys
-		for (const key of SETTINGS_KEYS) {
+		// Dynamically collect all utsuwa-* keys from localStorage
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (!key) continue;
 			const val = localStorage.getItem(key);
-			if (val !== null) localStorage_[key] = val;
+			if (val === null) continue;
+			if (key.startsWith('utsuwa-module-')) {
+				moduleSettings[key] = val;
+			} else if (key.startsWith('utsuwa-')) {
+				localStorage_[key] = val;
+			}
 		}
 
 		// Always export background from in-memory store — the customUrl data: URL may be
@@ -165,20 +170,13 @@ async function collectSettings(): Promise<ExportedSettings> {
 		if (bgPresetId || bgCustomUrl) {
 			localStorage_[BG_STORAGE_KEY] = JSON.stringify({ presetId: bgPresetId, customUrl: bgCustomUrl });
 		}
-
-		// All utsuwa-module-* keys
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (key?.startsWith('utsuwa-module-')) {
-				const val = localStorage.getItem(key);
-				if (val !== null) moduleSettings[key] = val;
-			}
-		}
 	}
 
 	// VRM custom models + blobs
 	const vrmModels: ExportedVrmModel[] = [];
 	let expressionProfilesByModel: Record<string, Record<string, EmotionMapping>> = {};
+	let activeModelId: string | undefined;
+
 	if (vrmStorage) {
 		try {
 			const modelList = await vrmStorage.getItem<Array<{ id: string; name: string; isDefault?: boolean }>>('model-list');
@@ -207,12 +205,35 @@ async function collectSettings(): Promise<ExportedSettings> {
 			if (savedProfiles && typeof savedProfiles === 'object') {
 				expressionProfilesByModel = savedProfiles;
 			}
+
+			// Active model ID
+			const savedActiveId = await vrmStorage.getItem<string>('active-model-id');
+			if (savedActiveId) activeModelId = savedActiveId;
 		} catch (e) {
 			console.warn('Failed to export VRM models:', e);
 		}
 	}
 
-	return { localStorage: localStorage_, moduleSettings, vrmModels, expressionProfilesByModel };
+	// Background fallback from localforage
+	let bgCustomUrlFromForage: string | undefined;
+	if (bgStorage) {
+		try {
+			const url = await bgStorage.getItem<string>(BG_CUSTOM_URL_KEY);
+			if (url) bgCustomUrlFromForage = url;
+		} catch (e) {
+			console.warn('Failed to export background from localforage:', e);
+		}
+	}
+
+	return {
+		localStorage: localStorage_,
+		moduleSettings,
+		vrmModels,
+		expressionProfilesByModel,
+		colorMode: browser ? localStorage.getItem('colorMode') ?? undefined : undefined,
+		activeModelId,
+		bgCustomUrlFromForage
+	};
 }
 
 function blobToBase64(blob: Blob): Promise<string> {
@@ -286,7 +307,7 @@ export async function importSave(
 			imported++;
 		}
 
-		// V3: restore settings
+		// V3+: restore settings
 		if (saveFile.version.startsWith('3.') && v2File.data.settings) {
 			await restoreSettings(v2File.data.settings, mode);
 		}
@@ -394,10 +415,15 @@ async function restoreSettings(settings: ExportedSettings, mode: 'merge' | 'repl
 			if (key?.startsWith('utsuwa-')) keysToRemove.push(key);
 		}
 		keysToRemove.forEach((k) => localStorage.removeItem(k));
+		localStorage.removeItem('colorMode');
 
 		// Clear VRM storage
 		if (vrmStorage) {
 			await vrmStorage.clear();
+		}
+		// Clear background localforage
+		if (bgStorage) {
+			await bgStorage.clear();
 		}
 	}
 
@@ -408,9 +434,8 @@ async function restoreSettings(settings: ExportedSettings, mode: 'merge' | 'repl
 				)
 			: {};
 
-	// Restore fixed localStorage keys
+	// Restore all utsuwa-* localStorage keys (settings always overwrite in merge mode)
 	for (const [key, value] of Object.entries(settings.localStorage)) {
-		if (mode === 'merge' && localStorage.getItem(key) !== null) continue;
 		if (key === BG_STORAGE_KEY) {
 			// Background may contain a large data: URL — handle gracefully
 			try {
@@ -432,10 +457,14 @@ async function restoreSettings(settings: ExportedSettings, mode: 'merge' | 'repl
 		}
 	}
 
-	// Restore module settings
+	// Restore module settings (always overwrite)
 	for (const [key, value] of Object.entries(settings.moduleSettings)) {
-		if (mode === 'merge' && localStorage.getItem(key) !== null) continue;
 		localStorage.setItem(key, value);
+	}
+
+	// Restore theme
+	if (settings.colorMode) {
+		localStorage.setItem('colorMode', settings.colorMode);
 	}
 
 	// Restore VRM models
@@ -469,6 +498,11 @@ async function restoreSettings(settings: ExportedSettings, mode: 'merge' | 'repl
 		}
 	}
 
+	// Restore active model ID
+	if (vrmStorage && settings.activeModelId) {
+		await vrmStorage.setItem('active-model-id', settings.activeModelId);
+	}
+
 	// Restore per-avatar expression mappings
 	if (vrmStorage && settings.expressionProfilesByModel) {
 		const incomingProfiles = settings.expressionProfilesByModel;
@@ -477,6 +511,11 @@ async function restoreSettings(settings: ExportedSettings, mode: 'merge' | 'repl
 				? incomingProfiles
 				: { ...(existingProfiles ?? {}), ...incomingProfiles };
 		await vrmStorage.setItem('expression-profiles-by-model', mergedProfiles);
+	}
+
+	// Restore background from localforage
+	if (bgStorage && settings.bgCustomUrlFromForage) {
+		await bgStorage.setItem(BG_CUSTOM_URL_KEY, settings.bgCustomUrlFromForage);
 	}
 }
 
@@ -585,6 +624,7 @@ export async function clearAllData(): Promise<void> {
 			if (key?.startsWith('utsuwa-')) keysToRemove.push(key);
 		}
 		keysToRemove.forEach((k) => localStorage.removeItem(k));
+		localStorage.removeItem('colorMode');
 	}
 
 	// Clear VRM storage

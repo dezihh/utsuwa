@@ -38,3 +38,6 @@ vite.config.ts.timestamp-*
 utsuwa-save-*.json
 data/profile.json
 data/profile-pin.hash
+
+# User audio recordings
+*.wav
