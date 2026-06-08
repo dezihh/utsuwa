@@ -25,7 +25,7 @@
 - **Dockable Chat Sidebar**: Collapsible sidebar showing full conversation history alongside the 3D view
 - **Voice Input**: Speech-to-text via Groq (Whisper), local Whisper server, or Web Speech API with real-time audio visualization
 - **Duplex / VOX Mode**: Hands-free conversation — the companion listens continuously, detects speech automatically using voice activity detection (VAD), transcribes, responds, and returns to listening. Includes noise rejection, background-noise toast notifications, and live sensitivity controls.
-- **LLM Integration**: Support for 9 LLM providers including OpenAI, Anthropic, Google, xAI, DeepSeek, OpenRouter, Ollama, LM Studio, and llama.cpp
+- **LLM Integration**: Support for 10 LLM providers including OpenAI, Anthropic, Google, xAI, DeepSeek, OpenRouter, **OpenAI Compatible** (LiteLLM, vLLM, custom proxies), Ollama, LM Studio, and llama.cpp
 - **Local Model Discovery**: Ollama and LM Studio discover installed local models directly from your device
 - **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, AllTalk, Chatterbox, and OmniVoice (with per-segment language + expression tags)
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
@@ -76,11 +76,12 @@ The desktop app uses the same codebase as the web version — your save files ar
 
 ## Supported Providers
 
-### LLM Providers (9)
+### LLM Providers (10)
 
 | Category | Providers |
 |----------|-----------|
 | **Cloud** | OpenAI, Anthropic, Google Gemini, DeepSeek, xAI (Grok), OpenRouter |
+| **OpenAI Compatible** | Any OpenAI-compatible endpoint (LiteLLM, vLLM, custom proxies) |
 | **Local** | Ollama, LM Studio, llama.cpp |
 
 ### TTS Providers (5)
@@ -302,6 +303,7 @@ pnpm tauri dev
 2. Navigate to **Settings > Character** to configure your chat provider:
    - Enable Chat (LLM)
    - Select a cloud provider and enter your API key
+   - Or select **OpenAI Compatible** for any OpenAI-compatible proxy (LiteLLM, vLLM, etc.) — enter your API key **and** the custom base URL
    - Or select a local server like Ollama, LM Studio, or llama.cpp and choose an installed model
 3. Configure text-to-speech in the same settings area (optional):
    - Select a TTS provider
@@ -442,11 +444,12 @@ pnpm tauri build  # Build desktop app installer
 - [x] MCP server edit form (add, edit, delete, enable/disable MCP servers in settings)
 - [x] MCP continue-mode support and progressive TTS streaming for tool-augmented responses
 - [x] VRM skeleton optimisation updated to combineSkeletons; LookAt proxy pre-registered to suppress library warnings
+- [x] **OpenAI Compatible provider** — connect any OpenAI-compatible API endpoint (LiteLLM proxy, vLLM, etc.) with custom base URL + API key; fetches all available models without filtering
+- [x] **Model search in dropdowns** — live text filter in all model selection dropdowns to quickly find models in long lists
 
 ### In Progress / Planned
 
 - [ ] **File, Image, and Video Uploads** - Add support for attaching files, images, and videos for multimodal LLM workflows and providers that can use richer context or web-aware tools
-- [ ] **OpenAI-Compatible Models** - Add a configurable option for OpenAI-compatible model endpoints beyond the currently listed providers
 - [ ] **Live2D Support** - Alternative to VRM for 2D animated avatars
 - [ ] **Windows and Linux Desktop Apps** - Expand desktop builds beyond the current macOS beta
 

@@ -128,7 +128,7 @@
 		llmSupportsBrowsing ? llmDynamicModels ?? [] : llmDynamicModels ?? staticLLMModels
 	);
 
-	// Check if API key is present for current LLM provider
+	// Check if API key (and baseUrl for openai-compatible) is present for current LLM provider
 	const llmHasApiKey = $derived.by(() => {
 		const providerId = consciousnessSettings.activeProvider as string;
 		if (!providerId) return false;
@@ -136,6 +136,9 @@
 		if (!provider) return false;
 		if (provider.isLocal || !provider.requiresApiKey) return true;
 		const config = settingsStore.getProviderConfig(providerId);
+		if (providerId === 'openai-compatible') {
+			return !!config.apiKey && !!config.baseUrl;
+		}
 		return !!config.apiKey;
 	});
 
@@ -537,6 +540,11 @@
 		modulesStore.setModuleSetting('consciousness', 'activeProvider', providerId);
 		const provider = getLLMProvider(providerId);
 
+		// Set default base URL if not already configured
+		if (provider?.defaultBaseUrl && !settingsStore.getProviderConfig(providerId).baseUrl) {
+			settingsStore.setProviderConfig(providerId, { baseUrl: provider.defaultBaseUrl });
+		}
+
 		// Reset dynamic models when provider changes
 		llmDynamicModels = null;
 		llmFetchError = null;
@@ -551,7 +559,10 @@
 		if (provider && !provider.isLocal && provider.models?.length) {
 			modulesStore.setModuleSetting('consciousness', 'activeModel', provider.models[0].id);
 		}
-		if (provider && ['ollama', 'llamacpp'].includes(provider.id)) {
+		const config = settingsStore.getProviderConfig(providerId);
+		const hasKey = !!config.apiKey;
+		const hasUrl = providerId !== 'openai-compatible' || !!config.baseUrl;
+		if (provider && (provider.isLocal || (provider.requiresApiKey && hasKey && hasUrl))) {
 			debouncedFetchLLMModels(providerId);
 		}
 		// Mark local providers as added immediately (they don't need API keys)
@@ -624,7 +635,8 @@
 		if (!providerId) return;
 		const provider = getLLMProvider(providerId);
 		const config = settingsStore.getProviderConfig(providerId);
-		if (config.apiKey && provider && !provider.isLocal) {
+		const hasUrl = providerId !== 'openai-compatible' || !!config.baseUrl;
+		if (config.apiKey && provider && !provider.isLocal && hasUrl) {
 			debouncedFetchLLMModels();
 		}
 	}
@@ -637,7 +649,10 @@
 
 		llmFetchError = null;
 		settingsStore.setProviderConfig(providerId, { baseUrl });
-		if (['ollama', 'llamacpp'].includes(provider.id)) {
+		const config = settingsStore.getProviderConfig(providerId);
+		const hasKey = !!config.apiKey;
+		const hasUrl = providerId !== 'openai-compatible' || !!baseUrl;
+		if (provider && (provider.isLocal || (provider.requiresApiKey && hasKey && hasUrl))) {
 			debouncedFetchLLMModels(providerId);
 		}
 	}
@@ -1011,6 +1026,17 @@
 											/>
 										</div>
 									{/if}
+									{#if provider?.id === 'openai-compatible'}
+										<div class="api-key-row">
+											<input
+												type="text"
+												class="api-key-input"
+												placeholder="https://your-proxy.com/v1"
+												value={settingsStore.getProviderConfig(provider.id).baseUrl ?? ''}
+												oninput={(e) => handleLLMBaseUrlChange(e.currentTarget.value)}
+											/>
+										</div>
+									{/if}
 								{/if}
 
 								{#if consciousnessSettings.activeProvider}
@@ -1024,8 +1050,11 @@
 											isLoading={llmIsLoading}
 											onRefresh={llmHasApiKey ? fetchLLMModels : undefined}
 											disabled={!llmHasApiKey}
-											disabledMessage="Enter API key first"
+											disabledMessage={consciousnessSettings.activeProvider === 'openai-compatible' ? 'Enter API key and URL first' : 'Enter API key first'}
 										/>
+										{#if llmFetchError}
+											<p class="provider-note error">{llmFetchError}</p>
+										{/if}
 									{/if}
 								{/if}
 
@@ -1151,7 +1180,7 @@
 											isLoading={ttsIsLoading}
 											onRefresh={ttsHasApiKey ? fetchTTSModels : undefined}
 											disabled={!ttsHasApiKey}
-											disabledMessage="Enter API key first"
+											disabledMessage={consciousnessSettings.activeProvider === 'openai-compatible' ? 'Enter API key and URL first' : 'Enter API key first'}
 										/>
 									{/if}
 								{/if}

@@ -39,9 +39,14 @@ const MODEL_FILTERS: Record<string, RegExp> = {
 	google: /^gemini-/
 };
 
-function filterModels(providerId: string, models: ModelInfo[]): ModelInfo[] {
+function filterModels(providerId: string, models: ModelInfo[], baseUrl?: string): ModelInfo[] {
 	const filter = MODEL_FILTERS[providerId];
 	if (!filter) return models; // No filter = keep all (Ollama, LM Studio, llama.cpp)
+	// If a custom baseUrl is set for a cloud provider, treat it as a proxy — keep all models
+	const defaultUrl = DEFAULT_BASE_URLS[providerId];
+	if (baseUrl && defaultUrl && baseUrl.replace(/\/+$/, '') !== defaultUrl.replace(/\/+$/, '')) {
+		return models;
+	}
 	return models.filter((m) => filter.test(m.id));
 }
 
@@ -234,6 +239,10 @@ export const POST: RequestHandler = async ({ request }) => {
 				if (!apiKey) throw new Error('API key required for OpenAI');
 				models = await fetchOpenAIModels(apiKey, cleanBaseUrl);
 				break;
+			case 'openai-compatible':
+				if (!apiKey) throw new Error('API key required');
+				models = await fetchOpenAIModels(apiKey, cleanBaseUrl);
+				break;
 			case 'anthropic':
 				if (!apiKey) throw new Error('API key required for Anthropic');
 				models = await fetchAnthropicModels(apiKey, cleanBaseUrl);
@@ -280,7 +289,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// Filter to chat-compatible models
-		const filteredModels = filterModels(providerId, models);
+		const filteredModels = filterModels(providerId, models, baseUrl);
 
 		return Response.json({ models: filteredModels } as FetchModelsResponse);
 	} catch (error) {

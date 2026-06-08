@@ -75,6 +75,15 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 		requiresApiKey: true,
 		defaultBaseUrl: 'https://openrouter.ai/api/v1/'
 	},
+	{
+		id: 'openai-compatible',
+		name: 'OpenAI Compatible',
+		description: 'Any OpenAI-compatible API (e.g. LiteLLM proxy, vLLM)',
+		category: 'llm',
+		icon: '🔌',
+		requiresApiKey: true,
+		defaultBaseUrl: ''
+	},
 	// Local LLMs discover installed models from the user's running local server.
 	{
 		id: 'ollama',

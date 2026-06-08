@@ -73,6 +73,7 @@ export async function fetchModelsDirect(
 
 		switch (providerId) {
 			case 'openai':
+			case 'openai-compatible':
 			case 'deepseek':
 			case 'xai': {
 				if (!apiKey) throw new Error('API key required');
