@@ -277,20 +277,42 @@
 	// ── Custom Animation Upload ──
 
 	let uploadingAnimation = $state(false);
+	let pendingUploadFile: File | null = $state(null);
+	let pendingUploadName = $state('');
+	let uploadNameInput: HTMLInputElement | null = $state(null);
 
-	async function handleAnimationUpload(e: Event) {
+	function handleFileSelect(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file || !file.name.endsWith('.vrma')) return;
 
+		pendingUploadFile = file;
+		pendingUploadName = file.name.replace(/\.vrma$/i, '');
+		input.value = ''; // reset so same file can be selected again
+
+		// Focus the name input on next tick
+		queueMicrotask(() => uploadNameInput?.focus());
+	}
+
+	async function confirmUpload() {
+		if (!pendingUploadFile) return;
+		const name = pendingUploadName.trim();
+		if (!name) return;
+
 		uploadingAnimation = true;
 		try {
-			await vrmStore.addAnimation(file);
+			await vrmStore.addAnimation(pendingUploadFile, name);
 		} catch (err) {
 			console.error('Failed to upload animation:', err);
 		}
 		uploadingAnimation = false;
-		input.value = ''; // reset so same file can be selected again
+		pendingUploadFile = null;
+		pendingUploadName = '';
+	}
+
+	function cancelUpload() {
+		pendingUploadFile = null;
+		pendingUploadName = '';
 	}
 
 	async function removeCustomAnimation(id: string) {
@@ -355,17 +377,44 @@
 				<!-- Custom Animation Upload -->
 				<div class="upload-section">
 					<p class="hint">Upload your own .vrma files to extend the animation library.</p>
-					<label class="upload-btn">
-						<Icon name="upload" size={14} />
-						{uploadingAnimation ? 'Uploading...' : 'Upload VRMA'}
-						<input
-							type="file"
-							accept=".vrma"
-							disabled={uploadingAnimation}
-							onchange={handleAnimationUpload}
-							style="display: none;"
-						/>
-					</label>
+					{#if pendingUploadFile}
+						<div class="upload-name-dialog">
+							<label for="upload-name">Animation name:</label>
+							<input
+								id="upload-name"
+								type="text"
+								bind:this={uploadNameInput}
+								bind:value={pendingUploadName}
+								onkeydown={(e) => {
+									if (e.key === 'Enter') confirmUpload();
+									if (e.key === 'Escape') cancelUpload();
+								}}
+							/>
+							<div class="upload-name-actions">
+								<button
+									class="btn-confirm"
+									disabled={uploadingAnimation || !pendingUploadName.trim()}
+									onclick={confirmUpload}
+								>
+									{uploadingAnimation ? 'Uploading...' : 'Confirm'}
+								</button>
+								<button class="btn-cancel" onclick={cancelUpload} disabled={uploadingAnimation}>
+									Cancel
+								</button>
+							</div>
+						</div>
+					{:else}
+						<label class="upload-btn">
+							<Icon name="upload" size={14} />
+							Upload VRMA
+							<input
+								type="file"
+								accept=".vrma"
+								onchange={handleFileSelect}
+								style="display: none;"
+							/>
+						</label>
+					{/if}
 				</div>
 
 				<!-- Custom Animation List -->
@@ -1027,6 +1076,86 @@
 		opacity: 0.5;
 		cursor: not-allowed;
 		transform: none;
+	}
+
+	.upload-name-dialog {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 0.75rem;
+		background: linear-gradient(180deg, #f8f8f8 0%, #f0f0f0 100%);
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 10px;
+	}
+
+	:global(.dark) .upload-name-dialog {
+		background: linear-gradient(180deg, #252525 0%, #1f1f1f 100%);
+		border-color: rgba(255, 255, 255, 0.08);
+	}
+
+	.upload-name-dialog label {
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--text-primary);
+	}
+
+	.upload-name-dialog input[type='text'] {
+		width: 100%;
+		padding: 0.5rem 0.75rem;
+		border: 1px solid rgba(0, 0, 0, 0.12);
+		border-radius: 6px;
+		font-size: 0.875rem;
+		font-family: 'Share Tech Mono', monospace;
+		background: #fff;
+		color: var(--text-primary);
+		outline: none;
+		transition: border-color 0.15s ease;
+	}
+
+	:global(.dark) .upload-name-dialog input[type='text'] {
+		background: #1a1a1a;
+		border-color: rgba(255, 255, 255, 0.1);
+		color: #e0e0e0;
+	}
+
+	.upload-name-dialog input[type='text']:focus {
+		border-color: var(--accent-primary, #01b2ff);
+	}
+
+	.upload-name-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.upload-name-actions button {
+		flex: 1;
+		padding: 0.45rem 0.75rem;
+		border: none;
+		border-radius: 6px;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: opacity 0.15s ease;
+	}
+
+	.upload-name-actions button:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.btn-confirm {
+		background: linear-gradient(180deg, #01b2ff 0%, #0090d4 100%);
+		color: #fff;
+	}
+
+	.btn-cancel {
+		background: linear-gradient(180deg, #e0e0e0 0%, #d0d0d0 100%);
+		color: #333;
+	}
+
+	:global(.dark) .btn-cancel {
+		background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
+		color: #e0e0e0;
 	}
 
 	.custom-animations {

@@ -646,42 +646,6 @@
 		border: 1px solid rgba(255, 255, 255, 0.3);
 	}
 
-	.skeu-icon {
-		background: linear-gradient(180deg, #4dd0ff 0%, #01b2ff 40%, #0099dd 100%);
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.4),
-			inset 0 -1px 2px rgba(0, 0, 0, 0.15),
-			0 4px 12px rgba(1, 178, 255, 0.4),
-			0 0 20px rgba(1, 178, 255, 0.25);
-		border: 1px solid rgba(255, 255, 255, 0.15);
-	}
-
-	.skeu-btn {
-		color: white;
-		background: linear-gradient(180deg, #4dd0ff 0%, #01b2ff 40%, #0099dd 100%);
-		border: 1px solid rgba(0, 0, 0, 0.1);
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.3),
-			0 2px 6px rgba(1, 178, 255, 0.25);
-		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
-	}
-
-	.skeu-btn:hover {
-		background: linear-gradient(180deg, #5dd8ff 0%, #1abcff 40%, #01a8ee 100%);
-		transform: translateY(-1px);
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.4),
-			0 0 16px rgba(1, 178, 255, 0.4),
-			0 4px 12px rgba(1, 178, 255, 0.3);
-	}
-
-	.skeu-btn:active {
-		transform: translateY(0);
-		box-shadow:
-			inset 0 2px 4px rgba(0, 0, 0, 0.2),
-			0 1px 2px rgba(0, 0, 0, 0.1);
-	}
-
 	.skeu-btn-sm {
 		color: white;
 		background: linear-gradient(180deg, #4dd0ff 0%, #01b2ff 40%, #0099dd 100%);
@@ -780,17 +744,6 @@
 			0 1px 2px rgba(0, 0, 0, 0.1);
 	}
 
-	/* Skeuomorphic card (dark) */
-	.skeu-card {
-		background: linear-gradient(180deg, #141414 0%, #0d0d0d 100%);
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.04),
-			inset 0 -1px 0 rgba(0, 0, 0, 0.3),
-			0 4px 16px rgba(0, 0, 0, 0.3),
-			0 1px 3px rgba(0, 0, 0, 0.2);
-	}
-
 	/* Skeuomorphic card (light) — Frutiger Aero glass */
 	.skeu-card-light {
 		background: linear-gradient(
@@ -809,24 +762,11 @@
 			0 1px 3px rgba(0, 0, 0, 0.05);
 	}
 
-	.footer-brand-logo {
-		height: 1.25rem;
-		width: auto;
-		filter: brightness(0) invert(1);
-	}
-
 	.footer-brand-logo-light {
 		height: 1.25rem;
 		width: auto;
 		filter: brightness(0);
 		opacity: 0.7;
-	}
-
-	.footer-giant-logo {
-		width: 80vw;
-		max-width: 1200px;
-		height: auto;
-		filter: brightness(0) invert(1);
 	}
 
 	.footer-giant-logo-light {

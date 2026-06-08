@@ -150,7 +150,7 @@ function createVrmStore() {
 	];
 
 	// User-uploaded custom VRMA animations (persisted in IndexedDB)
-	let customAnimations = $state<{ id: string; name: string; url: string }[]>([]);
+	let customAnimations = $state<{ id: string; name: string; url: string; missing?: boolean }[]>([]);
 
 	// Guard against saveToStorage running before init completes
 	let storageReady = false;
@@ -573,11 +573,23 @@ function createVrmStore() {
 
 	// ── Custom Animation Management ──
 
-	async function addAnimation(file: File): Promise<void> {
+	async function addAnimation(file: File, customName?: string): Promise<void> {
 		const id = `anim-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-		const name = file.name.replace(/\.vrma$/i, '');
+		const name = customName?.trim() || file.name.replace(/\.vrma$/i, '');
 
-		const blob = new Blob([await file.arrayBuffer()], { type: 'model/vrm-animation' });
+		const arrayBuffer = await file.arrayBuffer();
+
+		// Sanity-check: GLB magic bytes? (0x676C5446 = 'glTF')
+		const magic = new Uint32Array(arrayBuffer.slice(0, 4))[0];
+		if (magic !== 0x46546c67) {
+			// Not a GLB — check if it's a plain GLTF JSON
+			const text = new TextDecoder().decode(arrayBuffer.slice(0, 256));
+			if (!text.trimStart().startsWith('{')) {
+				console.warn('[vrmStore] Uploaded file does not look like a GLB or GLTF:', file.name, 'magic=', magic?.toString(16));
+			}
+		}
+
+		const blob = new Blob([arrayBuffer], { type: 'model/vrm-animation' });
 		await animationStorage?.setItem(`animation-blob-${id}`, blob);
 
 		const url = URL.createObjectURL(blob);

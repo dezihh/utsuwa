@@ -29,7 +29,7 @@
 - **Local Model Discovery**: Ollama and LM Studio discover installed local models directly from your device
 - **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, AllTalk, Chatterbox, and OmniVoice (with per-segment language + expression tags)
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
-- **Animations**: VRMA-based idle and talking animations with automatic blinking
+- **Animations**: 18 built-in VRMA motion clips (idle, talking, emotions, actions) with automatic blinking, plus upload your own `.vrma` files with custom naming
 - **Character Customization**: Customize your companion's name, personality, and system prompt with saveable presets
 - **Companion System**: Multi-axis relationship tracking with mood, events, and semantic memory
 - **Semantic Memory**: Local AI-powered memory search using Transformers.js - finds memories by meaning, not just keywords
@@ -176,6 +176,18 @@ Choose a background for your 3D companion scene under **Settings > Display > Bac
 - **Custom Image**: Upload a PNG/JPG/WEBP file via drag & drop or file picker
 - **HDRI / EXR**: Enter a `.hdr` or `.exr` URL (e.g. from [Poly Haven](https://polyhaven.com/hdris)) for realistic environment-based lighting — the image illuminates the VRM character with accurate PBR reflections
 - Settings are persisted locally and restored on next launch
+
+### Animation System
+
+The companion avatar supports a layered animation system powered by VRMA (VRM Animation) files:
+
+- **18 built-in motion clips**: 7 from the VRoid Motion Pack (Show Full Body, Greeting, Peace Sign, Shoot, Spin, Model Pose, Squat) plus 11 emotion/pose clips (Angry, Blush, Clapping, Goodbye, Jump, Look Around, Relax, Sad, Sleepy, Surprised, Thinking)
+- **Idle animations**: 5 clips cycle randomly with smooth crossfades when the avatar is not speaking
+- **Talking animation**: Loaded automatically when TTS is active
+- **Emote actions**: Triggered via the Developer Tools dropdown or LLM action tags (`[action:wave]`, `[action:jump]`, `[action:clap]`, `[action:think]`, etc.)
+- **Custom VRMA upload**: Upload your own `.vrma` files under **Settings > Developer Tools > Animation**. A name dialog lets you assign a custom display name before saving. Uploaded animations are persisted in IndexedDB and appear in the animation dropdown alongside built-in clips.
+- **Memory-safe playback**: Emote actions are automatically disposed after finishing to prevent mixer memory leaks. Idle crossfades clean up old actions after a short delay.
+- **VRMA compatibility**: Uploaded files that lack a GLTF scene or contain unsupported morph-target (`weights`) channels are automatically handled by a preprocessor plugin, so most VRMA files from external sources will work.
 
 ### Personality Presets
 
@@ -404,6 +416,10 @@ pnpm tauri build  # Build desktop app installer
 - [x] Audio-driven lip-sync
 - [x] Sentence-by-sentence TTS streaming (responses spoken as they arrive, not after full generation)
 - [x] VRMA-based animations (idle, talking, blinking)
+- [x] 18 built-in VRMA motion clips (VRoid Motion Pack + emotion/pose clips)
+- [x] Custom VRMA upload with custom naming and IndexedDB persistence
+- [x] Animation mixer memory leak fixes and automatic action disposal
+- [x] VRMA preprocessor plugin (scene injection + weights channel filtering for external files)
 - [x] Companion system with multi-axis relationships
 - [x] 8-stage relationship progression (Stranger → Soulmate)
 - [x] Visual novel event system with choices

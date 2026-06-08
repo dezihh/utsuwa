@@ -204,6 +204,48 @@
 		const idleUrl = urls[index];
 
 		const loader = new GLTFLoader();
+		loader.register((parser) => ({
+			name: 'VRMA-Preprocessor',
+			beforeRoot: () => {
+				// Some VRMA files contain 'weights' channels (morph targets) that the
+				// VRMAnimationLoaderPlugin doesn't support. Filter them out.
+				const json = parser.json;
+				if (!json.animations) return;
+				for (const anim of json.animations) {
+					if (!anim.channels) continue;
+					const filteredChannels = [];
+					const oldToNewSampler = new Map();
+					let newSamplerIdx = 0;
+					for (const ch of anim.channels) {
+						if (ch.target?.path === 'weights') {
+							console.warn('[VrmModel] Filtering unsupported "weights" channel from animation');
+							continue;
+						}
+						if (!oldToNewSampler.has(ch.sampler)) {
+							oldToNewSampler.set(ch.sampler, newSamplerIdx++);
+						}
+						ch.sampler = oldToNewSampler.get(ch.sampler);
+						filteredChannels.push(ch);
+					}
+					anim.channels = filteredChannels;
+					if (anim.samplers) {
+						const newSamplers = [];
+						for (let i = 0; i < anim.samplers.length; i++) {
+							if (oldToNewSampler.has(i)) {
+								newSamplers[oldToNewSampler.get(i)] = anim.samplers[i];
+							}
+						}
+						anim.samplers = newSamplers;
+					}
+				}
+			},
+			afterRoot: (gltf) => {
+				if (!gltf.scene) {
+					gltf.scene = new THREE.Group();
+					gltf.scenes = [gltf.scene];
+				}
+			}
+		}));
 		loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 
 		loader.load(
@@ -259,6 +301,48 @@
 		const idleUrl = urls[index];
 
 		const loader = new GLTFLoader();
+		loader.register((parser) => ({
+			name: 'VRMA-Preprocessor',
+			beforeRoot: () => {
+				// Some VRMA files contain 'weights' channels (morph targets) that the
+				// VRMAnimationLoaderPlugin doesn't support. Filter them out.
+				const json = parser.json;
+				if (!json.animations) return;
+				for (const anim of json.animations) {
+					if (!anim.channels) continue;
+					const filteredChannels = [];
+					const oldToNewSampler = new Map();
+					let newSamplerIdx = 0;
+					for (const ch of anim.channels) {
+						if (ch.target?.path === 'weights') {
+							console.warn('[VrmModel] Filtering unsupported "weights" channel from animation');
+							continue;
+						}
+						if (!oldToNewSampler.has(ch.sampler)) {
+							oldToNewSampler.set(ch.sampler, newSamplerIdx++);
+						}
+						ch.sampler = oldToNewSampler.get(ch.sampler);
+						filteredChannels.push(ch);
+					}
+					anim.channels = filteredChannels;
+					if (anim.samplers) {
+						const newSamplers = [];
+						for (let i = 0; i < anim.samplers.length; i++) {
+							if (oldToNewSampler.has(i)) {
+								newSamplers[oldToNewSampler.get(i)] = anim.samplers[i];
+							}
+						}
+						anim.samplers = newSamplers;
+					}
+				}
+			},
+			afterRoot: (gltf) => {
+				if (!gltf.scene) {
+					gltf.scene = new THREE.Group();
+					gltf.scenes = [gltf.scene];
+				}
+			}
+		}));
 		loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 
 		loader.load(
@@ -296,6 +380,48 @@
 		if (!talkingUrl) return;
 
 		const loader = new GLTFLoader();
+		loader.register((parser) => ({
+			name: 'VRMA-Preprocessor',
+			beforeRoot: () => {
+				// Some VRMA files contain 'weights' channels (morph targets) that the
+				// VRMAnimationLoaderPlugin doesn't support. Filter them out.
+				const json = parser.json;
+				if (!json.animations) return;
+				for (const anim of json.animations) {
+					if (!anim.channels) continue;
+					const filteredChannels = [];
+					const oldToNewSampler = new Map();
+					let newSamplerIdx = 0;
+					for (const ch of anim.channels) {
+						if (ch.target?.path === 'weights') {
+							console.warn('[VrmModel] Filtering unsupported "weights" channel from animation');
+							continue;
+						}
+						if (!oldToNewSampler.has(ch.sampler)) {
+							oldToNewSampler.set(ch.sampler, newSamplerIdx++);
+						}
+						ch.sampler = oldToNewSampler.get(ch.sampler);
+						filteredChannels.push(ch);
+					}
+					anim.channels = filteredChannels;
+					if (anim.samplers) {
+						const newSamplers = [];
+						for (let i = 0; i < anim.samplers.length; i++) {
+							if (oldToNewSampler.has(i)) {
+								newSamplers[oldToNewSampler.get(i)] = anim.samplers[i];
+							}
+						}
+						anim.samplers = newSamplers;
+					}
+				}
+			},
+			afterRoot: (gltf) => {
+				if (!gltf.scene) {
+					gltf.scene = new THREE.Group();
+					gltf.scenes = [gltf.scene];
+				}
+			}
+		}));
 		loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 
 		loader.load(
@@ -400,6 +526,51 @@
 
 		// Load emote VRMA file
 		const loader = new GLTFLoader();
+
+		// Some VRMA files don't have a scene, but the plugin expects one.
+		// Register a dummy plugin first to ensure gltf.scene exists.
+		loader.register((parser) => ({
+			name: 'VRMA-Preprocessor',
+			beforeRoot: () => {
+				const json = parser.json;
+				if (!json.animations) return;
+				for (const anim of json.animations) {
+					if (!anim.channels) continue;
+					const filteredChannels = [];
+					const oldToNewSampler = new Map();
+					let newSamplerIdx = 0;
+					for (const ch of anim.channels) {
+						if (ch.target?.path === 'weights') {
+							console.warn('[VrmModel] Filtering unsupported "weights" channel from animation');
+							continue;
+						}
+						if (!oldToNewSampler.has(ch.sampler)) {
+							oldToNewSampler.set(ch.sampler, newSamplerIdx++);
+						}
+						ch.sampler = oldToNewSampler.get(ch.sampler);
+						filteredChannels.push(ch);
+					}
+					anim.channels = filteredChannels;
+					if (anim.samplers) {
+						const newSamplers = [];
+						for (let i = 0; i < anim.samplers.length; i++) {
+							if (oldToNewSampler.has(i)) {
+								newSamplers[oldToNewSampler.get(i)] = anim.samplers[i];
+							}
+						}
+						anim.samplers = newSamplers;
+					}
+				}
+			},
+			afterRoot: (gltf) => {
+				if (!gltf.scene) {
+					console.warn('[VrmModel] VRMA has no scene, injecting dummy scene for', animationUrl);
+					gltf.scene = new THREE.Group();
+					gltf.scenes = [gltf.scene];
+				}
+			}
+		}));
+
 		loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 
 		loader.load(
@@ -421,14 +592,25 @@
 					}
 
 					// Create and play emote
-					const clip = createVRMAnimationClip(vrmAnimations[0], vrm);
-					const action = mixer.clipAction(clip);
-					action.setLoop(THREE.LoopOnce, 1);
-					action.clampWhenFinished = true;
-					action.timeScale = 1.5;
-					action.reset().fadeIn(0.2).play();
-					emoteAction = action;
-					isEmotePlaying = true;
+					let action: THREE.AnimationAction | undefined;
+					try {
+						const clip = createVRMAnimationClip(vrmAnimations[0], vrm);
+						action = mixer.clipAction(clip);
+						action.setLoop(THREE.LoopOnce, 1);
+						action.clampWhenFinished = true;
+						action.timeScale = 1.5;
+						action.reset().fadeIn(0.2).play();
+						emoteAction = action;
+						isEmotePlaying = true;
+						console.log('[VrmModel] Emote playing:', animationUrl);
+					} catch (err) {
+						console.error('[VrmModel] Failed to create animation clip:', animationUrl, err);
+						// Fade idle back in
+						if (currentIdle) {
+							currentIdle.reset().fadeIn(0.3).play();
+						}
+						return;
+					}
 
 					// Apply happy expression during emote
 					const happyExpr = findHappyExpression(vrm);
@@ -468,9 +650,16 @@
 
 				});
 			},
-			undefined,
+			(xhr) => {
+				if (xhr.lengthComputable) {
+					console.log('[VrmModel] Loading progress:', animationUrl, Math.round((xhr.loaded / xhr.total) * 100) + '%');
+				}
+			},
 			(error) => {
-				console.error('Error loading emote animation:', error);
+				console.error('[VrmModel] Error loading emote animation:', animationUrl, error);
+				if (error instanceof Error && error.stack) {
+					console.error('[VrmModel] Stack trace:', error.stack);
+				}
 			}
 		);
 	});
