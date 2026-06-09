@@ -107,7 +107,7 @@
 		height: 1.5rem;
 		width: auto;
 		filter: var(--docs-logo-filter, none);
-		drop-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
 	}
 
 	.header-nav {

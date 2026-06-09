@@ -224,6 +224,7 @@
 		margin: 0;
 		max-width: 640px;
 		display: -webkit-box;
+		line-clamp: 2;
 		-webkit-line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
@@ -345,6 +346,7 @@
 		line-height: 1.6;
 		margin: 0;
 		display: -webkit-box;
+		line-clamp: 3;
 		-webkit-line-clamp: 3;
 		-webkit-box-orient: vertical;
 		overflow: hidden;

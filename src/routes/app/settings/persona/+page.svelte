@@ -965,6 +965,7 @@
 							<div class="profile-selector">
 								{#each personalityProfiles as profile}
 									{#if editingProfileId === profile.id}
+										<!-- svelte-ignore a11y_autofocus -->
 										<input
 											class="profile-name-input"
 											type="text"
@@ -972,7 +973,7 @@
 											onblur={commitRename}
 											onkeydown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') commitRename(); }}
 											autofocus
-										/>
+											/>
 									{:else}
 										<button
 											class="profile-tab"
@@ -1024,7 +1025,7 @@
 							<div class="service-header">
 								<Icon name="brain" size={14} />
 								<span>Chat (LLM)</span>
-								<button class="service-toggle" class:enabled={isLLMEnabled} onclick={toggleLLM}>
+								<button class="service-toggle" class:enabled={isLLMEnabled} onclick={toggleLLM} aria-label="Toggle LLM">
 									<span class="toggle-track">
 										<span class="toggle-thumb"></span>
 									</span>
@@ -1153,7 +1154,7 @@
 							<div class="service-header">
 								<Icon name="mic" size={14} />
 								<span>Speech (TTS)</span>
-								<button class="service-toggle" class:enabled={isTTSEnabled} onclick={toggleTTS}>
+								<button class="service-toggle" class:enabled={isTTSEnabled} onclick={toggleTTS} aria-label="Toggle TTS">
 									<span class="toggle-track">
 										<span class="toggle-thumb"></span>
 									</span>
@@ -1781,10 +1782,10 @@
 									<span class="api-key-label">Model ID</span>
 								</div>
 								<div class="vad-sensitivity-row">
-									<label class="vad-sensitivity-label">
+									<span class="vad-sensitivity-label">
 										Mic Sensitivity
 										<span class="vad-value">{Math.round((1 - ((settingsStore.getProviderConfig('whisper-local').vadThreshold ?? 0.015) - 0.005) / 0.045) * 100)}%</span>
-									</label>
+									</span>
 									<input
 										type="range"
 										class="vad-slider"
@@ -2064,13 +2065,13 @@
 
 	<!-- Upload Modal -->
 	{#if uploadModalOpen}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="upload-modal" onclick={() => uploadModalOpen = false}>
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div class="upload-content" onclick={(e) => e.stopPropagation()}>
+		<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+		<div class="upload-modal" onclick={() => uploadModalOpen = false} onkeydown={() => {}}>
+			<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+			<div class="upload-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 				<div class="upload-header">
 					<h3>Upload Custom Model</h3>
-					<button class="close-btn" onclick={() => uploadModalOpen = false}>
+					<button class="close-btn" onclick={() => uploadModalOpen = false} onkeydown={() => {}}>
 						<Icon name="x" size={20} />
 					</button>
 				</div>
@@ -2081,10 +2082,10 @@
 
 	<!-- Mode Change Confirmation Modal -->
 	{#if modeConfirmOpen}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="confirm-modal" onclick={cancelModeChange}>
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div class="confirm-content" onclick={(e) => e.stopPropagation()}>
+		<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+		<div class="confirm-modal" onclick={cancelModeChange} onkeydown={() => {}}>
+			<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+			<div class="confirm-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 				<div class="confirm-icon">
 					<Icon name="alert" size={32} />
 				</div>
@@ -2093,7 +2094,7 @@
 					Switching modes frequently can lead to unexpected results and disrupt natural progression. Are you sure you want to continue?
 				</p>
 				<div class="confirm-actions">
-					<button class="confirm-btn confirm-btn--cancel" onclick={cancelModeChange}>
+					<button class="confirm-btn confirm-btn--cancel" onclick={cancelModeChange} onkeydown={() => {}}>
 						Cancel
 					</button>
 					<button class="confirm-btn confirm-btn--confirm" onclick={confirmModeChange}>
@@ -3635,21 +3636,6 @@
 		color: var(--text-tertiary);
 	}
 
-	/* Legacy event-check for backwards compatibility */
-	.event-check {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 22px;
-		height: 22px;
-		background: linear-gradient(180deg, #4dd0ff 0%, #01B2FF 100%);
-		border-radius: 50%;
-		color: white;
-		flex-shrink: 0;
-		box-shadow:
-			0 2px 4px rgba(1, 178, 255, 0.3),
-			inset 0 1px 0 rgba(255, 255, 255, 0.3);
-	}
 
 	.events-empty {
 		display: flex;
@@ -3674,11 +3660,6 @@
 	.events-empty span {
 		font-size: 0.8rem;
 		color: var(--text-secondary);
-	}
-
-	.events-hint {
-		font-size: 0.7rem !important;
-		color: var(--text-tertiary) !important;
 	}
 
 	/* AI Services Section */

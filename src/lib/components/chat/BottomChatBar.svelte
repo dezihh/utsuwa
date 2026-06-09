@@ -29,7 +29,7 @@
 		onAdjustSensitivity
 	}: Props = $props();
 	let inputValue = $state('');
-	let textareaRef: HTMLTextAreaElement;
+	let textareaRef: HTMLTextAreaElement = $state()!;
 
 	const isListening = $derived(sttStore.isListening);
 	const isTranscribing = $derived(sttStore.isTranscribing);
@@ -117,7 +117,7 @@
 </script>
 
 {#if sttError}
-	<div class="stt-error" onclick={() => sttStore.clearError()}>
+	<div class="stt-error" onclick={() => sttStore.clearError()} role="button" tabindex="0" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sttStore.clearError(); } }}>
 		<Icon name="alert" size={16} />
 		<span>{sttError}</span>
 		<button type="button" class="dismiss-btn" aria-label="Dismiss">
@@ -209,7 +209,8 @@
 				>
 					<Icon name="mic" size={20} />
 				</button>
-				<textarea
+				<!-- svelte-ignore a11y_autofocus -->
+	<textarea
 					bind:this={textareaRef}
 					bind:value={inputValue}
 					onkeydown={handleKeydown}

@@ -78,6 +78,7 @@
 
 	.progress-fill.variant-health {
 		/* Uses gradientColor prop for dynamic color */
+		background: transparent;
 	}
 
 	.progress-fill.variant-tier {

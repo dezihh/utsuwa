@@ -706,7 +706,7 @@
 				{/if}
 				<!-- Language -->
 				<div class="vad-sensitivity-row">
-					<label class="vad-sensitivity-label">Language</label>
+					<span class="vad-sensitivity-label">Language</span>
 					<select
 						class="api-key-input"
 						value={settingsStore.getProviderConfig('chatterbox').language ?? ''}

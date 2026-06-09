@@ -230,16 +230,16 @@
 							{#if editingId === entry.id}
 								<div class="edit-form">
 									<div class="edit-field">
-										<label>Value</label>
+										<span class="field-label">Value</span>
 										<textarea bind:value={editValue} rows={3}></textarea>
 									</div>
 									<div class="edit-row">
 										<div class="edit-field">
-											<label>Category</label>
+											<span class="field-label">Category</span>
 											<input type="text" bind:value={editCategory} />
 										</div>
 										<div class="edit-field">
-											<label>Confidence</label>
+											<span class="field-label">Confidence</span>
 											<input
 												type="number"
 												min="0"
@@ -250,7 +250,7 @@
 										</div>
 									</div>
 									<div class="edit-field">
-										<label>Tags (comma separated)</label>
+										<span class="field-label">Tags (comma separated)</span>
 										<input type="text" bind:value={editTags} />
 									</div>
 									<div class="edit-actions">
@@ -687,7 +687,7 @@
 		gap: 0.25rem;
 	}
 
-	.edit-field label {
+	.edit-field .field-label {
 		font-size: 0.75rem;
 		font-weight: 600;
 		color: var(--text-secondary);

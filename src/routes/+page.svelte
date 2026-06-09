@@ -632,7 +632,7 @@
 		width: min(80vw, 500px);
 		height: auto;
 		filter: brightness(0) invert(1);
-		drop-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+		filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
 	}
 
 	.glass-panel {

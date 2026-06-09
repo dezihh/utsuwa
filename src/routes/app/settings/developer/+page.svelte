@@ -926,6 +926,7 @@
 		cursor: pointer;
 		transition: all 0.15s ease-out;
 		appearance: none;
+		appearance: none;
 		-webkit-appearance: none;
 		-moz-appearance: none;
 		background-clip: padding-box;
@@ -1226,6 +1227,7 @@
 		background: linear-gradient(180deg, #d0d0d0 0%, #e0e0e0 100%);
 		border-radius: 4px;
 		outline: none;
+		appearance: none;
 		-webkit-appearance: none;
 		box-shadow:
 			inset 0 1px 3px rgba(0, 0, 0, 0.15),
@@ -1240,6 +1242,7 @@
 	}
 
 	.slider-row input[type='range']::-webkit-slider-thumb {
+		appearance: none;
 		-webkit-appearance: none;
 		width: 18px;
 		height: 18px;
@@ -1551,9 +1554,6 @@
 			max-height: 240px;
 		}
 
-		.event-btn span {
-			display: none;
-		}
 
 		.event-btn {
 			padding: 0.5rem;

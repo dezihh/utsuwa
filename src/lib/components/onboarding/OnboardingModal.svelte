@@ -121,7 +121,7 @@
 
 <div class="modal-overlay" onclick={handleComplete} role="presentation">
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-container" onclick={(e) => e.stopPropagation()}>
+	<div class="modal-container" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
 		<!-- Progress dots (hidden on complete step) -->
 		{#if currentStep !== 'complete'}
 			<div class="progress-dots">
@@ -145,14 +145,15 @@
 				/>
 				{#if showCloudPin}
 					<div class="cloud-pin-form">
-						<input
-							class="cloud-pin-input"
-							type="password"
-							placeholder="PIN eingeben"
-							bind:value={cloudPin}
-							onkeydown={(e) => e.key === 'Enter' && handleCloudRestore()}
-							autofocus
-						/>
+								<!-- svelte-ignore a11y_autofocus -->
+								<input
+									class="cloud-pin-input"
+									type="password"
+									placeholder="PIN eingeben"
+									bind:value={cloudPin}
+									onkeydown={(e) => e.key === 'Enter' && handleCloudRestore()}
+									autofocus
+									/>
 						<button class="cloud-pin-btn" onclick={handleCloudRestore} disabled={cloudLoading}>
 							{cloudLoading ? 'Lade…' : 'Wiederherstellen'}
 						</button>
