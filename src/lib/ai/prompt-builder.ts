@@ -44,6 +44,7 @@ export function buildSystemPrompt(context: PromptContext): string {
 		buildCharacterLayer(context),
 		buildStateLayer(context),
 		buildMemoryLayer(context),
+		buildFactLibraryLayer(context),
 		buildInstructionLayer(context)
 	];
 
@@ -86,11 +87,20 @@ RULES:
 - Remember context from recent conversations
 </system>`);
 
-	// Character personality
+	// Character personality (Layer 1 + Layer 2)
+	const soulText = ctx.state.soulPrompt || ctx.persona.systemPrompt || 'A friendly and helpful AI companion who enjoys meaningful conversations.';
+	const evolvedText = ctx.state.systemPrompt || ctx.persona.systemPrompt || '';
+
 	parts.push(`<character>
 Name: ${ctx.persona.name}
 
-${ctx.persona.systemPrompt || 'A friendly and helpful AI companion who enjoys meaningful conversations.'}
+<base_soul>
+${soulText}
+</base_soul>
+
+<evolved_persona>
+${evolvedText && evolvedText !== soulText ? evolvedText + '\n\n' : ''}Traits: open ${ctx.state.personality.openness}, warm ${ctx.state.personality.warmth}, playful ${ctx.state.personality.playfulness}
+</evolved_persona>
 </character>`);
 
 	// Simple state (mood and energy only)
@@ -118,6 +128,12 @@ Energy: ${energyDesc} (${ctx.state.energy}/100)
 		parts.push(`<memory>\n${memorySections.join('\n\n')}\n</memory>`);
 	}
 
+	// Fact library entries
+	const factLibrarySection = buildFactLibraryLayer(ctx);
+	if (factLibrarySection) {
+		parts.push(factLibrarySection);
+	}
+
 	// Simple instructions (no relationship mechanics)
 	parts.push(`<instructions>
 Respond naturally as ${ctx.persona.name}. Be helpful and engaging.
@@ -126,9 +142,16 @@ After your response, you may optionally output state changes as JSON:
 \`\`\`json
 {
   "mood_change": { "emotion": "emotion_name", "intensity_delta": number },
-  "energy_delta": number
+  "energy_delta": number,
+  "structured_fact_seen": { "type": "vocab", "key": "word", "value": "meaning", "category": "topic" }
 }
 \`\`\`
+
+If the user learns a new vocabulary word, concept, or fact, include "structured_fact_seen" with:
+- type: the kind of fact (e.g. "vocab", "concept", "exam_fact")
+- key: the term or concept
+- value: the meaning or explanation
+- category: optional topic (e.g. "business", "travel", "science")
 
 NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affection, trust, intimacy, comfort, or respect changes - these relationship stats are disabled.
 </instructions>`);
@@ -177,15 +200,49 @@ Current time: ${timeStr}, ${dateStr}
 </system>`;
 }
 
-// Character layer - who she is
+// Character layer - who she is (Layer 1 + Layer 2)
 function buildCharacterLayer(ctx: PromptContext): string {
 	const persona = ctx.persona;
+	const state = ctx.state;
+
+	const soulText = state.soulPrompt || persona.systemPrompt || 'A friendly and caring companion who enjoys meaningful conversations.';
+	const evolvedText = state.systemPrompt || persona.systemPrompt || '';
+
+	// Render personality axes
+	const personality = state.personality;
+	const adaptations = personality.communicationAdaptations || [];
+
+	let personaSection = '';
+	if (evolvedText && evolvedText !== soulText) {
+		personaSection += `\n${evolvedText}`;
+	}
+
+	// Add personality axes
+	personaSection += `\n\nEvolved traits:`;
+	personaSection += `\n- Openness: ${personality.openness}`;
+	personaSection += `\n- Warmth: ${personality.warmth}`;
+	personaSection += `\n- Assertiveness: ${personality.assertiveness}`;
+	personaSection += `\n- Playfulness: ${personality.playfulness}`;
+	personaSection += `\n- Sensitivity: ${personality.sensitivity}`;
+	personaSection += `\n- Likes teasing: ${personality.likesTeasing}`;
+	personaSection += `\n- Prefers directness: ${personality.prefersDirectness}`;
+
+	if (adaptations.length > 0) {
+		personaSection += `\n\nLearned communication patterns:`;
+		for (const adaptation of adaptations) {
+			personaSection += `\n- ${adaptation}`;
+		}
+	}
 
 	return `<character>
 Name: ${persona.name}
 
-Core Personality:
-${persona.systemPrompt || 'A friendly and caring companion who enjoys meaningful conversations.'}
+<base_soul>
+${soulText}
+</base_soul>
+
+<evolved_persona>${personaSection}
+</evolved_persona>
 </character>`;
 }
 
@@ -271,6 +328,25 @@ function buildMemoryLayer(ctx: PromptContext): string {
 	return `<memory>\n${sections.join('\n\n')}\n</memory>`;
 }
 
+// Fact library layer — structured facts relevant to current context
+function buildFactLibraryLayer(ctx: PromptContext): string | null {
+	const entries = ctx.memories.factLibraryEntries;
+	if (entries.length === 0) return null;
+
+	const lines = entries.map((e) => {
+		let line = `- [${e.type}] ${e.key}: ${e.value}`;
+		if (e.category) line += ` (${e.category})`;
+		return line;
+	});
+
+	return `<fact_library>
+Relevant facts and vocabulary for this conversation:
+${lines.join('\n')}
+
+If the user struggles with any of these or shows understanding, include "structured_fact_seen" in your JSON update.
+</fact_library>`;
+}
+
 // Instruction layer - how to respond
 function buildInstructionLayer(ctx: PromptContext): string {
 	const stage = ctx.state.relationshipStage;
@@ -301,9 +377,16 @@ After your dialogue response, you may optionally output state changes as JSON:
   "intimacy_delta": number,
   "comfort_delta": number,
   "new_memory": null | "fact to remember about them",
-  "triggered_event": null | "event_id"
+  "triggered_event": null | "event_id",
+  "structured_fact_seen": null | { "type": "vocab", "key": "word", "value": "meaning", "category": "topic" }
 }
 \`\`\`
+
+If the user learns a new vocabulary word, concept, or fact, include "structured_fact_seen" with:
+- type: the kind of fact (e.g. "vocab", "concept", "exam_fact")
+- key: the term or concept
+- value: the meaning or explanation
+- category: optional topic (e.g. "business", "travel", "science")
 
 Keep deltas small (-10 to +10 for most interactions). Only include the JSON if you want to suggest state changes.
 </instructions>`;

@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import localforage from 'localforage';
-import { db } from '$lib/db';
+import { db, type DBCharacterState } from '$lib/db';
 import { characterStore } from '$lib/stores/character.svelte';
 import { backgroundStore } from '$lib/stores/background.svelte';
 import type { EmotionMapping } from '$lib/services/vrm/expression-controller';
@@ -269,14 +269,25 @@ export async function importSave(
 		// V2/V3 format - single character
 		const v2File = saveFile as SaveFile;
 
+		const charWithDefaults = {
+			...v2File.data.character,
+			sessionCountSinceEvolution: ((v2File.data.character as unknown as Record<string, unknown>).sessionCountSinceEvolution as number) ?? 0,
+			evolutionThreshold: ((v2File.data.character as unknown as Record<string, unknown>).evolutionThreshold as number) ?? 10
+		};
+		// Ensure personality has communicationAdaptations
+		const personality = (charWithDefaults.personality as unknown as Record<string, unknown>) || undefined;
+		if (personality && !Array.isArray(personality.communicationAdaptations)) {
+			personality.communicationAdaptations = [];
+		}
+
 		if (mode === 'replace') {
-			await db.characterStates.add(v2File.data.character);
+			await db.characterStates.add(charWithDefaults as DBCharacterState);
 			imported++;
 		} else {
 			// Merge mode - skip character if one exists
 			const existing = await db.characterStates.toCollection().first();
 			if (!existing) {
-				await db.characterStates.add(v2File.data.character);
+				await db.characterStates.add(charWithDefaults as DBCharacterState);
 				imported++;
 			} else {
 				skipped++;
@@ -352,7 +363,8 @@ export async function importSave(
 						sensitivity: 20,
 						likesTeasing: 0,
 						prefersDirectness: -10,
-						romanticStyle: 'slow_burn' as const
+						romanticStyle: 'slow_burn' as const,
+						communicationAdaptations: []
 					},
 					lastInteraction: (firstCharState?.lastInteraction as Date | null) || null,
 					firstMet: (firstCharState?.firstMet as Date) || new Date(),
@@ -362,6 +374,8 @@ export async function importSave(
 					longestStreak: (firstCharState?.longestStreak as number) ?? 0,
 					streakLastDate: (firstCharState?.streakLastDate as string | null) || null,
 					completedEvents: (firstCharState?.completedEvents as string[]) || [],
+					sessionCountSinceEvolution: 0,
+					evolutionThreshold: 10,
 					createdAt: (firstCharState?.createdAt as Date) || new Date(),
 					updatedAt: new Date()
 				};

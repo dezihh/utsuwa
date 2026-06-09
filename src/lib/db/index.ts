@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { CharacterState } from '$lib/types/character';
-import type { Fact, SessionSummary, ConversationTurn } from '$lib/types/memory';
+import type { Fact, SessionSummary, ConversationTurn, FactLibraryEntry } from '$lib/types/memory';
 import type { CompletedEventRecord } from '$lib/types/events';
 
 // Database types with IndexedDB-friendly id handling
@@ -24,6 +24,10 @@ export interface DBCompletedEvent extends Omit<CompletedEventRecord, 'id'> {
 	id?: number;
 }
 
+export interface DBFactLibraryEntry extends Omit<FactLibraryEntry, 'id'> {
+	id?: number;
+}
+
 // Legacy persona storage keys (for migration)
 const LEGACY_PERSONA_CARDS_KEY = 'utsuwa-persona-cards';
 const LEGACY_PERSONA_ACTIVE_KEY = 'utsuwa-persona-active-id';
@@ -34,6 +38,7 @@ class UtsuwaDatabase extends Dexie {
 	sessions!: EntityTable<DBSessionSummary, 'id'>;
 	conversationTurns!: EntityTable<DBConversationTurn, 'id'>;
 	completedEvents!: EntityTable<DBCompletedEvent, 'id'>;
+	factLibrary!: EntityTable<DBFactLibraryEntry, 'id'>;
 
 	constructor() {
 		super('utsuwa-db');
@@ -121,6 +126,56 @@ class UtsuwaDatabase extends Dexie {
 			conversationTurns: '++id, sessionId, createdAt',
 			completedEvents: '++id, eventId, completedAt'
 		});
+
+		// Version 4: characterId tagging, factLibrary table, soulPrompt
+		this.version(4)
+			.stores({
+				characterStates: '++id, updatedAt',
+				facts: '++id, characterId, category, importance, createdAt',
+				sessions: '++id, characterId, startedAt',
+				conversationTurns: '++id, characterId, sessionId, createdAt',
+				completedEvents: '++id, characterId, eventId, completedAt',
+				factLibrary: '++id, characterId, type, category, confidence, createdAt'
+			})
+			.upgrade(async (tx) => {
+				// Migrate existing data: assign default characterId
+				const facts = tx.table('facts');
+				const sessions = tx.table('sessions');
+				const conversationTurns = tx.table('conversationTurns');
+				const completedEvents = tx.table('completedEvents');
+				const characterStates = tx.table('characterStates');
+
+				// Assign default characterId to all existing records
+				await facts.toCollection().modify((f: Record<string, unknown>) => {
+					f.characterId = 'default';
+				});
+				await sessions.toCollection().modify((s: Record<string, unknown>) => {
+					s.characterId = 'default';
+				});
+				await conversationTurns.toCollection().modify((t: Record<string, unknown>) => {
+					t.characterId = 'default';
+				});
+				await completedEvents.toCollection().modify((e: Record<string, unknown>) => {
+					e.characterId = 'default';
+				});
+
+				// Migrate characterStates: copy systemPrompt to soulPrompt, add evolution fields
+				await characterStates.toCollection().modify((cs: Record<string, unknown>) => {
+					if (!cs.soulPrompt && cs.systemPrompt) {
+						cs.soulPrompt = cs.systemPrompt;
+					}
+					if (!cs.sessionCountSinceEvolution) {
+						cs.sessionCountSinceEvolution = 0;
+					}
+					if (!cs.evolutionThreshold) {
+						cs.evolutionThreshold = 10;
+					}
+					const personality = cs.personality as Record<string, unknown> | undefined;
+					if (personality && !Array.isArray(personality.communicationAdaptations)) {
+						personality.communicationAdaptations = [];
+					}
+				});
+			});
 	}
 }
 

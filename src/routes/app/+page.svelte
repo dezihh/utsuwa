@@ -6,6 +6,7 @@
 	import BottomChatBar from '$lib/components/chat/BottomChatBar.svelte';
 	import SpeechBubble from '$lib/components/chat/SpeechBubble.svelte';
 	import ChatSidebar from '$lib/components/chat/ChatSidebar.svelte';
+	import DebugPanel from '$lib/components/debug/DebugPanel.svelte';
 	import { EventScene } from '$lib/components/events';
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import MemoryGraphModal from '$lib/components/memory/MemoryGraphModal.svelte';
@@ -39,15 +40,20 @@
 		retrieveRelevantContext,
 		addTurnToWorkingMemory,
 		hydrateWorkingMemory,
+		getWorkingMemory,
 		memoryApi,
 		determineFactCategory,
 		calculateFactImportance,
 		backfillEmbeddings,
-		getEmbeddingBackfillStatus
+		getEmbeddingBackfillStatus,
+		shouldStartNewSession,
+		startNewSession
 	} from '$lib/engine/memory';
+	import * as memoryStorage from '$lib/services/storage/memory';
 	import { initEmbeddingModel, subscribeToEmbeddingState, type EmbeddingState } from '$lib/services/embeddings';
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
 	import { allEvents } from '$lib/data/events';
+	import { debugStore } from '$lib/stores/debug.svelte';
 	import { splitIntoSegments, stripAllTags, stripForApiContext, isContinueRequest } from '$lib/utils/sentences';
 	import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
 	import type { ProviderConfig } from '$lib/types';
@@ -88,6 +94,9 @@
 	// Onboarding state
 	let showOnboarding = $state(false);
 	let onboardingDismissed = $state(false);
+
+	// Working memory reference
+	let workingMemory = getWorkingMemory();
 
 	// Speech bubble state
 	let latestResponse = $state('');
@@ -240,6 +249,43 @@
 			}
 		}
 
+		// Save structured fact to fact library
+		if (finalUpdates.structuredFactSeen) {
+			try {
+				const fact = finalUpdates.structuredFactSeen;
+				const existing = await memoryStorage.getFactLibraryEntryByKey(
+					fact.key,
+					fact.type,
+					'default'
+				);
+				if (existing && existing.id !== undefined) {
+					// Update existing entry
+					await memoryStorage.updateFactLibraryEntry(existing.id, {
+						value: fact.value,
+						category: fact.category,
+						tags: fact.tags,
+						lastReviewedAt: new Date()
+					});
+					await memoryStorage.incrementFactLibraryReview(existing.id, 0.15);
+					debugStore.logFact('Updated', fact.key, fact.type);
+				} else {
+					// Create new entry
+					await memoryStorage.saveFactLibraryEntry({
+						characterId: 'default',
+						type: fact.type,
+						key: fact.key,
+						value: fact.value,
+						category: fact.category,
+						tags: fact.tags,
+						confidence: 0.3
+					});
+					debugStore.logFact('Created', fact.key, fact.type);
+				}
+			} catch (e) {
+				console.debug('[FactLibrary] Failed to save structured fact:', e);
+			}
+		}
+
 		// Check stage transitions (only in Dating Sim Mode)
 		if (characterStore.appMode === 'dating_sim') {
 			const completedEventIds = characterStore.state.completedEvents || [];
@@ -249,9 +295,32 @@
 			}
 		}
 
-		// Save to working memory
-		addTurnToWorkingMemory({ role: 'user', content: userMessage, createdAt: new Date() });
-		addTurnToWorkingMemory({ role: 'assistant', content: dialogue, createdAt: new Date() });
+		// Save to working memory and IndexedDB
+		const sessionId = workingMemory.currentSessionId;
+		addTurnToWorkingMemory({ role: 'user', content: userMessage, sessionId, createdAt: new Date() });
+		addTurnToWorkingMemory({ role: 'assistant', content: dialogue, sessionId, createdAt: new Date() });
+
+		// Also persist turns to IndexedDB
+		if (sessionId) {
+			try {
+				await memoryStorage.saveConversationTurn({
+					characterId: 'default',
+					role: 'user',
+					content: userMessage,
+					sessionId,
+					createdAt: new Date()
+				});
+				await memoryStorage.saveConversationTurn({
+					characterId: 'default',
+					role: 'assistant',
+					content: dialogue,
+					sessionId,
+					createdAt: new Date()
+				});
+			} catch (e) {
+				console.debug('[Session] Failed to save turns:', e);
+			}
+		}
 
 		// Extract facts
 		const potentialFacts = extractPotentialFacts(dialogue, userMessage);
@@ -282,6 +351,28 @@
 		}
 
 		return dialogue;
+	}
+
+	// Trigger personality evolution analysis after threshold reached
+	async function triggerEvolutionAnalysis() {
+		try {
+			const sessions = await memoryStorage.getSessions({
+				characterId: 'default',
+				ended: true,
+				limit: characterStore.state.evolutionThreshold
+			});
+			const { analyzeEvolution } = await import('$lib/engine/memory');
+			const suggestions = await analyzeEvolution(
+				sessions,
+				characterStore.state.personality
+			);
+			if (suggestions.length > 0) {
+				characterStore.applyEvolution(suggestions.map((s) => s.adaptation));
+				console.log('[Evolution] Applied adaptations:', suggestions.map((s) => s.adaptation));
+			}
+		} catch (e) {
+			console.error('[Evolution] Analysis failed:', e);
+		}
 	}
 
 	// Build system prompt
@@ -327,7 +418,19 @@
 			emotionMappings
 		};
 
-		return buildSystemPrompt(context);
+		const systemPrompt = buildSystemPrompt(context);
+
+		// Debug logging
+		debugStore.logMemory({
+			recentTurns: memories.recentTurns.length,
+			relevantFacts: memories.relevantFacts.length,
+			triggeredMemories: memories.triggeredMemories.length,
+			recentSessions: memories.recentSessions.length,
+			factLibraryEntries: memories.factLibraryEntries.length
+		});
+		debugStore.logPrompt(systemPrompt, userMessage);
+
+		return systemPrompt;
 	}
 
 	// Handle send message
@@ -337,6 +440,23 @@
 		if (!modulesStore.isModuleEnabled('consciousness')) {
 			chatStore.setError('Chat is disabled. Enable it in Settings > Character > AI Services.');
 			return;
+		}
+
+		// Session management: check if new session should start
+		const state = characterStore.state;
+		if (shouldStartNewSession(state.lastInteraction)) {
+			try {
+				const session = await startNewSession('default');
+				debugStore.logSession('Session started', `Session ID: ${session.id}`);
+				// Increment session count and check for evolution
+				characterStore.incrementSessionCount();
+				if (characterStore.isEvolutionDue()) {
+					// Trigger evolution analysis (async, non-blocking)
+					triggerEvolutionAnalysis();
+				}
+			} catch (e) {
+				console.error('[Session] Failed to start new session:', e);
+			}
 		}
 
 		const continueMode = isContinueRequest(content);
@@ -787,6 +907,9 @@
 				onClose={handleEventClose}
 			/>
 		{/if}
+
+		<!-- Debug Panel -->
+		<DebugPanel />
 	</main>
 
 	<!-- Onboarding Modal (first-run) -->

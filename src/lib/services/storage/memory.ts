@@ -1,13 +1,36 @@
-import { db, type DBFact, type DBSessionSummary, type DBConversationTurn } from '$lib/db';
-import type { Fact, SessionSummary, ConversationTurn, MemorySearchOptions, NewFact } from '$lib/types/memory';
+import {
+	db,
+	type DBFact,
+	type DBSessionSummary,
+	type DBConversationTurn,
+	type DBFactLibraryEntry
+} from '$lib/db';
+import type {
+	Fact,
+	SessionSummary,
+	ConversationTurn,
+	MemorySearchOptions,
+	NewFact,
+	FactLibraryEntry,
+	FactLibrarySearchOptions
+} from '$lib/types/memory';
 import { embedText, isEmbeddingReady } from '$lib/services/embeddings';
+
+const DEFAULT_CHARACTER_ID = 'default';
 
 // Facts
 
-export async function getFacts(options: MemorySearchOptions = {}): Promise<Fact[]> {
-	const facts = await db.facts.toArray();
+export async function getFacts(
+	options: MemorySearchOptions & { characterId?: string } = {}
+): Promise<Fact[]> {
+	let facts = await db.facts.toArray();
 
 	let filtered = facts;
+
+	// Filter by characterId
+	if (options.characterId) {
+		filtered = filtered.filter((f) => f.characterId === options.characterId);
+	}
 
 	// Filter by category
 	if (options.category) {
@@ -42,7 +65,9 @@ export async function getFacts(options: MemorySearchOptions = {}): Promise<Fact[
 	return filtered.map(deserializeFact);
 }
 
-export async function saveFact(fact: NewFact): Promise<number> {
+export async function saveFact(
+	fact: NewFact & { characterId?: string }
+): Promise<number> {
 	const now = new Date();
 
 	// Generate embedding if model is ready
@@ -55,6 +80,7 @@ export async function saveFact(fact: NewFact): Promise<number> {
 	}
 
 	const dbFact: Omit<DBFact, 'id'> = {
+		characterId: fact.characterId ?? DEFAULT_CHARACTER_ID,
 		content: fact.content,
 		category: fact.category,
 		importance: fact.importance ?? 50,
@@ -105,22 +131,39 @@ export async function getAllFactsWithEmbeddings(): Promise<Fact[]> {
 
 // Sessions
 
-export async function getSessions(limit?: number): Promise<SessionSummary[]> {
+export async function getSessions(
+	options: { limit?: number; characterId?: string; ended?: boolean } = {}
+): Promise<SessionSummary[]> {
 	let sessions = await db.sessions.toArray();
+
+	// Filter by characterId
+	if (options.characterId) {
+		sessions = sessions.filter((s) => s.characterId === options.characterId);
+	}
+
+	// Filter by ended status
+	if (options.ended === true) {
+		sessions = sessions.filter((s) => s.endedAt !== undefined);
+	} else if (options.ended === false) {
+		sessions = sessions.filter((s) => s.endedAt === undefined);
+	}
 
 	// Sort by startedAt descending (most recent first)
 	sessions.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 
-	if (limit) {
-		sessions = sessions.slice(0, limit);
+	if (options.limit) {
+		sessions = sessions.slice(0, options.limit);
 	}
 
 	return sessions.map(deserializeSession);
 }
 
-export async function saveSession(session: Omit<SessionSummary, 'id'>): Promise<number> {
+export async function saveSession(
+	session: Omit<SessionSummary, 'id'> & { characterId?: string }
+): Promise<number> {
 	const dbSession: Omit<DBSessionSummary, 'id'> = {
 		...session,
+		characterId: session.characterId ?? DEFAULT_CHARACTER_ID,
 		startedAt: new Date(session.startedAt),
 		endedAt: session.endedAt ? new Date(session.endedAt) : undefined
 	};
@@ -147,7 +190,7 @@ export async function deleteAllSessions(): Promise<void> {
 // Conversation Turns
 
 export async function getConversationTurns(
-	options: { sessionId?: number; limit?: number } = {}
+	options: { sessionId?: number; limit?: number; characterId?: string } = {}
 ): Promise<ConversationTurn[]> {
 	let turns: DBConversationTurn[];
 
@@ -155,6 +198,11 @@ export async function getConversationTurns(
 		turns = await db.conversationTurns.where('sessionId').equals(options.sessionId).toArray();
 	} else {
 		turns = await db.conversationTurns.toArray();
+	}
+
+	// Filter by characterId
+	if (options.characterId) {
+		turns = turns.filter((t) => t.characterId === options.characterId);
 	}
 
 	// Sort by createdAt ascending (chronological order)
@@ -169,10 +217,11 @@ export async function getConversationTurns(
 }
 
 export async function saveConversationTurn(
-	turn: Omit<ConversationTurn, 'id'>
+	turn: Omit<ConversationTurn, 'id'> & { characterId?: string }
 ): Promise<number> {
 	const dbTurn: Omit<DBConversationTurn, 'id'> = {
 		...turn,
+		characterId: turn.characterId ?? DEFAULT_CHARACTER_ID,
 		createdAt: new Date(turn.createdAt)
 	};
 
@@ -186,6 +235,150 @@ export async function deleteAllTurns(): Promise<void> {
 
 export async function deleteTurnsForSession(sessionId: number): Promise<void> {
 	await db.conversationTurns.where('sessionId').equals(sessionId).delete();
+}
+
+// Fact Library
+
+export async function getFactLibraryEntries(
+	options: FactLibrarySearchOptions = {}
+): Promise<FactLibraryEntry[]> {
+	let entries = await db.factLibrary.toArray();
+
+	// Filter by characterId
+	if (options.characterId) {
+		entries = entries.filter((e) => e.characterId === options.characterId);
+	}
+
+	// Filter by type
+	if (options.type) {
+		entries = entries.filter((e) => e.type === options.type);
+	}
+
+	// Filter by category
+	if (options.category) {
+		entries = entries.filter((e) => e.category === options.category);
+	}
+
+	// Filter by minimum confidence
+	if (options.minConfidence !== undefined) {
+		entries = entries.filter((e) => e.confidence >= options.minConfidence!);
+	}
+
+	// Filter by keywords
+	if (options.keywords && options.keywords.length > 0) {
+		const lowerKeywords = options.keywords.map((k) => k.toLowerCase());
+		entries = entries.filter((e) =>
+			lowerKeywords.some(
+				(kw) =>
+					e.key.toLowerCase().includes(kw) ||
+					e.value.toLowerCase().includes(kw) ||
+					e.tags?.some((t) => t.toLowerCase().includes(kw))
+			)
+		);
+	}
+
+	// Sort by confidence ascending (lowest first = needs review), then by reviewCount
+	entries.sort((a, b) => {
+		if (a.confidence !== b.confidence) return a.confidence - b.confidence;
+		return a.reviewCount - b.reviewCount;
+	});
+
+	if (options.limit) {
+		entries = entries.slice(0, options.limit);
+	}
+
+	return entries.map(deserializeFactLibraryEntry);
+}
+
+export async function getFactLibraryEntryByKey(
+	key: string,
+	type: string,
+	characterId: string = DEFAULT_CHARACTER_ID
+): Promise<FactLibraryEntry | undefined> {
+	const entry = await db.factLibrary
+		.where({ characterId, type, key })
+		.first();
+	return entry ? deserializeFactLibraryEntry(entry) : undefined;
+}
+
+export async function saveFactLibraryEntry(
+	entry: Omit<FactLibraryEntry, 'id' | 'createdAt' | 'reviewCount'> & {
+		characterId?: string;
+	}
+): Promise<number> {
+	const now = new Date();
+
+	// Generate embedding if model is ready
+	let embedding: number[] | undefined;
+	if (isEmbeddingReady()) {
+		const textToEmbed = `${entry.key} ${entry.value} ${entry.category ?? ''} ${entry.tags?.join(' ') ?? ''}`;
+		const result = await embedText(textToEmbed);
+		if (result) embedding = result;
+	}
+
+	const dbEntry: Omit<DBFactLibraryEntry, 'id'> = {
+		characterId: entry.characterId ?? DEFAULT_CHARACTER_ID,
+		type: entry.type,
+		key: entry.key,
+		value: entry.value,
+		category: entry.category,
+		tags: entry.tags,
+		difficulty: entry.difficulty,
+		confidence: entry.confidence,
+		createdAt: now,
+		lastReviewedAt: now,
+		reviewCount: 0,
+		embedding,
+		metadata: entry.metadata
+	};
+
+	const id = await db.factLibrary.add(dbEntry);
+	return id as number;
+}
+
+export async function updateFactLibraryEntry(
+	id: number,
+	updates: Partial<Omit<FactLibraryEntry, 'id' | 'createdAt'>>
+): Promise<void> {
+	const serialized: Partial<DBFactLibraryEntry> = { ...updates };
+	if (updates.lastReviewedAt) serialized.lastReviewedAt = new Date(updates.lastReviewedAt);
+	await db.factLibrary.update(id, serialized);
+}
+
+export async function incrementFactLibraryReview(
+	id: number,
+	confidenceDelta: number = 0.15
+): Promise<void> {
+	const entry = await db.factLibrary.get(id);
+	if (!entry) return;
+	await db.factLibrary.update(id, {
+		reviewCount: entry.reviewCount + 1,
+		lastReviewedAt: new Date(),
+		confidence: Math.min(1, Math.max(0, entry.confidence + confidenceDelta))
+	});
+}
+
+export async function deleteFactLibraryEntry(id: number): Promise<void> {
+	await db.factLibrary.delete(id);
+}
+
+export async function getFactLibraryEntriesWithoutEmbeddings(): Promise<FactLibraryEntry[]> {
+	const entries = await db.factLibrary.toArray();
+	return entries
+		.filter((e) => !e.embedding || e.embedding.length === 0)
+		.map(deserializeFactLibraryEntry);
+}
+
+export async function getAllFactLibraryEntriesWithEmbeddings(): Promise<FactLibraryEntry[]> {
+	const entries = await db.factLibrary.toArray();
+	return entries.map(deserializeFactLibraryEntry);
+}
+
+export async function updateFactLibraryEmbedding(
+	id: number,
+	embedding: number[]
+): Promise<void> {
+	await db.factLibrary.update(id, { embedding });
 }
 
 // Serialization helpers
@@ -210,5 +403,13 @@ function deserializeTurn(turn: DBConversationTurn): ConversationTurn {
 	return {
 		...turn,
 		createdAt: new Date(turn.createdAt)
+	};
+}
+
+function deserializeFactLibraryEntry(entry: DBFactLibraryEntry): FactLibraryEntry {
+	return {
+		...entry,
+		createdAt: new Date(entry.createdAt),
+		lastReviewedAt: entry.lastReviewedAt ? new Date(entry.lastReviewedAt) : undefined
 	};
 }

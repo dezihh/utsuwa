@@ -21,6 +21,13 @@ interface LLMStateOutput {
 	new_memory?: string | null;
 	new_inside_joke?: string | null;
 	triggered_event?: string | null;
+	structured_fact_seen?: {
+		type: string;
+		key: string;
+		value: string;
+		category?: string;
+		tags?: string[];
+	} | null;
 }
 
 // Valid emotions for validation
@@ -125,6 +132,20 @@ function convertLLMOutput(output: LLMStateOutput): Partial<StateUpdates> {
 		updates.triggeredEvent = output.triggered_event.trim();
 	}
 
+	// Structured fact for fact library
+	if (output.structured_fact_seen && typeof output.structured_fact_seen === 'object') {
+		const fact = output.structured_fact_seen;
+		if (typeof fact.key === 'string' && typeof fact.value === 'string' && typeof fact.type === 'string') {
+			updates.structuredFactSeen = {
+				type: fact.type,
+				key: fact.key.trim(),
+				value: fact.value.trim(),
+				category: typeof fact.category === 'string' ? fact.category.trim() : undefined,
+				tags: Array.isArray(fact.tags) ? fact.tags.filter((t): t is string => typeof t === 'string') : undefined
+			};
+		}
+	}
+
 	return updates;
 }
 
@@ -218,6 +239,16 @@ export function validateStateUpdates(updates: Partial<StateUpdates>): {
 
 	if (updates.triggeredEvent) {
 		sanitized.triggeredEvent = updates.triggeredEvent;
+	}
+
+	// Validate structured fact
+	if (updates.structuredFactSeen) {
+		const fact = updates.structuredFactSeen;
+		if (fact.key && fact.value && fact.type) {
+			sanitized.structuredFactSeen = fact;
+		} else {
+			warnings.push('structuredFactSeen missing required fields (key, value, type)');
+		}
 	}
 
 	return {

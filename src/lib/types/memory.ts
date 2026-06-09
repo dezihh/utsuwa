@@ -4,6 +4,7 @@ export type FactCategory = 'user' | 'relationship' | 'shared_experience';
 // A fact remembered about the user or relationship
 export interface Fact {
 	id?: number;
+	characterId?: string;
 	content: string;
 	category: FactCategory;
 	importance: number; // 0-100, for retrieval ranking
@@ -21,6 +22,7 @@ export type TopicDepth = 'shallow' | 'moderate' | 'deep';
 // A single conversation turn
 export interface ConversationTurn {
 	id?: number;
+	characterId?: string;
 	sessionId?: number;
 	role: 'user' | 'assistant';
 	content: string;
@@ -36,6 +38,7 @@ export interface ConversationTurn {
 // Session summary (short-term memory)
 export interface SessionSummary {
 	id?: number;
+	characterId?: string;
 	summary?: string;
 	keyTopics: string[];
 	emotionalArc?: string; // e.g., "started playful, became serious, ended warmly"
@@ -48,6 +51,35 @@ export interface SessionSummary {
 	messageCount: number;
 	startedAt: Date;
 	endedAt?: Date;
+	embedding?: number[]; // 384-dim for semantic search
+}
+
+// Fact library entry (structured app-managed facts)
+export interface FactLibraryEntry {
+	id?: number;
+	characterId: string;
+	type: string; // 'vocab', 'exam_fact', 'concept', ...
+	key: string;
+	value: string;
+	category?: string;
+	tags?: string[];
+	difficulty?: number; // 1-5
+	confidence: number; // 0-1
+	createdAt: Date;
+	lastReviewedAt?: Date;
+	reviewCount: number;
+	embedding?: number[]; // 384-dim for semantic search
+	metadata?: Record<string, unknown>;
+}
+
+// Options for searching fact library
+export interface FactLibrarySearchOptions {
+	characterId?: string;
+	type?: string;
+	category?: string;
+	limit?: number;
+	minConfidence?: number;
+	keywords?: string[];
 }
 
 // Context retrieved from memory for prompt building
@@ -56,6 +88,7 @@ export interface RelevantContext {
 	relevantFacts: Fact[];
 	triggeredMemories: Fact[];
 	recentSessions: SessionSummary[];
+	factLibraryEntries: FactLibraryEntry[];
 }
 
 // Memory search options
@@ -68,6 +101,7 @@ export interface MemorySearchOptions {
 
 // New fact input
 export interface NewFact {
+	characterId?: string;
 	content: string;
 	category: FactCategory;
 	importance?: number;

@@ -9,7 +9,10 @@ import type {
 } from '$lib/types/memory';
 import { MAX_WORKING_MEMORY_TURNS, MAX_RELEVANT_FACTS, MAX_RECENT_SESSIONS, DEFAULT_FACT_IMPORTANCE, DEFAULT_FACT_CONFIDENCE } from '$lib/types/memory';
 import * as memoryStorage from '$lib/services/storage/memory';
-import { embedText, findSimilarFacts, isEmbeddingReady } from '$lib/services/embeddings';
+import { embedText, findSimilarFacts, isEmbeddingReady, cosineSimilarity } from '$lib/services/embeddings';
+
+// Session inactivity threshold (30 minutes)
+const SESSION_INACTIVITY_MS = 30 * 60 * 1000;
 
 // Working memory store (single instance for the session)
 let workingMemory: WorkingMemory = {
@@ -31,6 +34,12 @@ export function initWorkingMemory(): WorkingMemory {
 // Get working memory
 export function getWorkingMemory(): WorkingMemory {
 	return workingMemory;
+}
+
+// Check if a new session should start (lazy compaction trigger)
+export function shouldStartNewSession(lastInteraction: Date | null): boolean {
+	if (!lastInteraction) return true;
+	return Date.now() - new Date(lastInteraction).getTime() > SESSION_INACTIVITY_MS;
 }
 
 // Add a turn to working memory
@@ -71,6 +80,178 @@ export async function hydrateWorkingMemory(): Promise<void> {
 	workingMemory.messageCount = recentTurns.length;
 }
 
+// Analyze sessions for personality evolution suggestions
+export interface EvolutionSuggestion {
+	adaptation: string;
+	reason: string;
+}
+
+export async function analyzeEvolution(
+	sessions: SessionSummary[],
+	currentPersonality: import('$lib/types/character').PersonalityProfile
+): Promise<EvolutionSuggestion[]> {
+	if (sessions.length === 0) return [];
+
+	const suggestions: EvolutionSuggestion[] = [];
+
+	// Simple heuristic-based evolution analysis
+	// In a full implementation, this would be an LLM call
+	const topics = new Set<string>();
+	for (const session of sessions) {
+		for (const topic of session.keyTopics || []) {
+			topics.add(topic.toLowerCase());
+		}
+	}
+
+	// Suggest adaptations based on conversation patterns
+	const topicList = Array.from(topics);
+	if (topicList.length > 3) {
+		suggestions.push({
+			adaptation: `User enjoys discussing diverse topics including ${topicList.slice(0, 3).join(', ')}`,
+			reason: 'Detected variety of conversation topics across recent sessions'
+		});
+	}
+
+	// Check emotional arcs for patterns
+	const emotionalArcs = sessions.map((s) => s.emotionalArc).filter(Boolean);
+	if (emotionalArcs.some((arc) => arc?.includes('playful') || arc?.includes('warm'))) {
+		suggestions.push({
+			adaptation: 'User responds well to warm and playful tone',
+			reason: 'Recent sessions showed positive engagement with lighter emotional arcs'
+		});
+	}
+
+	// If user asks many questions, suggest directness preference
+	const questionCount = sessions.reduce((count, s) => {
+		return count + (s.summary?.includes('?') ? 1 : 0);
+	}, 0);
+	if (questionCount >= 2) {
+		suggestions.push({
+			adaptation: 'User asks many questions — prefers direct, informative answers',
+			reason: 'Multiple sessions contained question-heavy patterns'
+		});
+	}
+
+	return suggestions.slice(0, 2); // Max 2 suggestions
+}
+
+// Lazy session compaction: compact previous open session before starting a new one
+export async function compactOpenSession(
+	characterId: string = 'default',
+	onEvolutionTrigger?: () => void
+): Promise<SessionSummary | null> {
+	try {
+		// Find the most recent open session (no endedAt)
+		const openSessions = await memoryStorage.getSessions({
+			characterId,
+			ended: false,
+			limit: 1
+		});
+
+		const openSession = openSessions[0];
+		if (!openSession || !openSession.id) return null;
+
+		// Get all turns for this session
+		const turns = await memoryStorage.getConversationTurns({
+			sessionId: openSession.id,
+			characterId
+		});
+
+		if (turns.length === 0) {
+			// No turns, just mark as ended
+			await memoryStorage.updateSession(openSession.id, { endedAt: new Date() });
+			return { ...openSession, endedAt: new Date() };
+		}
+
+		// Build a transcript for the LLM summary
+		const transcript = turns
+			.slice(-50) // max 50 turns
+			.map((t) => `${t.role === 'user' ? 'User' : 'Assistant'}: ${t.content}`)
+			.join('\n');
+
+		// Generate summary via LLM (we'll do this client-side for now with a simple heuristic)
+		// For now, create a basic summary from the conversation
+		const summary = `Conversation about ${turns.length} messages.`;
+		const keyTopics: string[] = [];
+		const emotionalArc = 'conversation completed';
+
+		// Try to extract topics from user messages
+		const userMessages = turns.filter((t) => t.role === 'user').map((t) => t.content);
+		for (const msg of userMessages.slice(-5)) {
+			const words = msg.split(/\s+/).filter((w) => w.length > 4);
+			if (words.length > 0) keyTopics.push(words[0]);
+		}
+
+		// Generate embedding for the summary
+		let embedding: number[] | undefined;
+		if (isEmbeddingReady()) {
+			const result = await embedText(summary + ' ' + keyTopics.join(' '));
+			if (result) embedding = result;
+		}
+
+		// Update the session
+		await memoryStorage.updateSession(openSession.id, {
+			summary,
+			keyTopics: [...new Set(keyTopics)].slice(0, 5),
+			emotionalArc,
+			messageCount: turns.length,
+			endedAt: new Date(),
+			embedding
+		});
+
+		const compactedSession: SessionSummary = {
+			...openSession,
+			summary,
+			keyTopics: [...new Set(keyTopics)].slice(0, 5),
+			emotionalArc,
+			messageCount: turns.length,
+			endedAt: new Date(),
+			embedding
+		};
+
+		// Trigger evolution check via callback (store-level logic handles the rest)
+		if (onEvolutionTrigger) {
+			onEvolutionTrigger();
+		}
+
+		return compactedSession;
+	} catch (e) {
+		console.error('[Memory] Failed to compact open session:', e);
+		return null;
+	}
+}
+
+// Start a new session (after compacting any open one)
+export async function startNewSession(characterId: string = 'default'): Promise<SessionSummary> {
+	// Compact any open session first
+	await compactOpenSession(characterId);
+
+	// Create new session
+	const now = new Date();
+	const id = await memoryStorage.saveSession({
+		characterId,
+		summary: '',
+		keyTopics: [],
+		messageCount: 0,
+		emotionalArc: '',
+		startedAt: now
+	});
+
+	const session: SessionSummary = {
+		id,
+		characterId,
+		summary: '',
+		keyTopics: [],
+		messageCount: 0,
+		emotionalArc: '',
+		startedAt: now
+	};
+
+	workingMemory.currentSessionId = id;
+	workingMemory.sessionStartedAt = now;
+	return session;
+}
+
 // Memory API - uses IndexedDB storage directly
 export const memoryApi = {
 	// Get facts from IndexedDB
@@ -80,7 +261,7 @@ export const memoryApi = {
 
 	// Get sessions from IndexedDB
 	async getSessions(limit: number = 10): Promise<SessionSummary[]> {
-		return memoryStorage.getSessions(limit);
+		return memoryStorage.getSessions({ limit, characterId: 'default' });
 	},
 
 	// Search facts by keywords
@@ -112,9 +293,10 @@ export const memoryApi = {
 	},
 
 	// Create a new session
-	async createSession(): Promise<SessionSummary> {
+	async createSession(characterId?: string): Promise<SessionSummary> {
 		const now = new Date();
 		const id = await memoryStorage.saveSession({
+			characterId: characterId ?? 'default',
 			summary: '',
 			keyTopics: [],
 			messageCount: 0,
@@ -123,6 +305,7 @@ export const memoryApi = {
 		});
 		return {
 			id,
+			characterId: characterId ?? 'default',
 			summary: '',
 			keyTopics: [],
 			messageCount: 0,
@@ -223,12 +406,52 @@ export async function retrieveRelevantContext(userMessage: string): Promise<Rele
 		console.error('[Memory] Failed to fetch relevant facts:', e);
 	}
 
-	// Get recent sessions for context
+	// Get relevant sessions via semantic search (max 3)
 	let recentSessions: SessionSummary[] = [];
 	try {
-		recentSessions = await memoryApi.getSessions(MAX_RECENT_SESSIONS);
+		const allSessions = await memoryStorage.getSessions({
+			characterId: 'default',
+			ended: true,
+			limit: 50
+		});
+
+		if (isEmbeddingReady()) {
+			const queryEmbedding = await embedText(userMessage);
+			if (queryEmbedding) {
+				const sessionsWithEmbeddings = allSessions.filter((s) => s.embedding && s.embedding.length > 0);
+				const results: Array<{ session: SessionSummary; similarity: number }> = [];
+				for (const session of sessionsWithEmbeddings) {
+					if (!session.embedding) continue;
+					const similarity = cosineSimilarity(queryEmbedding, session.embedding);
+					if (similarity >= 0.35) {
+						results.push({ session, similarity });
+					}
+				}
+				results.sort((a, b) => b.similarity - a.similarity);
+				recentSessions = results.slice(0, 3).map((r) => r.session);
+			}
+		}
+
+		// Fallback: if no semantic matches, return most recent session
+		if (recentSessions.length === 0 && allSessions.length > 0) {
+			recentSessions = allSessions.slice(0, 1);
+		}
 	} catch (e) {
 		console.error('Failed to fetch recent sessions:', e);
+	}
+
+	// Retrieve relevant fact library entries (max 15, low confidence first)
+	let factLibraryEntries: import('$lib/types/memory').FactLibraryEntry[] = [];
+	try {
+		const keywords = userMessage.split(/\s+/).filter((w) => w.length > 3);
+		const entries = await memoryStorage.getFactLibraryEntries({
+			characterId: 'default',
+			limit: 15,
+			keywords: keywords.length > 0 ? keywords : undefined
+		});
+		factLibraryEntries = entries;
+	} catch (e) {
+		console.error('[Memory] Failed to fetch fact library entries:', e);
 	}
 
 	// Increment reference counts for retrieved facts
@@ -243,7 +466,8 @@ export async function retrieveRelevantContext(userMessage: string): Promise<Rele
 		recentTurns,
 		relevantFacts,
 		triggeredMemories,
-		recentSessions
+		recentSessions,
+		factLibraryEntries
 	};
 }
 

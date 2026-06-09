@@ -5,6 +5,7 @@
 	import * as THREE from 'three';
 	import localforage from 'localforage';
 	import { debugEventsStore, testEvents } from '$lib/stores/debugEvents.svelte';
+	import { debugStore } from '$lib/stores/debug.svelte';
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
 	import {
@@ -626,6 +627,60 @@
 					</button>
 					<button class="action-btn reset" onclick={clearCharacterData}>
 						Reset Character Data
+					</button>
+				</div>
+			</section>
+
+			<!-- Debug Logging -->
+			<section class="section">
+				<h3>Debug Logging</h3>
+				<p class="hint">Toggle logging categories. Open the debug panel to view logs in real-time.</p>
+				<div class="debug-toggles">
+					<label class="debug-toggle">
+						<input
+							type="checkbox"
+							checked={debugStore.settings.logSystemPrompts}
+							onchange={(e) => debugStore.updateSetting('logSystemPrompts', e.currentTarget.checked)}
+						/>
+						<span class="debug-toggle-label">Log System Prompts</span>
+						<span class="debug-toggle-desc">Full prompt before each LLM call</span>
+					</label>
+					<label class="debug-toggle">
+						<input
+							type="checkbox"
+							checked={debugStore.settings.logMemoryRetrieval}
+							onchange={(e) => debugStore.updateSetting('logMemoryRetrieval', e.currentTarget.checked)}
+						/>
+						<span class="debug-toggle-label">Log Memory Retrieval</span>
+						<span class="debug-toggle-desc">Facts, sessions, and fact library entries retrieved</span>
+					</label>
+					<label class="debug-toggle">
+						<input
+							type="checkbox"
+							checked={debugStore.settings.logSessionLifecycle}
+							onchange={(e) => debugStore.updateSetting('logSessionLifecycle', e.currentTarget.checked)}
+						/>
+						<span class="debug-toggle-label">Log Session Lifecycle</span>
+						<span class="debug-toggle-desc">Session start, compaction, and end events</span>
+					</label>
+					<label class="debug-toggle">
+						<input
+							type="checkbox"
+							checked={debugStore.settings.logFactLibrary}
+							onchange={(e) => debugStore.updateSetting('logFactLibrary', e.currentTarget.checked)}
+						/>
+						<span class="debug-toggle-label">Log Fact Library</span>
+						<span class="debug-toggle-desc">Structured facts saved or updated</span>
+					</label>
+				</div>
+				<div class="debug-panel-toggle">
+					<button
+						class="action-btn"
+						class:active={debugStore.panelVisible}
+						onclick={() => debugStore.togglePanel()}
+					>
+						<Icon name="terminal" size={14} />
+						{debugStore.panelVisible ? 'Hide Debug Panel' : 'Show Debug Panel'}
 					</button>
 				</div>
 			</section>
@@ -1501,5 +1556,57 @@
 		.event-btn {
 			padding: 0.5rem;
 		}
+	}
+
+	/* Debug toggle styles */
+	.debug-toggles {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		margin-bottom: 1rem;
+	}
+
+	.debug-toggle {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.6rem;
+		cursor: pointer;
+		padding: 0.5rem 0.6rem;
+		border-radius: 8px;
+		transition: background 0.1s;
+	}
+
+	.debug-toggle:hover {
+		background: rgba(0, 0, 0, 0.03);
+	}
+
+	:global(.dark) .debug-toggle:hover {
+		background: rgba(255, 255, 255, 0.03);
+	}
+
+	.debug-toggle input[type="checkbox"] {
+		margin-top: 0.15rem;
+		width: 16px;
+		height: 16px;
+		accent-color: #01B2FF;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.debug-toggle-label {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--text-primary);
+	}
+
+	.debug-toggle-desc {
+		font-size: 0.75rem;
+		color: var(--text-tertiary);
+		display: block;
+		margin-top: 0.1rem;
+	}
+
+	.debug-panel-toggle {
+		margin-top: 0.5rem;
 	}
 </style>

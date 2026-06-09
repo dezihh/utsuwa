@@ -78,6 +78,7 @@ export interface EventDefinition {
 // Completed event record (database)
 export interface CompletedEventRecord {
 	id?: number;
+	characterId?: string;
 	eventId: string;
 	eventType: EventType;
 	choiceIndex?: number;

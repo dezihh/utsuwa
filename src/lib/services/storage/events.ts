@@ -1,8 +1,10 @@
 import { db, type DBCompletedEvent } from '$lib/db';
 import type { CompletedEventRecord } from '$lib/types/events';
 
+const DEFAULT_CHARACTER_ID = 'default';
+
 export async function getCompletedEvents(
-	options: { eventId?: string; limit?: number } = {}
+	options: { eventId?: string; limit?: number; characterId?: string } = {}
 ): Promise<CompletedEventRecord[]> {
 	let events: DBCompletedEvent[];
 
@@ -10,6 +12,11 @@ export async function getCompletedEvents(
 		events = await db.completedEvents.where('eventId').equals(options.eventId).toArray();
 	} else {
 		events = await db.completedEvents.toArray();
+	}
+
+	// Filter by characterId
+	if (options.characterId) {
+		events = events.filter((e) => e.characterId === options.characterId);
 	}
 
 	// Sort by completedAt descending (most recent first)
@@ -23,10 +30,11 @@ export async function getCompletedEvents(
 }
 
 export async function saveCompletedEvent(
-	event: Omit<CompletedEventRecord, 'id'>
+	event: Omit<CompletedEventRecord, 'id'> & { characterId?: string }
 ): Promise<number> {
 	const dbEvent: Omit<DBCompletedEvent, 'id'> = {
 		...event,
+		characterId: event.characterId ?? DEFAULT_CHARACTER_ID,
 		completedAt: new Date(event.completedAt)
 	};
 

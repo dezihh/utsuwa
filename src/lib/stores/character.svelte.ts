@@ -162,15 +162,19 @@ function createCharacterStore() {
 	}
 
 	// Update persona fields (name, systemPrompt, extensions)
+	// Note: soulPrompt is NOT updated here — it's immutable after creation
 	function updatePersona(updates: {
 		name?: string;
 		systemPrompt?: string;
+		soulPrompt?: string;
 		extensions?: PersonaExtensions;
 	}): void {
 		state = {
 			...state,
 			...(updates.name !== undefined && { name: updates.name }),
 			...(updates.systemPrompt !== undefined && { systemPrompt: updates.systemPrompt }),
+			// soulPrompt can only be set if it's currently empty (onboarding), never overwritten
+			...(updates.soulPrompt !== undefined && !state.soulPrompt && { soulPrompt: updates.soulPrompt }),
 			...(updates.extensions !== undefined && { extensions: updates.extensions }),
 			updatedAt: new Date()
 		};
@@ -359,6 +363,47 @@ function createCharacterStore() {
 		save();
 	}
 
+	// Increment session count since last evolution
+	function incrementSessionCount(): void {
+		state = {
+			...state,
+			sessionCountSinceEvolution: state.sessionCountSinceEvolution + 1,
+			updatedAt: new Date()
+		};
+		save();
+	}
+
+	// Check if evolution threshold is reached
+	function isEvolutionDue(): boolean {
+		return state.sessionCountSinceEvolution >= state.evolutionThreshold;
+	}
+
+	// Apply evolution suggestions to personality
+	function applyEvolution(adaptations: string[]): void {
+		const currentAdaptations = state.personality.communicationAdaptations || [];
+		const merged = [...currentAdaptations];
+		for (const adaptation of adaptations) {
+			if (!merged.includes(adaptation)) {
+				merged.push(adaptation);
+			}
+		}
+		// Keep max 5
+		while (merged.length > 5) {
+			merged.shift();
+		}
+
+		state = {
+			...state,
+			personality: {
+				...state.personality,
+				communicationAdaptations: merged
+			},
+			sessionCountSinceEvolution: 0,
+			updatedAt: new Date()
+		};
+		save();
+	}
+
 	// Reset state (delete and recreate)
 	async function resetState(): Promise<void> {
 		if (!browser) return;
@@ -442,7 +487,10 @@ function createCharacterStore() {
 		updateStreak,
 		updateDaysKnown,
 		markOnboardingComplete,
-		resetState
+		resetState,
+		incrementSessionCount,
+		isEvolutionDue,
+		applyEvolution
 	};
 }
 

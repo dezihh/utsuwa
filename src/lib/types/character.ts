@@ -54,6 +54,9 @@ export interface PersonalityProfile {
 
 	// Romantic approach
 	romanticStyle: RomanticStyle;
+
+	// Learned communication patterns (max 5)
+	communicationAdaptations: string[];
 }
 
 // Persona extensions (module configs, agents, custom data)
@@ -71,6 +74,9 @@ export interface CharacterState {
 
 	// Persona fields (unified - no more separate persona storage)
 	name: string;
+	// Layer 1 — Base Soul: immutable core character
+	soulPrompt?: string;
+	// Layer 2 — Evolved Persona: editable personality layer
 	systemPrompt: string;
 	extensions: PersonaExtensions;
 
@@ -109,6 +115,10 @@ export interface CharacterState {
 	// Event tracking
 	completedEvents: string[];
 
+	// Evolution tracking
+	sessionCountSinceEvolution: number;
+	evolutionThreshold: number;
+
 	// Timestamps
 	createdAt: Date;
 	updatedAt: Date;
@@ -130,6 +140,13 @@ export interface StateUpdates {
 	newMemory?: string;
 	newInsideJoke?: string;
 	triggeredEvent?: string;
+	structuredFactSeen?: {
+		type: string;
+		key: string;
+		value: string;
+		category?: string;
+		tags?: string[];
+	};
 }
 
 // Default values for creating new state
@@ -142,7 +159,8 @@ export function createDefaultPersonality(): PersonalityProfile {
 		sensitivity: 20,
 		likesTeasing: 0,
 		prefersDirectness: -10,
-		romanticStyle: 'slow_burn'
+		romanticStyle: 'slow_burn',
+		communicationAdaptations: []
 	};
 }
 
@@ -163,6 +181,7 @@ export function createDefaultCharacterState(): Omit<CharacterState, 'id'> {
 	return {
 		// Persona fields
 		name: 'Utsuwa',
+		soulPrompt: DEFAULT_SYSTEM_PROMPT,
 		systemPrompt: DEFAULT_SYSTEM_PROMPT,
 		extensions: {},
 
@@ -185,6 +204,8 @@ export function createDefaultCharacterState(): Omit<CharacterState, 'id'> {
 		longestStreak: 0,
 		streakLastDate: null,
 		completedEvents: [],
+		sessionCountSinceEvolution: 0,
+		evolutionThreshold: 10,
 		createdAt: now,
 		updatedAt: now
 	};
