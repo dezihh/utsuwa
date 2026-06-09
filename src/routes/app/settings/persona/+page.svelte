@@ -449,6 +449,34 @@
 		}
 	});
 
+	// For non-local providers (e.g. openai-compatible), load models on mount
+	// if they haven't been fetched yet. Uses cache first, then fetches.
+	$effect(() => {
+		const providerId = consciousnessSettings.activeProvider as string;
+		if (!providerId) return;
+
+		const provider = getLLMProvider(providerId);
+		if (!provider || provider.isLocal) return; // Local handled above
+
+		// Already loaded — nothing to do
+		if (llmDynamicModels !== null) return;
+
+		// Try cached models first
+		const cached = getCachedModelsForProvider(providerId);
+		if (cached) {
+			llmDynamicModels = cached;
+			return;
+		}
+
+		// Fetch if configured
+		const config = settingsStore.getProviderConfig(providerId);
+		const hasKey = !!config.apiKey;
+		const hasUrl = providerId !== 'openai-compatible' || !!config.baseUrl;
+		if (provider.requiresApiKey && hasKey && hasUrl) {
+			debouncedFetchLLMModels(providerId);
+		}
+	});
+
 	// Load form values from store when character is ready
 	$effect(() => {
 		if (characterStore.isReady) {
