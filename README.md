@@ -29,7 +29,7 @@
 - **Local Model Discovery**: Ollama and LM Studio discover installed local models directly from your device
 - **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, AllTalk, Chatterbox, and OmniVoice (with per-segment language + expression tags)
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
-- **Animations**: 18 built-in VRMA motion clips (idle, talking, emotions, actions) with automatic blinking, plus upload your own `.vrma` files with custom naming
+- **Animations**: 18 built-in VRMA motion clips (idle, talking, emotions, actions) with automatic blinking. Upload your own `.vrma` files under **Settings > Animations**. Each animation has an editable description that the LLM sees in its prompt, plus a toggle to enable/disable it for LLM use — so you control which animations the companion can suggest.
 - **Character Customization**: Customize your companion's name, personality, and system prompt with saveable presets
 - **Companion System**: Multi-axis relationship tracking with mood, events, and semantic memory
 - **Semantic Memory**: Local AI-powered memory search using Transformers.js — finds memories by meaning, not just keywords
@@ -191,7 +191,13 @@ The companion avatar supports a layered animation system powered by VRMA (VRM An
 - **Idle animations**: 5 clips cycle randomly with smooth crossfades when the avatar is not speaking
 - **Talking animation**: Loaded automatically when TTS is active
 - **Emote actions**: Triggered via the Developer Tools dropdown or LLM action tags (`[action:wave]`, `[action:jump]`, `[action:clap]`, `[action:think]`, etc.)
-- **Custom VRMA upload**: Upload your own `.vrma` files under **Settings > Developer Tools > Animation**. A name dialog lets you assign a custom display name before saving. Uploaded animations are persisted in IndexedDB and appear in the animation dropdown alongside built-in clips.
+- **Custom VRMA upload**: Upload your own `.vrma` files under **Settings > Developer Tools**. After upload you are redirected to **Settings > Animations** where you can manage all animations in a table.
+- **Animation Management**: Under **Settings > Animations** every built-in and custom animation is listed in an editable table with:
+  - **Active toggle** — enable/disable per animation for LLM visibility
+  - **Description** — inline-editable text that the LLM receives in its prompt (e.g. "Wave hello or goodbye")
+  - **Type badge** — built-in vs. custom
+  - **Delete** — remove custom uploads
+- **Emotion-to-Action Mapping**: Emotion tags like `[laugh]`, `[excited]`, or `[sad]` automatically trigger matching body animations without requiring an explicit `[action:xxx]` tag. Each mapping has probability and cooldown controls so the companion feels natural, not mechanical.
 - **Memory-safe playback**: Emote actions are automatically disposed after finishing to prevent mixer memory leaks. Idle crossfades clean up old actions after a short delay.
 - **VRMA compatibility**: Uploaded files that lack a GLTF scene or contain unsupported morph-target (`weights`) channels are automatically handled by a preprocessor plugin, so most VRMA files from external sources will work.
 
@@ -462,13 +468,18 @@ pnpm tauri build  # Build desktop app installer
 - [x] **Lazy Session Compaction** — Previous open sessions are summarized automatically when a new session starts (handles browser tab closure gracefully); turns are persisted with `sessionId`
 - [x] **Episodic Semantic Recall** — Past sessions are retrieved by semantic similarity (cosine on embeddings) rather than just recency; up to 3 thematically matching sessions are injected into the prompt
 - [x] **Debug Environment** — Settings > Developer toggles for Prompt / Memory / Session / Fact logging; real-time Debug Panel overlay with category filters, search, and expandable log entries
+- [x] **Animation Management** — Settings > Animations table with per-animation Active toggle, inline-editable LLM description, type badge, and custom upload delete
+- [x] **Emotion-to-Action Mapping** — Automatic body animation triggers from emotion tags (e.g. `[laugh]` → shoulder shake) with probability and cooldown controls
+- [x] **Voice-Tag Layer Sync** — Body action lists in Chatterbox/OmniVoice prompt layers are dynamically generated from available animations, never suggesting missing files
+- [x] **VOX Mode AudioContext Fix** — Duplex VAD now resumes AudioContext after creation, fixing transcription failure on fresh sessions
+- [x] **TypeScript Zero Errors** — All 13 pre-existing type errors resolved; build now reports 0 errors
 
 ### In Progress / Planned
 
-- [ ] **LLM-based Session Summaries** — Replace heuristic summaries with real LLM-generated session summaries (2–4 sentences, key topics, emotional arc) for higher-quality episodic recall
-- [ ] **Fact Library UI** — Settings page to browse, filter, edit, and delete Fact Library entries (vocabulary, concepts, exam facts) with confidence-based sorting
-- [ ] **LLM-based Personality Evolution** — Replace heuristic evolution analysis with a dedicated LLM call that analyzes session summaries and suggests concrete, reasoned personality adaptations
-- [ ] **User-Confirmed Evolution** — Modal dialog showing proposed adaptations before they are applied, with per-suggestion accept/reject controls
+- [x] **LLM-based Session Summaries** — Replace heuristic summaries with real LLM-generated session summaries (2–4 sentences, key topics, emotional arc) for higher-quality episodic recall
+- [x] **Fact Library UI** — Settings page to browse, filter, edit, and delete Fact Library entries (vocabulary, concepts, exam facts) with confidence-based sorting
+- [x] **LLM-based Personality Evolution** — Replace heuristic evolution analysis with a dedicated LLM call that analyzes session summaries and suggests concrete, reasoned personality adaptations
+- [x] **User-Confirmed Evolution** — Modal dialog showing proposed adaptations before they are applied, with per-suggestion accept/reject controls
 - [ ] **File, Image, and Video Uploads** - Add support for attaching files, images, and videos for multimodal LLM workflows and providers that can use richer context or web-aware tools
 - [ ] **Live2D Support** - Alternative to VRM for 2D animated avatars
 - [ ] **Windows and Linux Desktop Apps** - Expand desktop builds beyond the current macOS beta
@@ -514,7 +525,13 @@ Utsuwa is built on the shoulders of these excellent projects:
 - **[n8ao](https://github.com/N8python/n8ao)** - Ambient occlusion for Three.js
 - **[postprocessing](https://github.com/pmndrs/postprocessing)** - Post-processing effects
 
-## Recent Memory System Updates
+## Recent Updates
+
+### Animation Management UI
+A new **Settings > Animations** page lists every built-in and custom VRMA animation in an editable table. You can toggle animations on/off for LLM visibility, add inline descriptions that the LLM receives in its prompt, and delete custom uploads. After uploading a `.vrma` file in Developer Tools you are automatically redirected here. The LLM only sees enabled animations — no more suggestions for missing files.
+
+### Emotion-to-Action Mapping
+Emotion tags like `[laugh]`, `[excited]`, or `[sad]` now automatically trigger matching body animations (e.g. laugh → shoulder shake, excited → jump, sad → sad pose). Each mapping uses probability and cooldown controls so the companion feels natural, not mechanical. Works in both TTS and text-only mode. Explicit `[action:xxx]` tags still take precedence.
 
 ### LLM-Based Session Summaries
 Session compaction now uses the configured LLM provider to generate rich, contextual summaries including key topics and emotional arcs — replacing the previous heuristic approach. Falls back gracefully if the LLM is unavailable.
@@ -527,6 +544,12 @@ The evolution analyzer now sends recent session summaries to the LLM for pattern
 
 ### User-Confirmed Evolution
 Before any personality adaptations are applied, a confirmation modal shows the suggested changes with explanations. The user can select which adaptations to keep, or reject them entirely.
+
+### VOX Mode Fix
+The duplex VAD service now correctly resumes the AudioContext after creation. Previously, VOX mode appeared active but never transcribed on a fresh browser session because the AudioContext started in `suspended` state. A one-line `audioContext.resume()` fix resolves this.
+
+### TypeScript: Zero Errors
+All 13 pre-existing TypeScript errors have been fixed. The build now reports **0 errors** (35 warnings remain, all CSS/accessibility).
 
 ## License
 
