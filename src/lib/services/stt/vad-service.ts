@@ -125,6 +125,9 @@ class VadService {
 		}
 
 		this.audioContext = new AudioContext();
+		if (this.audioContext.state === 'suspended') {
+			await this.audioContext.resume();
+		}
 		const source = this.audioContext.createMediaStreamSource(this.stream);
 
 		this.analyser = this.audioContext.createAnalyser();
