@@ -473,6 +473,7 @@ pnpm tauri build  # Build desktop app installer
 - [x] **Voice-Tag Layer Sync** — Body action lists in Chatterbox/OmniVoice prompt layers are dynamically generated from available animations, never suggesting missing files
 - [x] **VOX Mode AudioContext Fix** — Duplex VAD now resumes AudioContext after creation, fixing transcription failure on fresh sessions
 - [x] **TypeScript Zero Errors** — All 13 pre-existing type errors resolved; build now reports 0 errors
+- [x] **Svelte Check Zero Warnings** — All 30 pre-existing CSS vendor-prefix, accessibility, and unused-selector warnings resolved; build now reports 0 errors and 0 warnings
 
 ### In Progress / Planned
 
@@ -548,8 +549,8 @@ Before any personality adaptations are applied, a confirmation modal shows the s
 ### VOX Mode Fix
 The duplex VAD service now correctly resumes the AudioContext after creation. Previously, VOX mode appeared active but never transcribed on a fresh browser session because the AudioContext started in `suspended` state. A one-line `audioContext.resume()` fix resolves this.
 
-### TypeScript: Zero Errors
-All 13 pre-existing TypeScript errors have been fixed. The build now reports **0 errors** (35 warnings remain, all CSS/accessibility).
+### TypeScript & Svelte: Zero Errors, Zero Warnings
+All 13 pre-existing TypeScript errors and 30 CSS/accessibility warnings have been fixed. The build now reports **0 errors and 0 warnings**.
 
 ## License
 
