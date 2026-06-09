@@ -580,28 +580,37 @@ EXAMPLES:
 // on missing capabilities.
 function buildAvatarCapabilityLayer(ctx: PromptContext): string | null {
 	const expressions = ctx.availableExpressions;
-	if (!expressions || expressions.length === 0) return null;
+	const actions = ctx.availableActions;
+
+	const hasExpressions = expressions && expressions.length > 0;
+	const hasActions = actions && actions.length > 0;
+
+	// Nothing to report — skip this layer entirely
+	if (!hasExpressions && !hasActions) return null;
 
 	const parts: string[] = [];
 
 	// Supported expressions
-	parts.push(`Supported facial expressions on this model:\n  ${expressions.join(', ')}`);
+	if (hasExpressions) {
+		parts.push(`Supported facial expressions on this model:\n  ${expressions!.join(', ')}`);
+	}
 
 	// Emotion tag mappings
-	const mappings = ctx.emotionMappings;
-	if (mappings && Object.keys(mappings).length > 0) {
-		const mapped = Object.entries(mappings)
-			.filter(([, expr]) => expr && expressions.includes(expr))
-			.map(([tag, expr]) => `  [${tag}] → ${expr}`);
-		if (mapped.length > 0) {
-			parts.push(`Active emotion tag mappings (use only these):\n${mapped.join('\n')}`);
+	if (hasExpressions) {
+		const mappings = ctx.emotionMappings;
+		if (mappings && Object.keys(mappings).length > 0) {
+			const mapped = Object.entries(mappings)
+				.filter(([, expr]) => expr && expressions!.includes(expr))
+				.map(([tag, expr]) => `  [${tag}] → ${expr}`);
+			if (mapped.length > 0) {
+				parts.push(`Active emotion tag mappings (use only these):\n${mapped.join('\n')}`);
+			}
 		}
 	}
 
 	// Available actions
-	const actions = ctx.availableActions;
-	if (actions && actions.length > 0) {
-		const actionList = actions
+	if (hasActions) {
+		const actionList = actions!
 			.map((a) => {
 				const desc = a.description ? ` — ${a.description}` : '';
 				return `  [action:${a.id}]${desc}`;
