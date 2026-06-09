@@ -1,4 +1,5 @@
 import type { SpeechSegment } from '$lib/services/voice-orchestrator';
+import { resolveEmotionAction } from '$lib/services/vrm/emotion-action-map';
 
 type EmotionEntry = {
 	ttsText: string;
@@ -432,6 +433,8 @@ function extractEmotionBlock(block: string, language?: string): SpeechSegment[] 
 	if (lastExaggeration !== undefined) seg.exaggeration = lastExaggeration;
 	if (lastEmotion) seg.emotion = lastEmotion;
 	if (lastSpeed !== undefined) seg.speed = lastSpeed;
+	const implicitAction = lastEmotion ? resolveEmotionAction(lastEmotion) : undefined;
+	if (implicitAction) seg.action = implicitAction;
 	return [seg];
 }
 
@@ -462,6 +465,8 @@ function extractEmotionSegments(sentence: string, language?: string): SpeechSegm
 			if (currentExaggeration !== undefined) seg.exaggeration = currentExaggeration;
 			if (currentEmotion) seg.emotion = currentEmotion;
 			if (currentSpeed !== undefined) seg.speed = currentSpeed;
+			const implicitAction = currentEmotion ? resolveEmotionAction(currentEmotion) : undefined;
+			if (implicitAction) seg.action = implicitAction;
 			result.push(seg);
 		}
 
@@ -475,6 +480,8 @@ function extractEmotionSegments(sentence: string, language?: string): SpeechSegm
 			const seg: SpeechSegment = { text: spokenText, language, emotion: match.tag };
 			if (entry.exaggeration !== undefined) seg.exaggeration = entry.exaggeration;
 			if (entry.speed !== undefined) seg.speed = entry.speed;
+			const implicitAction = resolveEmotionAction(match.tag);
+			if (implicitAction) seg.action = implicitAction;
 			result.push(seg);
 		}
 
@@ -487,6 +494,8 @@ function extractEmotionSegments(sentence: string, language?: string): SpeechSegm
 		if (currentExaggeration !== undefined) seg.exaggeration = currentExaggeration;
 		if (currentEmotion) seg.emotion = currentEmotion;
 		if (currentSpeed !== undefined) seg.speed = currentSpeed;
+		const implicitAction = currentEmotion ? resolveEmotionAction(currentEmotion) : undefined;
+		if (implicitAction) seg.action = implicitAction;
 		result.push(seg);
 	}
 

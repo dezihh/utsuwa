@@ -13,6 +13,7 @@
 	import FactLibraryModal from '$lib/components/memory/FactLibraryModal.svelte';
 	import EvolutionConfirmModal from '$lib/components/ui/EvolutionConfirmModal.svelte';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
+	import { expressionController } from '$lib/services/vrm/expression-controller';
 	import { chatStore } from '$lib/stores/chat.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { modulesStore } from '$lib/stores/modules.svelte';
@@ -771,6 +772,15 @@
 				latestResponse = displayText;
 				if (displayText) {
 					vrmStore.startTalking(displayText);
+				}
+				// Even without TTS, parse segments to trigger implicit actions & emotions
+				const textSegments = splitIntoSegments(cleanedResponse, undefined, false);
+				const firstAction = textSegments.find((s) => s.action)?.action;
+				const firstEmotion = textSegments.find((s) => s.emotion)?.emotion;
+				if (firstAction) vrmStore.triggerAction(firstAction);
+				if (firstEmotion) {
+					vrmStore.setEmotion(firstEmotion);
+					expressionController.setEmotion(firstEmotion);
 				}
 				onTTSDone();
 			}
