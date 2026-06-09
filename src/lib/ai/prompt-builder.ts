@@ -443,12 +443,32 @@ EXAMPLES of when to use tools:
 </available_tools>`;
 }
 
+function buildActionTagBlock(
+	actions: { id: string; description?: string }[] | undefined
+): string {
+	if (!actions || actions.length === 0) return '';
+	const lines = actions
+		.map((a) => {
+			const desc = a.description ? ` — ${a.description}` : '';
+			return `  [action:${a.id}]${desc}`;
+		})
+		.join('\n');
+	return `BODY ACTIONS (trigger avatar animations — use sparingly):\n${lines}\nPlace [action:xxx] at the start of the sentence where the animation should play.\nUse at most ONE action tag per response.`;
+}
+
 // Voice tag layer - injected only when Chatterbox or OmniVoice TTS is active
 function buildVoiceTagLayer(ctx: PromptContext): string | null {
+	const actionBlock = buildActionTagBlock(ctx.availableActions);
+	const exampleAction = ctx.availableActions?.[0]?.id ?? '';
+
 	if (ctx.ttsProvider === 'chatterbox') {
 		const langHint = ctx.ttsLanguage
 			? `The default spoken language is **${ctx.ttsLanguage}**. Use [lang:${ctx.ttsLanguage}] to return to it after switching.`
 			: 'Use [lang:xx] tags to switch the spoken language per sentence.';
+
+		const example = exampleAction
+			? `"[action:${exampleAction}][excited]Oh wow, that is impressive! [lang:es]¡Muy bien hecho! [lang:de][chuckle]Du machst das wirklich gut. [slow]Ich überlege kurz."`
+			: `"[excited]Oh wow, that is impressive! [lang:es]¡Muy bien hecho! [lang:de][chuckle]Du machst das wirklich gut. [slow]Ich überlege kurz."`;
 
 		return `<voice_tags>
 You are connected to a text-to-speech engine (Chatterbox) that understands special inline tags.
@@ -466,19 +486,7 @@ EMOTION / SOUND EFFECTS (influence voice expressiveness):
   [calm]     — calm, measured       [whisper]  — soft, hushed
   [dramatic] — over-the-top drama
 
-BODY ACTIONS (trigger avatar animations — use sparingly):
-  [action:wave]   — wave hello/goodbye
-  [action:nod]    — nod in agreement
-  [action:shake]  — shake head (disagreement)
-  [action:jump]   — jump for joy
-  [action:bow]    — bow (thanks/apology)
-  [action:think]  — thinking pose
-  [action:clap]   — applause
-  [action:dance]  — dance
-  Place [action:xxx] at the start of the sentence where the animation should play.
-  Use at most ONE action tag per response.
-
-SPEED TAGS:
+${actionBlock ? actionBlock + '\n\n' : ''}SPEED TAGS:
   [slow]  — speak slowly and thoughtfully
   [fast]  — speak quickly or excitedly
 
@@ -490,7 +498,7 @@ RULES:
 - Use them naturally to make the conversation more expressive and realistic.
 
 EXAMPLE:
-  "[action:wave][excited]Oh wow, that is impressive! [lang:es]¡Muy bien hecho! [lang:de][chuckle]Du machst das wirklich gut. [slow]Ich überlege kurz."
+  ${example}
 </voice_tags>`;
 	}
 
@@ -504,6 +512,9 @@ EXAMPLE:
 		const altLangCode = (!primaryLang || primaryLang === 'es') ? 'en' : 'es';
 		const primaryLangCode = primaryLang ?? 'de';
 		const bilingualExample = `[excited]Let's practice! [lang:${altLangCode}]Great, how are you? [lang:${primaryLangCode}][sigh]Very well done!`;
+		const monoExample = exampleAction
+			? `"[action:${exampleAction}][excited]Oh wow, that is great! [laugh]I'm so happy! [laughter]"`
+			: `"[excited]Oh wow, that is great! [laugh]I'm so happy! [laughter]"`;
 
 		return `<voice_tags>
 You are connected to a text-to-speech engine (OmniVoice) that understands special inline tags.
@@ -536,19 +547,7 @@ NATIVE SOUND TAGS (OmniVoice produces these as authentic audio — use additiona
   [dissatisfaction-hnn] — dissatisfied grunt
   [confirmation-en]     — confirming "mhm"
 
-BODY ACTIONS (trigger avatar animations — use sparingly):
-  [action:wave]   — wave hello/goodbye
-  [action:nod]    — nod in agreement
-  [action:shake]  — shake head (disagreement)
-  [action:jump]   — jump for joy
-  [action:bow]    — bow (thanks/apology)
-  [action:think]  — thinking pose
-  [action:clap]   — applause
-  [action:dance]  — dance
-  Place [action:xxx] at the start of the sentence where the animation should play.
-  Use at most ONE action tag per response.
-
-LANGUAGE TAGS — required for correct pronunciation when mixing languages:
+${actionBlock ? actionBlock + '\n\n' : ''}LANGUAGE TAGS — required for correct pronunciation when mixing languages:
   ${langHint}
   Use any ISO 639-1 code: [lang:de] [lang:es] [lang:en] [lang:fr] [lang:it] [lang:pt] [lang:ja] …
   The tag applies to all following text until the next [lang:xx] tag.
@@ -568,7 +567,7 @@ RULES:
 - Use them naturally to make the conversation warm, lively, and expressive.
 
 EXAMPLES:
-  Monolingual: "[action:wave][excited]Oh wow, that is great! [laugh]I'm so happy! [laughter]"
+  Monolingual: ${monoExample}
   Bilingual:   "${bilingualExample}"
 </voice_tags>`;
 	}
