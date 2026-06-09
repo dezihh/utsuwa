@@ -368,6 +368,8 @@
 		uploadingAnimation = true;
 		try {
 			await vrmStore.addAnimation(pendingUploadFile, name);
+			// Navigate to animation management after successful upload
+			goto('/app/settings/avatar/animations');
 		} catch (err) {
 			console.error('Failed to upload animation:', err);
 		}

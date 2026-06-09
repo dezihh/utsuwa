@@ -220,9 +220,7 @@
 			ttsProvider: activeTTSProvider,
 			ttsLanguage: ttsConfig?.language || undefined,
 			availableExpressions: vrmStore.availableExpressions,
-			availableActions: vrmStore.availableAnimations
-				.filter((a) => !a.missing)
-				.map((a) => a.id),
+			availableActions: vrmStore.llmActions,
 			emotionMappings
 		};
 

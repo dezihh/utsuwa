@@ -7,6 +7,7 @@
 	const navItems = [
 		{ href: '/app/settings/persona', label: 'Character', icon: 'persona' },
 		{ href: '/app/settings/display', label: 'Display', icon: 'monitor' },
+		{ href: '/app/settings/avatar/animations', label: 'Animations', icon: 'layers' },
 		{ href: '/app/settings/data', label: 'Data', icon: 'database' },
 		{ href: '/app/settings/developer', label: 'Developer', icon: 'code' },
 		{ href: '/app/settings/mcp', label: 'MCP Tools', icon: 'tool' }

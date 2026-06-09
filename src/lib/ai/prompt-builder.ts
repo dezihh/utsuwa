@@ -28,7 +28,7 @@ export interface PromptContext {
 	/** VRM expressions available on the currently loaded model */
 	availableExpressions?: string[];
 	/** Body actions (animations) available for the current model */
-	availableActions?: string[];
+	availableActions?: { id: string; description?: string }[];
 	/** Emotion-to-expression mappings active for the current model (tag → expressionName) */
 	emotionMappings?: Record<string, string>;
 }
@@ -602,7 +602,12 @@ function buildAvatarCapabilityLayer(ctx: PromptContext): string | null {
 	// Available actions
 	const actions = ctx.availableActions;
 	if (actions && actions.length > 0) {
-		const actionList = actions.map((a) => `  [action:${a}]`).join('\n');
+		const actionList = actions
+			.map((a) => {
+				const desc = a.description ? ` — ${a.description}` : '';
+				return `  [action:${a.id}]${desc}`;
+			})
+			.join('\n');
 		parts.push(`Available body animations:\n${actionList}`);
 	}
 
