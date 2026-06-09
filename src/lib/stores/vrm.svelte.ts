@@ -103,6 +103,11 @@ function createVrmStore() {
 	let headScreenPosition = $state<{ x: number; y: number } | null>(null);
 	// Screen-space position well above the head top — used for typing indicator only
 	let headTopScreenPosition = $state<{ x: number; y: number } | null>(null);
+	// Expressions manually overridden on the Developer page — Map of
+	// expression name → current value. These are protected from automatic
+	// systems (blink, lip-sync, emotion controller, lookAt) and re-applied
+	// every frame so the LookAt system doesn't overwrite them.
+	let developerExpressionOverrides = $state<Map<string, number>>(new Map());
 	// Default animations
 	const idleAnimationUrl = '/animations/idle.vrma';
 	const talkingAnimationUrl = '/animations/talking.vrma';
@@ -446,6 +451,20 @@ function createVrmStore() {
 		pendingAction = action;
 	}
 
+	function setDeveloperExpressionOverride(name: string, value: number) {
+		const next = new Map(developerExpressionOverrides);
+		if (value > 0) {
+			next.set(name, value);
+		} else {
+			next.delete(name);
+		}
+		developerExpressionOverrides = next;
+	}
+
+	function clearDeveloperExpressionOverrides() {
+		developerExpressionOverrides = new Map();
+	}
+
 	function clearPendingAction() {
 		pendingAction = null;
 	}
@@ -696,6 +715,9 @@ function createVrmStore() {
 		get headTopScreenPosition() {
 			return headTopScreenPosition;
 		},
+		get developerExpressionOverrides() {
+			return developerExpressionOverrides;
+		},
 		setModelUrl,
 		setHeadPosition,
 		setHeadScreenPosition,
@@ -718,7 +740,9 @@ function createVrmStore() {
 		getActiveModel,
 		setModelPreview,
 		addAnimation,
-		removeAnimation
+		removeAnimation,
+		setDeveloperExpressionOverride,
+		clearDeveloperExpressionOverrides
 	};
 }
 

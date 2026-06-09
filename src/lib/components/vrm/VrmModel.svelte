@@ -822,11 +822,120 @@
 			lipSyncAnalyzer.setAnalyser(analyser);
 		}
 
-		// Update animation mixer
+		const overrides = vrmStore.developerExpressionOverrides;
+
+		// LookAt directions driven by Developer overrides.
+		// These map slider values (0-1) directly to lookAt yaw/pitch angles.
+		const LOOKAT_DIRECTIONS = new Set(['lookUp', 'lookDown', 'lookLeft', 'lookRight']);
+		const hasLookAtDirOverride = [...overrides.keys()].some((n) => LOOKAT_DIRECTIONS.has(n));
+
+		// eye/lookAt expressions that the LookAt applier overwrites every frame
+		const LOOKAT_EXPRESSIONS = new Set([
+			'eyeLookUpLeft', 'eyeLookDownLeft', 'eyeLookInLeft', 'eyeLookOutLeft',
+			'eyeLookUpRight', 'eyeLookDownRight', 'eyeLookInRight', 'eyeLookOutRight',
+			'eyeBlinkLeft', 'eyeBlinkRight',
+			...LOOKAT_DIRECTIONS
+		]);
+		const hasLookAtExprOverride = [...overrides.keys()].some((n) => LOOKAT_EXPRESSIONS.has(n));
+
+		// Pause LookAt auto-update while eye/lookAt expressions are overridden
+		if (hasLookAtExprOverride && vrm.lookAt) {
+			vrm.lookAt.autoUpdate = false;
+		} else if (vrm.lookAt && !hasLookAtExprOverride && !vrm.lookAt.autoUpdate) {
+			vrm.lookAt.autoUpdate = true;
+		}
+
+		// Calculate lookAt direction from Developer overrides.
+		// These map slider values (0-1) directly to lookAt yaw/pitch angles.
+		let lookAtPitch = 0;
+		let lookAtYaw = 0;
+		if (hasLookAtDirOverride && vrm.lookAt) {
+			const up = overrides.get('lookUp') || 0;
+			const down = overrides.get('lookDown') || 0;
+			const left = overrides.get('lookLeft') || 0;
+			const right = overrides.get('lookRight') || 0;
+			if (up) lookAtPitch -= 30 * up;
+			if (down) lookAtPitch += 30 * down;
+			if (left) lookAtYaw += 30 * left;
+			if (right) lookAtYaw -= 30 * right;
+			vrm.lookAt.pitch = lookAtPitch;
+			vrm.lookAt.yaw = lookAtYaw;
+		} else if (hasLookAtExprOverride && vrm.lookAt) {
+			// No direction override, but LookAt is paused — reset to neutral.
+			vrm.lookAt.reset();
+		}
+
+		// Update animation mixer (idle animation rotates bones)
 		mixer?.update(delta);
+
+		// Re-apply expression overrides after mixer update
+		if (overrides.size > 0 && vrm.expressionManager) {
+			for (const [name, value] of overrides) {
+				// Skip lookAt directions — those are handled below via direct bone rotation
+				if (LOOKAT_DIRECTIONS.has(name)) continue;
+				try {
+					vrm.expressionManager.setValue(name, value);
+				} catch {
+					// Expression doesn't exist on this model
+				}
+			}
+			vrm.expressionManager.update();
+		}
 
 		// Update VRM core
 		vrm.update(delta);
+
+		// Apply Developer lookAt direction overrides.
+		// We pause the idle animation so it doesn't overwrite our bone rotations,
+		// then rotate head and eyes directly. This only affects the Developer page.
+		if (hasLookAtDirOverride) {
+			if (idleAction && !idleAction.paused) idleAction.paused = true;
+
+			const head = vrm.humanoid.getNormalizedBoneNode('head');
+			const leftEye = vrm.humanoid.getNormalizedBoneNode('leftEye');
+			const rightEye = vrm.humanoid.getNormalizedBoneNode('rightEye');
+			const pitchRad = THREE.MathUtils.degToRad(lookAtPitch);
+			const yawRad = THREE.MathUtils.degToRad(lookAtYaw);
+
+			if (head) {
+				head.rotation.x = pitchRad;
+				head.rotation.y = yawRad;
+				head.updateMatrixWorld();
+			}
+			if (leftEye) {
+				leftEye.rotation.x = pitchRad * 0.5;
+				leftEye.rotation.y = yawRad * 0.5;
+				leftEye.updateMatrixWorld();
+			}
+			if (rightEye) {
+				rightEye.rotation.x = pitchRad * 0.5;
+				rightEye.rotation.y = yawRad * 0.5;
+				rightEye.updateMatrixWorld();
+			}
+		} else {
+			// LookAt inactive — resume idle animation
+			if (idleAction && idleAction.paused) idleAction.paused = false;
+
+			// Reset head/eye rotations to neutral if they were previously overridden
+			const head = vrm.humanoid.getNormalizedBoneNode('head');
+			const leftEye = vrm.humanoid.getNormalizedBoneNode('leftEye');
+			const rightEye = vrm.humanoid.getNormalizedBoneNode('rightEye');
+			if (head) {
+				head.rotation.x = 0;
+				head.rotation.y = 0;
+				head.updateMatrixWorld();
+			}
+			if (leftEye) {
+				leftEye.rotation.x = 0;
+				leftEye.rotation.y = 0;
+				leftEye.updateMatrixWorld();
+			}
+			if (rightEye) {
+				rightEye.rotation.x = 0;
+				rightEye.rotation.y = 0;
+				rightEye.updateMatrixWorld();
+			}
+		}
 
 		// Track head position for 3D speech bubble
 		const headBone = vrm.humanoid.getNormalizedBoneNode('head');
@@ -864,6 +973,11 @@
 			}
 		};
 
+		// Expressions manually set on the Developer page are protected from
+		// automatic systems (blink, lip-sync, emotion controller).
+		// overrides was already fetched earlier in this frame to re-apply after vrm.update().
+		const isOverridden = (name: string) => overrides.has(name);
+
 		// === Blinking Animation (runs during idle, disabled during emotes) ===
 		if (!isEmotePlaying) {
 			blinkTimer += delta;
@@ -894,17 +1008,17 @@
 					isBlinking = false;
 					blinkTimer = 0;
 					nextBlinkTime = Math.random() * 4 + 2; // Random 2-6 seconds
-					// Try all blink expression variants
-					setExpression('blink', 0);
-					setExpression('Blink', 0);
-					setExpression('eyeBlinkLeft', 0);
-					setExpression('eyeBlinkRight', 0);
+					// Try all blink expression variants — respect overrides
+					if (!isOverridden('blink')) setExpression('blink', 0);
+					if (!isOverridden('Blink')) setExpression('Blink', 0);
+					if (!isOverridden('eyeBlinkLeft')) setExpression('eyeBlinkLeft', 0);
+					if (!isOverridden('eyeBlinkRight')) setExpression('eyeBlinkRight', 0);
 				} else {
-					// Try all blink expression variants
-					setExpression('blink', finalBlinkValue);
-					setExpression('Blink', finalBlinkValue);
-					setExpression('eyeBlinkLeft', finalBlinkValue);
-					setExpression('eyeBlinkRight', finalBlinkValue);
+					// Try all blink expression variants — respect overrides
+					if (!isOverridden('blink')) setExpression('blink', finalBlinkValue);
+					if (!isOverridden('Blink')) setExpression('Blink', finalBlinkValue);
+					if (!isOverridden('eyeBlinkLeft')) setExpression('eyeBlinkLeft', finalBlinkValue);
+					if (!isOverridden('eyeBlinkRight')) setExpression('eyeBlinkRight', finalBlinkValue);
 				}
 			}
 		}
@@ -914,23 +1028,24 @@
 
 		// Apply viseme weights - try multiple naming conventions
 		// VRM 1.0 style
-		setExpression('aa', visemes.aa);
-		setExpression('ee', visemes.ee);
-		setExpression('ih', visemes.ih);
-		setExpression('oh', visemes.oh);
-		setExpression('ou', visemes.ou);
+		if (!isOverridden('aa')) setExpression('aa', visemes.aa);
+		if (!isOverridden('ee')) setExpression('ee', visemes.ee);
+		if (!isOverridden('ih')) setExpression('ih', visemes.ih);
+		if (!isOverridden('oh')) setExpression('oh', visemes.oh);
+		if (!isOverridden('ou')) setExpression('ou', visemes.ou);
 		// VRM 0.x style
-		setExpression('a', visemes.aa);
-		setExpression('i', visemes.ih);
-		setExpression('u', visemes.ou);
-		setExpression('e', visemes.ee);
-		setExpression('o', visemes.oh);
+		if (!isOverridden('a')) setExpression('a', visemes.aa);
+		if (!isOverridden('i')) setExpression('i', visemes.ih);
+		if (!isOverridden('u')) setExpression('u', visemes.ou);
+		if (!isOverridden('e')) setExpression('e', visemes.ee);
+		if (!isOverridden('o')) setExpression('o', visemes.oh);
 		// ARKit style (jawOpen for mouth)
-		setExpression('jawOpen', visemes.aa * 0.7);
+		if (!isOverridden('jawOpen')) setExpression('jawOpen', visemes.aa * 0.7);
 
 		// === Emotion expression animation ===
 		const emotionWeights = expressionController.update(delta);
 		for (const [exprName, weight] of emotionWeights) {
+			if (isOverridden(exprName)) continue;
 			if (weight > 0.01) setExpression(exprName, weight);
 			else setExpression(exprName, 0);
 		}

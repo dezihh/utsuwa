@@ -6,6 +6,7 @@
 	import localforage from 'localforage';
 	import { debugEventsStore, testEvents } from '$lib/stores/debugEvents.svelte';
 	import { goto } from '$app/navigation';
+	import { onMount, onDestroy } from 'svelte';
 	import {
 		EMOTION_TAGS,
 		getEmotionVrmExpression,
@@ -97,6 +98,8 @@
 			'mouthUpperUpLeft',
 			'mouthUpperUpRight'
 		],
+		lookAt: [
+		],
 		other: [
 			'cheekPuff',
 			'cheekSquintLeft',
@@ -116,6 +119,11 @@
 	// Track expression values
 	let expressionValues = $state<Record<string, number>>({});
 
+	// Track which emotion tag last activated each expression.
+	// Used so multiple emotion buttons mapping to the same expression
+	// don't all appear active at once.
+	let activeEmotionForExpression = $state<Record<string, string>>({});
+
 	// Use stored expressions (persists across navigation)
 	let availableExpressions = $derived(vrmStore.availableExpressions);
 
@@ -124,7 +132,8 @@
 		return category.filter((name) => availableExpressions.includes(name));
 	}
 
-	// Set expression value
+	// Set expression value — when value > 0, mark as developer override so
+	// automatic systems (blink, lip-sync, emotion controller) don't overwrite it.
 	function setExpression(name: string, value: number) {
 		expressionValues[name] = value;
 		const vrm = vrmStore.vrm;
@@ -136,9 +145,42 @@
 				// Expression doesn't exist
 			}
 		}
+		vrmStore.setDeveloperExpressionOverride(name, value);
 	}
 
-	// Reset all expressions
+	// Direct lookAt control (works for both VRM 0.x and VRM 1.0).
+	// VRM 0.x may have lookUp/Down/Left/Right expressions, VRM 1.0 uses bone-based LookAt.
+	function setLookAtDirection(name: string, value: number) {
+		expressionValues[name] = value;
+		const vrm = vrmStore.vrm;
+		if (!vrm?.lookAt) return;
+		let pitch = vrm.lookAt.pitch;
+		let yaw = vrm.lookAt.yaw;
+		if (name === 'lookUp') pitch = -30 * value;
+		else if (name === 'lookDown') pitch = 30 * value;
+		else if (name === 'lookLeft') yaw = 30 * value;
+		else if (name === 'lookRight') yaw = -30 * value;
+		vrm.lookAt.pitch = pitch;
+		vrm.lookAt.yaw = yaw;
+		if (value > 0) {
+			vrmStore.setDeveloperExpressionOverride(name, value);
+		} else {
+			vrmStore.setDeveloperExpressionOverride(name, 0);
+		}
+	}
+
+	// Toggle an expression on/off (used by Detected Model Expression tags).
+	// If currently active (>0), deactivate. If inactive, activate at full intensity.
+	function toggleExpression(name: string) {
+		const currentValue = expressionValues[name] || 0;
+		if (currentValue > 0) {
+			setExpression(name, 0);
+		} else {
+			setExpression(name, 1);
+		}
+	}
+
+	// Reset all expressions, lookAt, and clear developer overrides
 	function resetAll() {
 		const vrm = vrmStore.vrm;
 		if (vrm?.expressionManager) {
@@ -148,7 +190,22 @@
 			}
 			vrm.expressionManager.update();
 		}
+		if (vrm?.lookAt) {
+			vrm.lookAt.reset();
+			vrm.lookAt.update(0);
+			expressionValues['lookUp'] = 0;
+			expressionValues['lookDown'] = 0;
+			expressionValues['lookLeft'] = 0;
+			expressionValues['lookRight'] = 0;
+		}
+		vrmStore.clearDeveloperExpressionOverrides();
+		activeEmotionForExpression = {};
 	}
+
+	// Clean up overrides when leaving the developer page
+	onDestroy(() => {
+		vrmStore.clearDeveloperExpressionOverrides();
+	});
 
 	// ── Expression Presets ──
 
@@ -219,18 +276,26 @@
 		return profile?.[emotion]?.intensity ?? DEFAULT_EMOTION_MAPPINGS[emotion]?.intensity ?? 0.7;
 	}
 
-	/** Play a single emotion expression for a short time, then reset.
-	 *  Uses the per-model emotion profile so custom mappings are honoured. */
-	function testEmotion(emotion: string) {
+	/** Toggle an emotion expression on/off.
+	 *  Uses the per-model emotion profile so custom mappings are honoured.
+	 *  Active emotions are highlighted and protected from automatic systems.
+	 *  Only one emotion per expression can be active at a time. */
+	function toggleEmotion(emotion: string) {
 		const profile = vrmStore.emotionProfile;
 		const mapping = profile?.[emotion];
 		const expr = mapping?.expression || getEmotionVrmExpression(emotion);
 		if (!expr || !availableExpressions.includes(expr)) return;
 		const intensity = mapping?.intensity ?? DEFAULT_EMOTION_MAPPINGS[emotion]?.intensity ?? 0.7;
-		setExpression(expr, intensity);
-		setTimeout(() => {
+		const currentActive = activeEmotionForExpression[expr];
+		if (currentActive === emotion) {
+			// Deactivate this emotion
 			setExpression(expr, 0);
-		}, 1500);
+			activeEmotionForExpression = { ...activeEmotionForExpression, [expr]: '' };
+		} else {
+			// Activate this emotion (replaces any other emotion using the same expression)
+			setExpression(expr, intensity);
+			activeEmotionForExpression = { ...activeEmotionForExpression, [expr]: emotion };
+		}
 	}
 
 	/** All known emotion tags, sorted alphabetically. */
@@ -479,18 +544,39 @@
 			<!-- Emotion Tags (dynamic, model-specific) -->
 			<section class="section">
 				<h3>Emotion Tags</h3>
-				<p class="hint">Test each emotion the LLM can use. Only emotions whose underlying VRM expression is available on this model are enabled.</p>
+				<p class="hint">
+					Click an emotion to activate its expression. Click again to deactivate.
+					Active emotions are highlighted. Only emotions whose underlying VRM expression
+					is available on this model are enabled.
+				</p>
 				<div class="quick-actions">
 					{#each knownEmotions as emotion}
 						{@const available = isEmotionAvailable(emotion)}
+						{@const exprName = (() => {
+							const profile = vrmStore.emotionProfile;
+							const mapping = profile?.[emotion];
+							return mapping?.expression || getEmotionVrmExpression(emotion) || '';
+						})()}
+						{@const isActive = exprName ? activeEmotionForExpression[exprName] === emotion : false}
 						<button
 							class="action-btn"
-							class:disabled={!available}
-							onclick={() => testEmotion(emotion)}
-							disabled={!available}
-							title={available ? `Test ${emotion}` : `Expression '${getEmotionVrmExpression(emotion) ?? '?'}' not available on this model`}
+							class:missing={!available}
+							class:active={available && isActive}
+							onclick={() => toggleEmotion(emotion)}
+							title={available
+								? isActive
+									? `Deactivate ${emotion} (${exprName})`
+									: `Activate ${emotion} (${exprName} = ${(() => {
+											const profile = vrmStore.emotionProfile;
+											const mapping = profile?.[emotion];
+											return (mapping?.intensity ?? DEFAULT_EMOTION_MAPPINGS[emotion]?.intensity ?? 0.7).toFixed(1);
+										})()})`
+								: `Expression '${exprName}' not available on this model`}
 						>
 							{EMOTION_TAGS[emotion].displayText ?? ''} {emotion}
+							{#if !available}
+								<span class="missing-badge">!</span>
+							{/if}
 						</button>
 					{/each}
 				</div>
@@ -547,13 +633,19 @@
 			<!-- Detected Model Expressions (formerly Available Expressions) -->
 			<section class="section">
 				<h3>Detected Model Expressions ({availableExpressions.length})</h3>
-				<p class="hint">Click any expression to preview it at full intensity. Click Reset to clear.</p>
+				<p class="hint">
+					Click an expression to activate it, click again to deactivate.
+					Active expressions are highlighted — they are protected from automatic systems
+					(blink, lip-sync, emotion controller). Use Reset to clear all.
+				</p>
 				<div class="expression-tags">
 					{#each availableExpressions as expr}
+						{@const isActive = (expressionValues[expr] || 0) > 0}
 						<button
 							class="tag clickable"
-							onclick={() => setExpression(expr, 1)}
-							title="Preview {expr}"
+							class:active={isActive}
+							onclick={() => toggleExpression(expr)}
+							title={isActive ? `Deactivate ${expr}` : `Activate ${expr}`}
 							type="button"
 						>
 							{expr}
@@ -588,6 +680,34 @@
 					</section>
 				{/if}
 			{/each}
+
+			<!-- LookAt Control (always shown when model has LookAt) -->
+			{#if vrmStore.vrm?.lookAt}
+				<section class="section">
+					<h3>LookAt</h3>
+					<p class="hint">
+						Direct head/eye direction control. Works for both VRM 0.x and VRM 1.0 models.
+						VRM 1.0 uses bone-based LookAt; VRM 0.x may use expressions or bones.
+					</p>
+					<div class="sliders">
+						{#each ['lookUp', 'lookDown', 'lookLeft', 'lookRight'] as dir}
+							<div class="slider-row">
+								<label for={dir}>{dir}</label>
+								<input
+									type="range"
+									id={dir}
+									min="0"
+									max="1"
+									step="0.01"
+									value={expressionValues[dir] || 0}
+									oninput={(e) => setLookAtDirection(dir, parseFloat(e.currentTarget.value))}
+								/>
+								<span class="value">{(expressionValues[dir] || 0).toFixed(2)}</span>
+							</div>
+						{/each}
+					</div>
+				</section>
+			{/if}
 		</div>
 	</div>
 </div>
@@ -842,6 +962,53 @@
 		color: var(--color-red-300);
 	}
 
+	.action-btn.active {
+		background: linear-gradient(180deg, #e8f7ff 0%, #d8f0ff 100%);
+		border-color: rgba(1, 178, 255, 0.4);
+		color: #01B2FF;
+		box-shadow:
+			0 2px 6px rgba(1, 178, 255, 0.15),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9);
+	}
+
+	:global(.dark) .action-btn.active {
+		background: linear-gradient(180deg, #1a3040 0%, #152530 100%);
+		border-color: rgba(1, 178, 255, 0.5);
+		color: #01B2FF;
+		box-shadow:
+			0 2px 6px rgba(1, 178, 255, 0.2),
+			inset 0 1px 0 rgba(255, 255, 255, 0.05);
+	}
+
+	.action-btn.missing {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.action-btn.missing:hover {
+		transform: none;
+		box-shadow:
+			0 2px 6px rgba(0, 0, 0, 0.06),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9);
+	}
+
+	:global(.dark) .action-btn.missing:hover {
+		box-shadow:
+			0 2px 6px rgba(0, 0, 0, 0.2),
+			inset 0 1px 0 rgba(255, 255, 255, 0.05);
+	}
+
+	.missing-badge {
+		margin-left: 0.25rem;
+		font-size: 0.625rem;
+		color: var(--color-red-500);
+		font-weight: 700;
+	}
+
+	:global(.dark) .missing-badge {
+		color: var(--color-red-400);
+	}
+
 	.action-btn.reset:hover {
 		background: linear-gradient(180deg, #ffe5e5 0%, #ffd5d5 100%);
 		transform: translateY(-1px);
@@ -957,6 +1124,24 @@
 			0 3px 6px rgba(0, 0, 0, 0.25),
 			inset 0 1px 0 rgba(255, 255, 255, 0.05);
 		border-color: rgba(1, 178, 255, 0.45);
+	}
+
+	.tag.active {
+		background: linear-gradient(180deg, #e8f7ff 0%, #d8f0ff 100%);
+		border-color: rgba(1, 178, 255, 0.4);
+		color: #01B2FF;
+		box-shadow:
+			0 1px 3px rgba(1, 178, 255, 0.15),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9);
+	}
+
+	:global(.dark) .tag.active {
+		background: linear-gradient(180deg, #1a3040 0%, #152530 100%);
+		border-color: rgba(1, 178, 255, 0.5);
+		color: #01B2FF;
+		box-shadow:
+			0 1px 3px rgba(1, 178, 255, 0.2),
+			inset 0 1px 0 rgba(255, 255, 255, 0.05);
 	}
 
 	.sliders {
