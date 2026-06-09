@@ -53,15 +53,21 @@ export interface ProviderConfig {
 	baseUrl?: string;
 	modelId?: string;
 	voiceId?: string;
+	/** Chatterbox: alternative voice ID for multilingual switching */
+	alternativeVoiceId?: string;
 	rvcVoiceId?: string;
 	language?: string;
 	speed?: number;
+	/** Chatterbox: alternative voice speech speed */
+	alternativeSpeed?: number;
 	pitch?: number;
 	volume?: number;
 	/** For meta-configs (e.g. 'stt-config'): the selected provider id */
 	activeProvider?: string;
 	cachedModels?: Array<{ id: string; name: string }>;
 	modelsFetchedAt?: number;
+	/** Whisper-local: model identifier (e.g. 'deepdml/faster-whisper-large-v3-turbo-ct2') */
+	model?: string;
 	/** VAD sensitivity threshold (0.005 = very sensitive … 0.05 = low). whisper-local only. */
 	vadThreshold?: number;
 	/** Chatterbox: emotion exaggeration 0.0-2.0 */

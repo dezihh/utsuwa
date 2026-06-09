@@ -206,7 +206,7 @@
 		const loader = new GLTFLoader();
 		loader.register((parser) => ({
 			name: 'VRMA-Preprocessor',
-			beforeRoot: () => {
+			beforeRoot: async () => {
 				// Some VRMA files contain 'weights' channels (morph targets) that the
 				// VRMAnimationLoaderPlugin doesn't support. Filter them out.
 				const json = parser.json;
@@ -239,7 +239,7 @@
 					}
 				}
 			},
-			afterRoot: (gltf) => {
+			afterRoot: async (gltf) => {
 				if (!gltf.scene) {
 					gltf.scene = new THREE.Group();
 					gltf.scenes = [gltf.scene];
@@ -303,7 +303,7 @@
 		const loader = new GLTFLoader();
 		loader.register((parser) => ({
 			name: 'VRMA-Preprocessor',
-			beforeRoot: () => {
+			beforeRoot: async () => {
 				// Some VRMA files contain 'weights' channels (morph targets) that the
 				// VRMAnimationLoaderPlugin doesn't support. Filter them out.
 				const json = parser.json;
@@ -336,7 +336,7 @@
 					}
 				}
 			},
-			afterRoot: (gltf) => {
+			afterRoot: async (gltf) => {
 				if (!gltf.scene) {
 					gltf.scene = new THREE.Group();
 					gltf.scenes = [gltf.scene];
@@ -382,7 +382,7 @@
 		const loader = new GLTFLoader();
 		loader.register((parser) => ({
 			name: 'VRMA-Preprocessor',
-			beforeRoot: () => {
+			beforeRoot: async () => {
 				// Some VRMA files contain 'weights' channels (morph targets) that the
 				// VRMAnimationLoaderPlugin doesn't support. Filter them out.
 				const json = parser.json;
@@ -415,7 +415,7 @@
 					}
 				}
 			},
-			afterRoot: (gltf) => {
+			afterRoot: async (gltf) => {
 				if (!gltf.scene) {
 					gltf.scene = new THREE.Group();
 					gltf.scenes = [gltf.scene];
@@ -531,7 +531,7 @@
 		// Register a dummy plugin first to ensure gltf.scene exists.
 		loader.register((parser) => ({
 			name: 'VRMA-Preprocessor',
-			beforeRoot: () => {
+			beforeRoot: async () => {
 				const json = parser.json;
 				if (!json.animations) return;
 				for (const anim of json.animations) {
@@ -562,7 +562,7 @@
 					}
 				}
 			},
-			afterRoot: (gltf) => {
+			afterRoot: async (gltf) => {
 				if (!gltf.scene) {
 					console.warn('[VrmModel] VRMA has no scene, injecting dummy scene for', animationUrl);
 					gltf.scene = new THREE.Group();

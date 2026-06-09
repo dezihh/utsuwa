@@ -603,7 +603,7 @@ export class VoiceOrchestrator {
 		let sampleRate = 24000;
 		let bytesPerSample = 4;
 
-		let remainder = new Uint8Array(0);
+		let remainder: Uint8Array = new Uint8Array(0);
 		// nextPlayTime is set on first chunk: audioContext.currentTime + SCHEDULE_AHEAD_S
 		let nextPlayTime = 0;
 		let firstChunk = true;

@@ -6,6 +6,8 @@ export interface ChatterboxVoice {
 
 export interface ChatterboxData {
 	voices: ChatterboxVoice[];
+	/** ID of the default/preferred voice returned by the server */
+	defaultVoiceId?: string;
 	error?: string;
 }
 
