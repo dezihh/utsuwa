@@ -4,10 +4,11 @@
 
 	interface Props {
 		onOpenMemoryGraph?: () => void;
+		onOpenFactLibrary?: () => void;
 		leftOffset?: number;
 	}
 
-	let { onOpenMemoryGraph, leftOffset = 0 }: Props = $props();
+	let { onOpenMemoryGraph, onOpenFactLibrary, leftOffset = 0 }: Props = $props();
 
 	function takeScreenshot() {
 		screenshotStore.take();
@@ -21,6 +22,11 @@
 	{#if onOpenMemoryGraph}
 		<button class="icon-btn" onclick={onOpenMemoryGraph} aria-label="Open memory graph">
 			<Icon name="brain" size={20} />
+		</button>
+	{/if}
+	{#if onOpenFactLibrary}
+		<button class="icon-btn" onclick={onOpenFactLibrary} aria-label="Open fact library">
+			<Icon name="book-open" size={20} />
 		</button>
 	{/if}
 </div>

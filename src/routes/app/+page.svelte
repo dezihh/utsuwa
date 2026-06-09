@@ -10,6 +10,8 @@
 	import { EventScene } from '$lib/components/events';
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import MemoryGraphModal from '$lib/components/memory/MemoryGraphModal.svelte';
+	import FactLibraryModal from '$lib/components/memory/FactLibraryModal.svelte';
+	import EvolutionConfirmModal from '$lib/components/ui/EvolutionConfirmModal.svelte';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 	import { chatStore } from '$lib/stores/chat.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
@@ -90,6 +92,12 @@
 
 	// Memory graph modal state
 	let showMemoryGraph = $state(false);
+
+	// Fact library modal state
+	let showFactLibrary = $state(false);
+
+	// Evolution confirmation modal state
+	let pendingEvolutionSuggestions = $state<Array<{ adaptation: string; reason: string }> | null>(null);
 
 	// Onboarding state
 	let showOnboarding = $state(false);
@@ -364,15 +372,27 @@
 			const { analyzeEvolution } = await import('$lib/engine/memory');
 			const suggestions = await analyzeEvolution(
 				sessions,
-				characterStore.state.personality
+				characterStore.state.personality,
+				characterStore.state.name
 			);
 			if (suggestions.length > 0) {
-				characterStore.applyEvolution(suggestions.map((s) => s.adaptation));
-				console.log('[Evolution] Applied adaptations:', suggestions.map((s) => s.adaptation));
+				pendingEvolutionSuggestions = suggestions;
+				debugStore.logSession('Evolution pending', `${suggestions.length} suggestion(s) awaiting user confirmation`);
 			}
 		} catch (e) {
 			console.error('[Evolution] Analysis failed:', e);
 		}
+	}
+
+	function handleEvolutionConfirm(adaptations: string[]) {
+		characterStore.applyEvolution(adaptations);
+		pendingEvolutionSuggestions = null;
+		debugStore.logSession('Evolution applied', adaptations.join(', '));
+	}
+
+	function handleEvolutionReject() {
+		pendingEvolutionSuggestions = null;
+		debugStore.logSession('Evolution rejected', 'User declined adaptations');
 	}
 
 	// Build system prompt
@@ -446,7 +466,7 @@
 		const state = characterStore.state;
 		if (shouldStartNewSession(state.lastInteraction)) {
 			try {
-				const session = await startNewSession('default');
+				const session = await startNewSession('default', characterStore.state.name);
 				debugStore.logSession('Session started', `Session ID: ${session.id}`);
 				// Increment session count and check for evolution
 				characterStore.incrementSessionCount();
@@ -816,7 +836,7 @@
 </script>
 
 <div class="app-container">
-	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} {leftOffset} />
+	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} onOpenFactLibrary={() => showFactLibrary = true} {leftOffset} />
 	<TopRightButtons
 		onInfoClick={() => showInfoModal = true}
 		{showSidebarBtn}
@@ -829,6 +849,17 @@
 	{/if}
 	{#if showMemoryGraph}
 		<MemoryGraphModal onClose={() => showMemoryGraph = false} />
+	{/if}
+	{#if showFactLibrary}
+		<FactLibraryModal onClose={() => showFactLibrary = false} />
+	{/if}
+	{#if pendingEvolutionSuggestions}
+		<EvolutionConfirmModal
+			suggestions={pendingEvolutionSuggestions}
+			companionName={characterStore.state.name}
+			onConfirm={handleEvolutionConfirm}
+			onReject={handleEvolutionReject}
+		/>
 	{/if}
 
 	<main class="main-content">

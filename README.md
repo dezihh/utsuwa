@@ -35,10 +35,10 @@
 - **Semantic Memory**: Local AI-powered memory search using Transformers.js — finds memories by meaning, not just keywords
 - **Memory Graph**: Interactive visualization showing how memories connect semantically
 - **5-Layer Memory Architecture**: Structured memory system with Base Soul (immutable core), Evolved Persona (learned adaptations), User Model (semantic facts), Episodic Memory (session summaries), and Fact Library (structured knowledge like vocabulary)
-- **Fact Library**: Type-agnostic structured storage for vocabulary, concepts, exam facts, and more — automatically managed by the app with confidence-based review scheduling
-- **Personality Evolution**: The companion learns communication patterns from conversations and develops an evolving personality profile over time
-- **Lazy Session Compaction**: Sessions are automatically summarized when a new session starts (robust against browser tab closure)
-- **Debug Environment**: Real-time logging panel with filterable categories (Prompts, Memory, Sessions, Facts) and live system prompt inspection
+- **Fact Library**: Type-agnostic structured storage for vocabulary, concepts, exam facts, and more — automatically managed by the app with confidence-based review scheduling. Browse, search, edit, and review entries via the in-app UI (book icon in top-left)
+- **Personality Evolution**: The companion learns communication patterns from conversations and develops an evolving personality profile over time. LLM-powered analysis of session summaries with user confirmation before applying adaptations
+- **Lazy Session Compaction**: Sessions are automatically summarized via LLM when a new session starts (robust against browser tab closure)
+- **Debug Environment**: Real-time logging panel with filterable categories (Prompts, Memory, Sessions, Facts) and live system prompt inspection. Toggle categories in Settings > Developer
 - **Scene Backgrounds**: 9 built-in presets (gradients, solid colors, studio grid) plus custom image upload (PNG/JPG/WEBP) and HDRI/EXR environment maps for realistic PBR lighting
 - **Data Export/Import**: Download your data as a save file, restore anytime
 - **Theming**: Light and dark mode support with system preference detection
@@ -513,6 +513,20 @@ Utsuwa is built on the shoulders of these excellent projects:
 
 - **[n8ao](https://github.com/N8python/n8ao)** - Ambient occlusion for Three.js
 - **[postprocessing](https://github.com/pmndrs/postprocessing)** - Post-processing effects
+
+## Recent Memory System Updates
+
+### LLM-Based Session Summaries
+Session compaction now uses the configured LLM provider to generate rich, contextual summaries including key topics and emotional arcs — replacing the previous heuristic approach. Falls back gracefully if the LLM is unavailable.
+
+### Fact Library UI
+A dedicated modal (accessible via the book icon in the top-left corner) allows browsing, searching, filtering, editing, and reviewing Fact Library entries. Entries can be sorted by confidence, date, or review count.
+
+### LLM-Powered Personality Evolution
+The evolution analyzer now sends recent session summaries to the LLM for pattern detection, producing richer and more context-aware adaptation suggestions than the previous heuristic system.
+
+### User-Confirmed Evolution
+Before any personality adaptations are applied, a confirmation modal shows the suggested changes with explanations. The user can select which adaptations to keep, or reject them entirely.
 
 ## License
 
