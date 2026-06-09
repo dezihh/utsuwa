@@ -32,8 +32,13 @@
 - **Animations**: 18 built-in VRMA motion clips (idle, talking, emotions, actions) with automatic blinking, plus upload your own `.vrma` files with custom naming
 - **Character Customization**: Customize your companion's name, personality, and system prompt with saveable presets
 - **Companion System**: Multi-axis relationship tracking with mood, events, and semantic memory
-- **Semantic Memory**: Local AI-powered memory search using Transformers.js - finds memories by meaning, not just keywords
+- **Semantic Memory**: Local AI-powered memory search using Transformers.js — finds memories by meaning, not just keywords
 - **Memory Graph**: Interactive visualization showing how memories connect semantically
+- **5-Layer Memory Architecture**: Structured memory system with Base Soul (immutable core), Evolved Persona (learned adaptations), User Model (semantic facts), Episodic Memory (session summaries), and Fact Library (structured knowledge like vocabulary)
+- **Fact Library**: Type-agnostic structured storage for vocabulary, concepts, exam facts, and more — automatically managed by the app with confidence-based review scheduling
+- **Personality Evolution**: The companion learns communication patterns from conversations and develops an evolving personality profile over time
+- **Lazy Session Compaction**: Sessions are automatically summarized when a new session starts (robust against browser tab closure)
+- **Debug Environment**: Real-time logging panel with filterable categories (Prompts, Memory, Sessions, Facts) and live system prompt inspection
 - **Scene Backgrounds**: 9 built-in presets (gradients, solid colors, studio grid) plus custom image upload (PNG/JPG/WEBP) and HDRI/EXR environment maps for realistic PBR lighting
 - **Data Export/Import**: Download your data as a save file, restore anytime
 - **Theming**: Light and dark mode support with system preference detection
@@ -451,9 +456,19 @@ pnpm tauri build  # Build desktop app installer
 - [x] **Developer LookAt control** — direct head/eye direction sliders for both VRM 0.x and VRM 1.0 models
 - [x] **Developer Emotion Tags** — toggle on/off with visual active state, only one emotion per expression at a time
 - [x] **Model persistence fix** — non-local provider models (e.g. openai-compatible) are reloaded from cache on settings page revisit
+- [x] **5-Layer Memory Architecture** — Dexie Schema v4 with Base Soul (immutable `soulPrompt`), Evolved Persona (`communicationAdaptations`), User Model (`characterId`-tagged facts), Episodic Memory (lazy session compaction with semantic search), and Fact Library (type-agnostic structured storage with confidence tracking)
+- [x] **Structured Fact Extraction** — LLM can emit `structured_fact_seen` to save vocabulary, concepts, or exam facts to the Fact Library; app-managed with auto-confidence updates
+- [x] **Personality Evolution** — `sessionCountSinceEvolution` tracking with heuristics-based adaptation suggestions applied automatically after threshold (default: 10 sessions)
+- [x] **Lazy Session Compaction** — Previous open sessions are summarized automatically when a new session starts (handles browser tab closure gracefully); turns are persisted with `sessionId`
+- [x] **Episodic Semantic Recall** — Past sessions are retrieved by semantic similarity (cosine on embeddings) rather than just recency; up to 3 thematically matching sessions are injected into the prompt
+- [x] **Debug Environment** — Settings > Developer toggles for Prompt / Memory / Session / Fact logging; real-time Debug Panel overlay with category filters, search, and expandable log entries
 
 ### In Progress / Planned
 
+- [ ] **LLM-based Session Summaries** — Replace heuristic summaries with real LLM-generated session summaries (2–4 sentences, key topics, emotional arc) for higher-quality episodic recall
+- [ ] **Fact Library UI** — Settings page to browse, filter, edit, and delete Fact Library entries (vocabulary, concepts, exam facts) with confidence-based sorting
+- [ ] **LLM-based Personality Evolution** — Replace heuristic evolution analysis with a dedicated LLM call that analyzes session summaries and suggests concrete, reasoned personality adaptations
+- [ ] **User-Confirmed Evolution** — Modal dialog showing proposed adaptations before they are applied, with per-suggestion accept/reject controls
 - [ ] **File, Image, and Video Uploads** - Add support for attaching files, images, and videos for multimodal LLM workflows and providers that can use richer context or web-aware tools
 - [ ] **Live2D Support** - Alternative to VRM for 2D animated avatars
 - [ ] **Windows and Linux Desktop Apps** - Expand desktop builds beyond the current macOS beta
