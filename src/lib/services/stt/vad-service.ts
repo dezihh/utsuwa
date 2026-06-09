@@ -64,32 +64,39 @@ class VadService {
 	private silenceStartMs = 0;
 
 	// Noise floor calibration
-	private static readonly CALIBRATION_MS = 1500;
+	private static readonly CALIBRATION_MS = 3000;
 	private calibrating = false;
 	private calibrationEndMs = 0;
 	private calibrationSamples: number[] = [];
-	private calibratedBase = 0.015;
-	private effectiveThreshold = 0.015;
+	private calibratedBase = 0.02;
+	private effectiveThreshold = 0.02;
 
-	// Sensitivity: 1.0 = default. Lower = more sensitive, higher = less.
-	private sensitivityMultiplier = 1.0;
+	// Sensitivity: 1-10 scale. 1 = very insensitive (high threshold), 10 = very sensitive (low threshold).
+	// Internally mapped to a multiplier: 1 → 2.5×, 5 → 1.0×, 10 → 0.4× the calibrated base.
+	private sensitivityLevel = 5;
 
 	// Config (user-supplied)
-	private speechThreshold = 0.015;
+	private speechThreshold = 0.02;
 	private silenceDurationMs = 1500;
 	private minSpeechDurationMs = 500;
 	private preBufferMs = 300;
 
-	/** Adjust detection sensitivity at runtime. multiplier < 1 = more sensitive, > 1 = less. */
-	setSensitivity(multiplier: number) {
-		this.sensitivityMultiplier = Math.max(0.3, Math.min(4.0, multiplier));
+	/** Map 1-10 sensitivity level to internal multiplier. 10 = most sensitive. */
+	private levelToMultiplier(level: number): number {
+		// Level 5 → 1.0 (default). Level 1 → 2.0 (less sensitive). Level 10 → 0.4 (more sensitive).
+		return 2.0 - (Math.max(1, Math.min(10, level)) - 1) * (1.6 / 9);
+	}
+
+	/** Set sensitivity as a 1-10 level. 1 = ignore most noise, 10 = detect very quiet speech. */
+	setSensitivity(level: number) {
+		this.sensitivityLevel = Math.max(1, Math.min(10, level));
 		if (!this.calibrating) {
-			this.effectiveThreshold = this.calibratedBase * this.sensitivityMultiplier;
+			this.effectiveThreshold = this.calibratedBase * this.levelToMultiplier(this.sensitivityLevel);
 		}
 	}
 
 	getSensitivity(): number {
-		return this.sensitivityMultiplier;
+		return this.sensitivityLevel;
 	}
 
 	async start(callbacks: VadCallbacks, config?: VadConfig): Promise<boolean> {
@@ -230,12 +237,12 @@ class VadService {
 					this.calibrating = false;
 					const sorted = [...this.calibrationSamples].sort((a, b) => a - b);
 					const p90 = sorted[Math.floor(sorted.length * 0.9)] ?? 0;
-					const MAX_CALIBRATED_BASE = 0.08;
+					const MAX_CALIBRATED_BASE = 0.12;
 					this.calibratedBase = Math.min(
 						MAX_CALIBRATED_BASE,
-						Math.max(this.speechThreshold, p90 * 3)
+						Math.max(this.speechThreshold, p90 * 5)
 					);
-					this.effectiveThreshold = this.calibratedBase * this.sensitivityMultiplier;
+					this.effectiveThreshold = this.calibratedBase * this.levelToMultiplier(this.sensitivityLevel);
 					console.debug(`[VAD] Calibrated: noise floor p90=${p90.toFixed(4)}, base=${this.calibratedBase.toFixed(4)}, effective=${this.effectiveThreshold.toFixed(4)} (cap=${MAX_CALIBRATED_BASE})`);
 					this.calibrationSamples = [];
 				}

@@ -167,20 +167,20 @@
 						<button
 							type="button"
 							class="sens-btn"
-							onclick={() => onAdjustSensitivity(-0.2)}
-							title="More sensitive (detect quieter speech)"
-							aria-label="Increase sensitivity"
-						>+</button>
-						<span class="sens-label" title="Sensitivity: {Math.round((1/duplexSensitivity)*100)}%">
-							{Math.round((1 / duplexSensitivity) * 100)}%
+							onclick={() => onAdjustSensitivity(-1)}
+							title="Less sensitive (ignore background noise)"
+							aria-label="Decrease sensitivity"
+						>−</button>
+						<span class="sens-label" title="Sensitivity: {duplexSensitivity}/10">
+							{duplexSensitivity}
 						</span>
 						<button
 							type="button"
 							class="sens-btn"
-							onclick={() => onAdjustSensitivity(0.2)}
-							title="Less sensitive (ignore background noise)"
-							aria-label="Decrease sensitivity"
-						>−</button>
+							onclick={() => onAdjustSensitivity(1)}
+							title="More sensitive (detect quieter speech)"
+							aria-label="Increase sensitivity"
+						>+</button>
 					</div>
 				{/if}
 			{:else if isTranscribing}

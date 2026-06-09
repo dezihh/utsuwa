@@ -163,11 +163,11 @@ Hands-free, continuous conversation without pressing any buttons:
 3. When speech is detected, it records, transcribes (via your configured STT provider), generates a response, and speaks it aloud (via your configured TTS provider)
 4. It then returns to listening — fully automatic loop
 5. Background noise is automatically filtered; a toast notification appears when ambient noise is detected
-6. Use the **+/−** buttons next to the headset icon to adjust mic sensitivity in real time
+6. Use the **−/+** buttons next to the headset icon to adjust mic sensitivity in real time (1–10 scale)
 
 Duplex mode requires both an STT provider and a TTS provider to be configured.
 
-**Noise handling improvements**: A 250 ms hold-off prevents brief noise spikes from interrupting TTS. Only confirmed speech (VAD segment ready) triggers an interrupt. If TTS is interrupted mid-response, saying "setze fort" / "continue" / "continuer" / or the equivalent in any of 12 supported languages replays the unspoken tail without a new LLM call.
+**Noise handling**: The VAD calibrates for 3 seconds on startup to measure ambient noise, then uses a 5× noise-floor multiplier so background sounds are far less likely to trigger speech detection. TTS is **only interrupted after transcription confirms real text** — not on raw audio peaks — preventing false interrupts from keyboard clicks, HVAC, or other ambient sounds. If TTS is interrupted mid-response, saying "setze fort" / "continue" / "continuer" / or the equivalent in any of 12 supported languages replays the unspoken tail without a new LLM call.
 
 ### Scene Backgrounds
 
@@ -446,6 +446,11 @@ pnpm tauri build  # Build desktop app installer
 - [x] VRM skeleton optimisation updated to combineSkeletons; LookAt proxy pre-registered to suppress library warnings
 - [x] **OpenAI Compatible provider** — connect any OpenAI-compatible API endpoint (LiteLLM proxy, vLLM, etc.) with custom base URL + API key; fetches all available models without filtering
 - [x] **Model search in dropdowns** — live text filter in all model selection dropdowns to quickly find models in long lists
+- [x] **Duplex VAD robustness** — 3-second calibration, 5× noise-floor multiplier, interrupt only after confirmed transcription (not on audio peaks), clean 1–10 sensitivity scale
+- [x] **Developer Expression Overrides** — manual expression values on the Developer page are protected from automatic systems (blink, lip-sync, emotion controller, LookAt)
+- [x] **Developer LookAt control** — direct head/eye direction sliders for both VRM 0.x and VRM 1.0 models
+- [x] **Developer Emotion Tags** — toggle on/off with visual active state, only one emotion per expression at a time
+- [x] **Model persistence fix** — non-local provider models (e.g. openai-compatible) are reloaded from cache on settings page revisit
 
 ### In Progress / Planned
 

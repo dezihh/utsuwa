@@ -69,7 +69,7 @@
 	let duplexPhase = $state<DuplexPhase>('idle');
 	let duplexAudioLevel = $state(0);
 	let noiseDetected = $state(false);
-	let sensitivity = $state(1.0); // 1.0 = default; lower = more sensitive
+	let sensitivity = $state(5); // 1-10 scale. 1 = ignore most noise, 10 = detect very quiet speech.
 
 	// ── Callbacks set on startDuplex() ──────────────────────────────────────────
 	let onTranscript: ((text: string) => void) | null = null;
@@ -81,14 +81,6 @@
 
 	/** Auto-dismiss the noise toast after 2s */
 	let noiseToastTimer: ReturnType<typeof setTimeout> | null = null;
-
-	/**
-	 * Hold-off before interrupting TTS on speech onset.
-	 * If onNoiseDetected fires before this timer, the interrupt is cancelled
-	 * (it was background noise, not real speech).
-	 */
-	let interruptHoldoff: ReturnType<typeof setTimeout> | null = null;
-	const INTERRUPT_HOLDOFF_MS = 250;
 
 	/** Watchdog: if stuck in thinking/transcribing, auto-return to listening. */
 	let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
@@ -199,6 +191,13 @@
 				return;
 			}
 
+			// Confirmed real speech — interrupt TTS now (not earlier, so background
+			// noise that produces no transcription never stops the assistant).
+			if (ttsActive) {
+				onInterrupt?.();
+				ttsActive = false;
+			}
+
 			setPhase('thinking');
 			armWatchdog();
 			onTranscript?.(text);
@@ -234,42 +233,19 @@
 					duplexAudioLevel = level;
 				},
 				onSpeechStart: () => {
-					// Only interrupt active TTS playback. Use a short hold-off so that
-					// brief background-noise spikes (< INTERRUPT_HOLDOFF_MS) don't stop
-					// the TTS — onNoiseDetected will cancel the timer if it was just noise.
-					if (ttsActive && interruptHoldoff === null) {
-						interruptHoldoff = setTimeout(() => {
-							interruptHoldoff = null;
-							if (ttsActive) {
-								onInterrupt?.();
-								ttsActive = false;
-							}
-						}, INTERRUPT_HOLDOFF_MS);
-					}
+					// We no longer interrupt TTS on speech onset — background noise
+					// would constantly stop the assistant. Instead we wait until
+					// transcription confirms real text (see transcribeSegment).
 				},
 				onSegmentReady: (blob, mimeType) => {
 					console.debug(`[Duplex] Segment ready: ${blob.size} bytes, phase=${duplexPhase}, active=${isDuplexActive}`);
 					if (!isDuplexActive) return;
-					// Speech confirmed — fire any pending interrupt immediately.
-					if (interruptHoldoff !== null) {
-						clearTimeout(interruptHoldoff);
-						interruptHoldoff = null;
-						if (ttsActive) {
-							onInterrupt?.();
-							ttsActive = false;
-						}
-					}
 					// Skip if a transcription or LLM call is already in flight to avoid
 					// concurrent whisper requests which cause intermittent 500 errors.
 					if (duplexPhase === 'transcribing' || duplexPhase === 'thinking') return;
 					transcribeSegment(blob, mimeType);
 				},
 				onNoiseDetected: () => {
-					// Cancel pending TTS interrupt — the onset was just noise.
-					if (interruptHoldoff !== null) {
-						clearTimeout(interruptHoldoff);
-						interruptHoldoff = null;
-					}
 					triggerNoiseToast();
 				},
 				onError: (msg) => {
@@ -280,7 +256,7 @@
 			{
 				speechThreshold: (() => {
 					const cfg = settingsStore.getProviderConfig('whisper-local');
-					return typeof cfg.vadThreshold === 'number' ? cfg.vadThreshold : 0.015;
+					return typeof cfg.vadThreshold === 'number' ? cfg.vadThreshold : 0.02;
 				})(),
 				silenceDurationMs: 1000,
 				minSpeechDurationMs: 500,
@@ -298,13 +274,12 @@
 	}
 
 	export function adjustSensitivity(delta: number) {
-		sensitivity = Math.max(0.3, Math.min(4.0, sensitivity + delta));
+		sensitivity = Math.max(1, Math.min(10, sensitivity + delta));
 		vadService.setSensitivity(sensitivity);
 	}
 
 	export function stopDuplex() {
 		clearWatchdog();
-		if (interruptHoldoff !== null) { clearTimeout(interruptHoldoff); interruptHoldoff = null; }
 		isDuplexActive = false;
 		ttsActive = false;
 		onTranscript = null;
@@ -326,8 +301,6 @@
 	export function onTTSDone() {
 		if (!isDuplexActive) return;
 		clearWatchdog();
-		// Cancel any pending interrupt — TTS finished naturally, no need to interrupt.
-		if (interruptHoldoff !== null) { clearTimeout(interruptHoldoff); interruptHoldoff = null; }
 		ttsActive = false;
 		// VAD is already running — just switch phase back to listening.
 		setPhase('listening');
