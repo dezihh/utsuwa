@@ -27,16 +27,24 @@ async function loadUpcoming() {
 
 async function checkReminders() {
 	const sessionId = getWorkingMemory().currentSessionId;
-	if (!sessionId) return;
+	if (!sessionId) {
+		console.debug('[Reminders] No session ID, skipping check');
+		return;
+	}
 
 	const now = new Date();
+	console.debug('[Reminders] Checking at', now.toLocaleTimeString(), 'session:', sessionId);
+
 	const due = await db.reminders
 		.where('sessionId')
 		.equals(sessionId)
 		.and((r) => !r.executed && r.triggerAt <= now)
 		.toArray();
 
+	console.debug('[Reminders] Found due:', due.length);
+
 	for (const reminder of due) {
+		console.log('[Reminders] Firing reminder:', reminder.content);
 		if (reminder.id !== undefined) {
 			await db.reminders.update(reminder.id, { executed: true });
 		}

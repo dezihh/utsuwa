@@ -42,6 +42,8 @@ export function buildSystemPrompt(context: PromptContext): string {
 	if (context.state.appMode === 'companion') {
 		return buildCompanionModePrompt(context);
 	}
+	const reminderLayer = buildReminderLayer(context);
+
 	const layers = [
 		buildSystemLayer(context),
 		buildCharacterLayer(context),
@@ -50,6 +52,8 @@ export function buildSystemPrompt(context: PromptContext): string {
 		buildFactLibraryLayer(context),
 		buildInstructionLayer(context)
 	];
+
+	if (reminderLayer) layers.splice(1, 0, reminderLayer);
 
 	const voiceTags = buildVoiceTagLayer(context);
 	if (voiceTags) layers.push(voiceTags);
@@ -68,9 +72,6 @@ export function buildSystemPrompt(context: PromptContext): string {
 
 	const continueLayer = buildContinueLayer(context);
 	if (continueLayer) layers.push(continueLayer);
-
-	const reminderLayer = buildReminderLayer(context);
-	if (reminderLayer) layers.push(reminderLayer);
 
 	return layers.join('\n\n');
 }
@@ -165,6 +166,9 @@ If the user learns a new vocabulary word, concept, or fact, include "structured_
 NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affection, trust, intimacy, comfort, or respect changes - these relationship stats are disabled.
 </instructions>`);
 
+	const reminderLayer = buildReminderLayer(ctx);
+	if (reminderLayer) parts.push(reminderLayer);
+
 	const voiceTags = buildVoiceTagLayer(ctx);
 	if (voiceTags) parts.push(voiceTags);
 
@@ -182,9 +186,6 @@ NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affecti
 
 	const continueLayer = buildContinueLayer(ctx);
 	if (continueLayer) parts.push(continueLayer);
-
-	const reminderLayer = buildReminderLayer(ctx);
-	if (reminderLayer) parts.push(reminderLayer);
 
 	return parts.join('\n\n');
 }

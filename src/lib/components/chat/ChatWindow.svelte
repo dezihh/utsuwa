@@ -15,7 +15,7 @@
 	import type { TTSProvider } from '$lib/types';
 	import type { EventDefinition } from '$lib/types/events';
 	import { reminderStore } from '$lib/stores/reminders.svelte';
-	import { extractReminderTags } from '$lib/utils/reminders';
+	import { extractReminderTags, tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
 	import { db } from '$lib/db';
 	import { getWorkingMemory, startNewSession, shouldStartNewSession } from '$lib/engine/memory';
 	import Dropdown from '$lib/components/ui/Dropdown.svelte';
@@ -62,10 +62,13 @@
 	$effect(() => {
 		reminderStore.setOnReminderFired((reminder) => {
 			const msg = `[Reminder] It's time: ${reminder.content}`;
+			console.log('[Reminder] Fired callback for:', reminder.content, 'isLoading:', chatStore.isLoading);
 			if (chatStore.isLoading) {
 				// Queue as system message so the LLM sees it in the next prompt
 				chatStore.addSystemMessage(msg);
+				console.log('[Reminder] Queued as system message (chat is loading)');
 			} else {
+				console.log('[Reminder] Triggering handleSend with:', msg);
 				handleSend(msg);
 			}
 		});
@@ -91,14 +94,18 @@
 
 		// 2b. Schedule any extracted reminders
 		const sessionId = getWorkingMemory().currentSessionId;
+		console.log('[Reminder] Processing extracted reminders:', reminders.length, 'sessionId:', sessionId);
 		if (sessionId) {
 			for (const r of reminders) {
 				try {
 					await reminderStore.addReminder(r.content, r.triggerAt, sessionId);
+					console.log('[Reminder] Saved reminder:', r.content, 'for', r.triggerAt.toLocaleTimeString());
 				} catch (e) {
 					console.error('[Reminder] Failed to save reminder:', e);
 				}
 			}
+		} else {
+			console.warn('[Reminder] No sessionId — cannot save reminders');
 		}
 		if (parsed.parseError) {
 			console.debug('LLM JSON parse error (using heuristics only):', parsed.parseError);
@@ -256,6 +263,17 @@
 				await startNewSession('default', characterStore.state.name);
 			} catch (e) {
 				console.error('[Session] Failed to start new session:', e);
+			}
+		}
+
+		// Client-side fallback: parse natural-language reminder requests directly
+		const directReminder = tryExtractReminderFromUserMessage(content);
+		if (directReminder && wm.currentSessionId) {
+			try {
+				await reminderStore.addReminder(directReminder.content, directReminder.triggerAt, wm.currentSessionId);
+				console.log('[Reminder] Direct fallback saved:', directReminder.content, 'for', directReminder.triggerAt.toLocaleTimeString());
+			} catch (e) {
+				console.error('[Reminder] Direct fallback failed:', e);
 			}
 		}
 
