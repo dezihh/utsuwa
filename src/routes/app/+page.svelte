@@ -296,7 +296,6 @@
 						const data = await res.json();
 						if (res.ok && data.results?.length > 0) {
 							imageSearchStore.openModal(data.results, query);
-							chatStore.addSystemMessage('Found images for "' + query + '": ' + data.results.map((r: { url: string }) => r.url).join(', '));
 						} else if (data.error) {
 							console.warn('[ImageSearch] Search failed:', data.error);
 						}
@@ -576,7 +575,6 @@
 					const data = await res.json();
 					if (res.ok && data.results?.length > 0) {
 						imageSearchStore.openModal(data.results, imageQuery);
-						chatStore.addSystemMessage('Found images for "' + imageQuery + '": ' + data.results.map((r: { url: string }) => r.url).join(', '));
 					} else if (data.error) {
 						console.warn('[ImageSearch] Search failed:', data.error);
 					}
