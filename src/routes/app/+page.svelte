@@ -568,22 +568,30 @@
 		console.log('[ImageSearch] Fallback check:', content, '→ query:', imageQuery);
 		if (imageQuery) {
 			const searxUrl = settingsStore.getSearxUrl();
+			console.log('[ImageSearch] searxUrl:', searxUrl);
 			if (searxUrl) {
 				try {
 					imageSearchStore.setLoading(true);
 					const res = await fetch(`/api/search/images?q=${encodeURIComponent(imageQuery)}&searxUrl=${encodeURIComponent(searxUrl)}`);
+					console.log('[ImageSearch] API response status:', res.status);
 					const data = await res.json();
+					console.log('[ImageSearch] API data:', data);
 					if (res.ok && data.results?.length > 0) {
+						console.log('[ImageSearch] Opening modal with', data.results.length, 'results');
 						imageSearchStore.openModal(data.results, imageQuery);
 						chatStore.addSystemMessage('Found images for "' + imageQuery + '": ' + data.results.map((r: { url: string }) => r.url).join(', '));
 					} else if (data.error) {
 						console.warn('[ImageSearch] Search failed:', data.error);
+					} else {
+						console.warn('[ImageSearch] No results or unexpected response');
 					}
 				} catch (e) {
 					console.warn('[ImageSearch] Fetch error:', e);
 				} finally {
 					imageSearchStore.setLoading(false);
 				}
+			} else {
+				console.warn('[ImageSearch] No searxUrl configured');
 			}
 		}
 
