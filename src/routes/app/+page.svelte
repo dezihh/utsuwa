@@ -58,6 +58,8 @@
 	import { allEvents } from '$lib/data/events';
 	import { debugStore } from '$lib/stores/debug.svelte';
 	import { splitIntoSegments, stripAllTags, stripForApiContext, isContinueRequest } from '$lib/utils/sentences';
+	import { reminderStore } from '$lib/stores/reminders.svelte';
+	import { tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
 	import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
 	import type { ProviderConfig } from '$lib/types';
 
@@ -490,6 +492,18 @@
 				}
 			} catch (e) {
 				console.error('[Session] Failed to start new session:', e);
+			}
+		}
+
+		// Client-side fallback: parse natural-language reminder requests directly
+		const wm = getWorkingMemory();
+		const directReminder = tryExtractReminderFromUserMessage(content);
+		if (directReminder && wm.currentSessionId) {
+			try {
+				await reminderStore.addReminder(directReminder.content, directReminder.triggerAt, wm.currentSessionId);
+				console.log('[Reminder] Direct fallback saved:', directReminder.content, 'for', directReminder.triggerAt.toLocaleTimeString());
+			} catch (e) {
+				console.error('[Reminder] Direct fallback failed:', e);
 			}
 		}
 
