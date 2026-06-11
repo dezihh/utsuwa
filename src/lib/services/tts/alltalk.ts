@@ -142,7 +142,9 @@ export class AllTalkTTS implements ITTSProvider {
 					text,
 					voice: this.voiceId,
 					...(this.rvcVoiceId ? { rvcvoice: this.rvcVoiceId } : {}),
-					speed: this.speed,
+					speed: options?.speed ?? this.speed,
+					pitch: options?.pitch,
+					volume: options?.volume,
 					language: this.language,
 					baseUrl: this.baseUrl
 				}),

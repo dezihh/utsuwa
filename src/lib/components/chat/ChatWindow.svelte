@@ -370,6 +370,11 @@
 			// Update message with cleaned dialogue
 			chatStore.updateLastMessage(cleanedResponse);
 
+			// Free the input NOW — the LLM response is complete.
+			// TTS and animations run independently; the user should be able
+			// to type the next message while the avatar is still speaking.
+			chatStore.setLoading(false);
+
 			// Trigger talking animation based on response length
 			if (cleanedResponse) {
 				vrmStore.startTalking(cleanedResponse);

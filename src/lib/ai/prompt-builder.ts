@@ -5,6 +5,7 @@ import type { McpTool } from '$lib/types/mcp';
 import { STAGE_BEHAVIORS, STAGE_INSTRUCTIONS } from '$lib/engine/stages';
 import { inferResponseLengthMode } from './response-length.ts';
 import { getEmotionVrmExpression, getKnownActionTags } from '$lib/utils/sentences';
+import { ttsEmotionsStore } from '$lib/stores/tts-emotions.svelte';
 
 // Prompt context for building
 export interface PromptContext {
@@ -52,6 +53,9 @@ export function buildSystemPrompt(context: PromptContext): string {
 
 	const voiceTags = buildVoiceTagLayer(context);
 	if (voiceTags) layers.push(voiceTags);
+
+	const ttsEmotionsLayer = buildTTSEmotionsLayer(context);
+	if (ttsEmotionsLayer) layers.push(ttsEmotionsLayer);
 
 	const avatarLayer = buildAvatarCapabilityLayer(context);
 	if (avatarLayer) layers.push(avatarLayer);
@@ -163,6 +167,9 @@ NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affecti
 
 	const voiceTags = buildVoiceTagLayer(ctx);
 	if (voiceTags) parts.push(voiceTags);
+
+	const ttsEmotionsLayer = buildTTSEmotionsLayer(ctx);
+	if (ttsEmotionsLayer) parts.push(ttsEmotionsLayer);
 
 	const avatarLayer = buildAvatarCapabilityLayer(ctx);
 	if (avatarLayer) parts.push(avatarLayer);
@@ -581,6 +588,30 @@ EXAMPLES:
 	}
 
 	return null;
+}
+
+// TTS emotions layer — informs the LLM which emotion tags are enabled for the active provider
+function buildTTSEmotionsLayer(ctx: PromptContext): string | null {
+	if (!ctx.ttsProvider) return null;
+	const provider = ctx.ttsProvider as import('$lib/types').TTSProvider;
+	const emotions = ttsEmotionsStore.getDefaultEmotions(provider);
+	const enabled = Object.entries(emotions)
+		.filter(([, cfg]) => cfg.enabled)
+		.map(([tag, cfg]) => `  [${tag}]${cfg.displayText ? ` ${cfg.displayText}` : ''}${cfg.ttsText ? ` — speaks "${cfg.ttsText}"` : ''}`);
+
+	if (enabled.length === 0) return null;
+
+	const caps = ttsEmotionsStore.getProviderCapabilities(provider);
+	let nativeSection = '';
+	if (caps.supportsNativeTags && caps.availableNativeTags.length > 0) {
+		const tagLines = caps.availableNativeTags.map((t: string) => `  [${t}]`);
+		nativeSection = `\n\nNATIVE SOUND TAGS (produced as authentic audio — use alongside emotion tags):\n${tagLines.join('\n')}`;
+	}
+
+	return `<tts_emotions>
+The following emotion tags are enabled for the active TTS engine (${provider}):
+${enabled.join('\n')}${nativeSection}
+</tts_emotions>`;
 }
 
 // Avatar capability layer — informs the LLM which expressions and animations

@@ -142,8 +142,10 @@ export class ChatterboxTTS implements ITTSProvider {
                         exaggeration: options?.exaggeration ?? this.exaggeration,
                         cfgWeight: this.cfgWeight ?? 0.5,
                         temperature: this.temperature ?? 0.5,
-                        speed: this.speed,
+                        speed: options?.speed ?? this.speed,
                 };
+                if (options?.pitch !== undefined) params.pitch = options.pitch;
+                if (options?.volume !== undefined) params.volume = options.volume;
                 const language = options?.language ?? this.language;
                 if (language) params.language = language;
 

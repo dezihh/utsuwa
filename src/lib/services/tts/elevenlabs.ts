@@ -57,7 +57,8 @@ export class ElevenLabsTTS implements ITTSProvider {
 					model_id: this.model,
 					voice_settings: {
 						stability: 0.5,
-						similarity_boost: 0.75
+						similarity_boost: 0.75,
+						speed: options?.speed ?? this.speed
 					}
 				}),
 				signal: options?.signal

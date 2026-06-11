@@ -42,6 +42,10 @@ export interface StreamOptions {
 	language?: string;
 	/** Speech speed override (0.5-2.0, 1.0 = normal) */
 	speed?: number;
+	/** Pitch override (formant shift multiplier, 1.0 = normal) */
+	pitch?: number;
+	/** Volume override (gain multiplier, 1.0 = normal) */
+	volume?: number;
 	/** Per-segment voice ID override (overrides provider default for this segment) */
 	voiceId?: string;
 	/** AbortSignal for cancellation */

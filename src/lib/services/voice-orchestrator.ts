@@ -5,6 +5,7 @@ import {
 	type StreamOptions,
 	type ITTSProvider
 } from '$lib/services/tts';
+import { applyEmotionToSegment, type AudioEffects } from '$lib/services/tts/emotion-applier';
 
 /**
  * Metadata attached to each speech segment by the response parser.
@@ -22,6 +23,10 @@ export interface SpeechSegment {
 	action?: string;
 	/** Optional speech speed override */
 	speed?: number;
+	/** Optional pitch override (formant shift multiplier) */
+	pitch?: number;
+	/** Optional volume override (gain multiplier) */
+	volume?: number;
 	/** Voice selector: 'default' | 'alt' | literal voice ID. Resolved by orchestrator. */
 	voiceId?: string;
 }
@@ -88,6 +93,8 @@ interface PipelineItem {
 	bufferPromise?: Promise<AudioBuffer | null>;
 	/** Streaming path: called when the runner is ready to play this segment */
 	streamPlay?: (callbacks?: OrchestratorCallbacks) => Promise<void>;
+	/** Client-side audio effects to apply during playback */
+	audioEffects?: AudioEffects;
 }
 
 /**
@@ -252,17 +259,23 @@ export class VoiceOrchestrator {
 		const signal = abort.signal;
 		const index = this.pipelineIndex++;
 
+		// Apply provider-specific emotion configuration
+		const { segment: modifiedSegment, audioEffects } = applyEmotionToSegment(
+			segment,
+			this.sessionOptions.provider
+		);
+
 		// For streaming providers (Chatterbox): buffer segments and combine into one
 		// request in endSession. This enables sentence_pipelining=true which drops
 		// RTF from 1.5 to ~1.0 and allows gapless progressive playback.
 		if (provider.capabilities?.streaming && provider.speakStreaming) {
-			this.bufferedStreamingSegments.push(segment);
+			this.bufferedStreamingSegments.push(modifiedSegment);
 			return;
 		}
 
 		// Non-streaming providers: batch path (prefetch while previous segment plays)
-		const bufferPromise = this.fetchBuffer(provider, segment, signal);
-		this.channel.push({ segment, index, bufferPromise });
+		const bufferPromise = this.fetchBuffer(provider, modifiedSegment, signal);
+		this.channel.push({ segment: modifiedSegment, index, bufferPromise, audioEffects });
 	}
 
 	/**
@@ -279,10 +292,12 @@ export class VoiceOrchestrator {
 			const provider = getTTSProvider(this.sessionOptions);
 			const signal = this.pipelineAbort.signal;
 			const index = this.pipelineIndex++;
+			const { audioEffects } = applyEmotionToSegment(segments[0], this.sessionOptions.provider);
 			this.channel.push({
 				segment: segments[0],
 				index,
-				streamPlay: (cb) => this.playAllAsOneStream(provider, segments, index, signal, cb)
+				streamPlay: (cb) => this.playAllAsOneStream(provider, segments, index, signal, cb, audioEffects),
+				audioEffects
 			});
 		}
 		this.channel?.close();
@@ -359,7 +374,7 @@ export class VoiceOrchestrator {
 				if (item.segment.emotion) callbacks?.onEmotionChange?.(item.segment.emotion);
 				if (item.segment.action) callbacks?.onAction?.(item.segment.action);
 
-				await this.playBuffer(buffer, item.segment, item.index, callbacks);
+				await this.playBuffer(buffer, item.segment, item.index, callbacks, item.audioEffects);
 			}
 		} finally {
 			this.isPlaying = false;
@@ -395,6 +410,8 @@ export class VoiceOrchestrator {
 			exaggeration: segment.exaggeration,
 			language: segment.language,
 			speed: segment.speed ?? baseSpeed,
+			pitch: segment.pitch,
+			volume: segment.volume,
 			voiceId: this.resolveVoiceId(segment.voiceId),
 			signal
 		};
@@ -499,20 +516,45 @@ export class VoiceOrchestrator {
 		buffer: AudioBuffer,
 		segment: SpeechSegment,
 		index: number,
-		callbacks?: OrchestratorCallbacks
+		callbacks?: OrchestratorCallbacks,
+		audioEffects?: AudioEffects
 	): Promise<void> {
 		const audioContext = getSharedAudioContext();
 		if (audioContext.state === 'suspended') {
 			await audioContext.resume();
 		}
 
-		const analyser = audioContext.createAnalyser();
-		analyser.fftSize = 256;
-		analyser.connect(audioContext.destination);
+		// Build audio effect chain: source → filter (pitch/formant) → gain (volume) → analyser → destination
+		let lastNode: AudioNode;
 
 		const source = audioContext.createBufferSource();
 		source.buffer = buffer;
-		source.connect(analyser);
+		lastNode = source;
+
+		// Formant-shift via BiquadFilter for pitch
+		if (audioEffects?.pitch !== undefined && audioEffects.pitch !== 1) {
+			const filter = audioContext.createBiquadFilter();
+			filter.type = 'peaking';
+			filter.frequency.value = 2500;
+			filter.Q.value = 1;
+			// Map pitch 0.5-2.0 to gain -12dB to +12dB
+			filter.gain.value = (audioEffects.pitch - 1) * 12;
+			source.connect(filter);
+			lastNode = filter;
+		}
+
+		// Volume via GainNode
+		if (audioEffects?.volume !== undefined && audioEffects.volume !== 1) {
+			const gainNode = audioContext.createGain();
+			gainNode.gain.value = Math.max(0, audioEffects.volume);
+			lastNode.connect(gainNode);
+			lastNode = gainNode;
+		}
+
+		const analyser = audioContext.createAnalyser();
+		analyser.fftSize = 256;
+		lastNode.connect(analyser);
+		analyser.connect(audioContext.destination);
 
 		this.currentSource = source;
 		this.currentAnalyser = analyser;
@@ -560,7 +602,8 @@ export class VoiceOrchestrator {
 		segments: SpeechSegment[],
 		index: number,
 		signal: AbortSignal,
-		callbacks?: OrchestratorCallbacks
+		callbacks?: OrchestratorCallbacks,
+		audioEffects?: AudioEffects
 	): Promise<void> {
 		const SCHEDULE_AHEAD_S = 1.5;
 
@@ -569,8 +612,30 @@ export class VoiceOrchestrator {
 			await audioContext.resume();
 		}
 
+		let effectInput: AudioNode;
 		const analyser = audioContext.createAnalyser();
 		analyser.fftSize = 256;
+		effectInput = analyser;
+
+		// Formant-shift via BiquadFilter for pitch
+		if (audioEffects?.pitch !== undefined && audioEffects.pitch !== 1) {
+			const filter = audioContext.createBiquadFilter();
+			filter.type = 'peaking';
+			filter.frequency.value = 2500;
+			filter.Q.value = 1;
+			filter.gain.value = (audioEffects.pitch - 1) * 12;
+			filter.connect(effectInput);
+			effectInput = filter;
+		}
+
+		// Volume via GainNode
+		if (audioEffects?.volume !== undefined && audioEffects.volume !== 1) {
+			const gainNode = audioContext.createGain();
+			gainNode.gain.value = Math.max(0, audioEffects.volume);
+			gainNode.connect(effectInput);
+			effectInput = gainNode;
+		}
+
 		analyser.connect(audioContext.destination);
 		this.currentAnalyser = analyser;
 
@@ -705,7 +770,7 @@ export class VoiceOrchestrator {
 
 					const src = audioContext.createBufferSource();
 					src.buffer = audioBuffer;
-					src.connect(analyser);
+					src.connect(effectInput);
 					this.currentSource = src;
 					sources.push(src);
 					src.start(nextPlayTime);

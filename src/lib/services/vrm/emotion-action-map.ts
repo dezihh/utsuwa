@@ -10,6 +10,7 @@
  */
 
 import { vrmStore, type AnimationEntry } from '$lib/stores/vrm.svelte';
+import { ttsEmotionsStore } from '$lib/stores/tts-emotions.svelte';
 
 export interface EmotionActionRule {
 	/** Emotion tag that triggers this action (e.g. 'laugh') */
@@ -20,39 +21,41 @@ export interface EmotionActionRule {
 	probability: number;
 	/** Minimum milliseconds between repeated triggers (default 3000) */
 	cooldownMs: number;
+	/** Whether this rule is active */
+	enabled?: boolean;
 }
 
 // ── Sensible defaults (subtle, not intrusive) ──────────────────────────────
 
 export const DEFAULT_EMOTION_ACTION_RULES: EmotionActionRule[] = [
-	{ emotionTag: 'laugh',     actionId: 'shake',    probability: 0.6, cooldownMs: 4000 },
-	{ emotionTag: 'giggle',    actionId: 'shake',    probability: 0.5, cooldownMs: 4000 },
-	{ emotionTag: 'chuckle',   actionId: 'shake',    probability: 0.4, cooldownMs: 4000 },
-	{ emotionTag: 'excited',   actionId: 'jump',     probability: 0.4, cooldownMs: 6000 },
-	{ emotionTag: 'surprised', actionId: 'jump',     probability: 0.5, cooldownMs: 5000 },
-	{ emotionTag: 'shocked',   actionId: 'jump',     probability: 0.7, cooldownMs: 5000 },
-	{ emotionTag: 'gasp',      actionId: 'jump',     probability: 0.5, cooldownMs: 5000 },
-	{ emotionTag: 'sad',       actionId: 'sad-pose', probability: 0.5, cooldownMs: 5000 },
-	{ emotionTag: 'sigh',      actionId: 'sad-pose', probability: 0.4, cooldownMs: 5000 },
-	{ emotionTag: 'cry',       actionId: 'sad-pose', probability: 0.6, cooldownMs: 5000 },
-	{ emotionTag: 'lonely',    actionId: 'sad-pose', probability: 0.4, cooldownMs: 5000 },
-	{ emotionTag: 'angry',     actionId: 'shake',    probability: 0.6, cooldownMs: 4000 },
-	{ emotionTag: 'frustrated',actionId: 'shake',    probability: 0.5, cooldownMs: 4000 },
-	{ emotionTag: 'annoyed',   actionId: 'shake',    probability: 0.4, cooldownMs: 4000 },
-	{ emotionTag: 'happy',     actionId: 'wave',     probability: 0.3, cooldownMs: 6000 },
-	{ emotionTag: 'proud',     actionId: 'wave',     probability: 0.3, cooldownMs: 6000 },
-	{ emotionTag: 'love',      actionId: 'wave',     probability: 0.3, cooldownMs: 6000 },
-	{ emotionTag: 'flirty',    actionId: 'wave',     probability: 0.3, cooldownMs: 6000 },
-	{ emotionTag: 'dramatic',  actionId: 'lookaround', probability: 0.4, cooldownMs: 5000 },
-	{ emotionTag: 'confused',  actionId: 'think',    probability: 0.4, cooldownMs: 5000 },
-	{ emotionTag: 'unsure',    actionId: 'think',    probability: 0.3, cooldownMs: 5000 },
-	{ emotionTag: 'nervous',   actionId: 'think',    probability: 0.3, cooldownMs: 5000 },
-	{ emotionTag: 'shy',       actionId: 'blush',    probability: 0.5, cooldownMs: 5000 },
-	{ emotionTag: 'calm',      actionId: 'relax',    probability: 0.3, cooldownMs: 6000 },
-	{ emotionTag: 'relaxed',   actionId: 'relax',    probability: 0.3, cooldownMs: 6000 },
-	{ emotionTag: 'sleepy',    actionId: 'sleepy',   probability: 0.5, cooldownMs: 5000 },
-	{ emotionTag: 'yawn',      actionId: 'sleepy',   probability: 0.5, cooldownMs: 5000 },
-	{ emotionTag: 'scream',    actionId: 'surprised-pose', probability: 0.6, cooldownMs: 4000 }
+	{ emotionTag: 'laugh',     actionId: 'shake',    probability: 0.6, cooldownMs: 4000, enabled: true },
+	{ emotionTag: 'giggle',    actionId: 'shake',    probability: 0.5, cooldownMs: 4000, enabled: true },
+	{ emotionTag: 'chuckle',   actionId: 'shake',    probability: 0.4, cooldownMs: 4000, enabled: true },
+	{ emotionTag: 'excited',   actionId: 'jump',     probability: 0.4, cooldownMs: 6000, enabled: true },
+	{ emotionTag: 'surprised', actionId: 'jump',     probability: 0.5, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'shocked',   actionId: 'jump',     probability: 0.7, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'gasp',      actionId: 'jump',     probability: 0.5, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'sad',       actionId: 'sad-pose', probability: 0.5, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'sigh',      actionId: 'sad-pose', probability: 0.4, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'cry',       actionId: 'sad-pose', probability: 0.6, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'lonely',    actionId: 'sad-pose', probability: 0.4, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'angry',     actionId: 'shake',    probability: 0.6, cooldownMs: 4000, enabled: true },
+	{ emotionTag: 'frustrated',actionId: 'shake',    probability: 0.5, cooldownMs: 4000, enabled: true },
+	{ emotionTag: 'annoyed',   actionId: 'shake',    probability: 0.4, cooldownMs: 4000, enabled: true },
+	{ emotionTag: 'happy',     actionId: 'wave',     probability: 0.3, cooldownMs: 6000, enabled: true },
+	{ emotionTag: 'proud',     actionId: 'wave',     probability: 0.3, cooldownMs: 6000, enabled: true },
+	{ emotionTag: 'love',      actionId: 'wave',     probability: 0.3, cooldownMs: 6000, enabled: true },
+	{ emotionTag: 'flirty',    actionId: 'wave',     probability: 0.3, cooldownMs: 6000, enabled: true },
+	{ emotionTag: 'dramatic',  actionId: 'lookaround', probability: 0.4, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'confused',  actionId: 'think',    probability: 0.4, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'unsure',    actionId: 'think',    probability: 0.3, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'nervous',   actionId: 'think',    probability: 0.3, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'shy',       actionId: 'blush',    probability: 0.5, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'calm',      actionId: 'relax',    probability: 0.3, cooldownMs: 6000, enabled: true },
+	{ emotionTag: 'relaxed',   actionId: 'relax',    probability: 0.3, cooldownMs: 6000, enabled: true },
+	{ emotionTag: 'sleepy',    actionId: 'sleepy',   probability: 0.5, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'yawn',      actionId: 'sleepy',   probability: 0.5, cooldownMs: 5000, enabled: true },
+	{ emotionTag: 'scream',    actionId: 'surprised-pose', probability: 0.6, cooldownMs: 4000, enabled: true }
 ];
 
 // ── Runtime state (session-only, not persisted) ────────────────────────────
@@ -78,10 +81,10 @@ export function resolveEmotionAction(
 	emotionTag: string,
 	customRules?: EmotionActionRule[]
 ): string | undefined {
-	const rules = customRules ?? DEFAULT_EMOTION_ACTION_RULES;
+	const rules = customRules ?? ttsEmotionsStore.getBodyActionRules();
 	const tag = emotionTag.toLowerCase();
 
-	const rule = rules.find((r) => r.emotionTag.toLowerCase() === tag);
+	const rule = rules.find((r) => r.emotionTag.toLowerCase() === tag && r.enabled !== false);
 	if (!rule) return undefined;
 
 	// Availability check
@@ -109,8 +112,8 @@ export function hasEmotionActionRule(
 	emotionTag: string,
 	customRules?: EmotionActionRule[]
 ): boolean {
-	const rules = customRules ?? DEFAULT_EMOTION_ACTION_RULES;
-	return rules.some((r) => r.emotionTag.toLowerCase() === emotionTag.toLowerCase());
+	const rules = customRules ?? ttsEmotionsStore.getBodyActionRules();
+	return rules.some((r) => r.emotionTag.toLowerCase() === emotionTag.toLowerCase() && r.enabled !== false);
 }
 
 /** Get all rules that target a specific action ID. */
@@ -118,6 +121,6 @@ export function getRulesForAction(
 	actionId: string,
 	customRules?: EmotionActionRule[]
 ): EmotionActionRule[] {
-	const rules = customRules ?? DEFAULT_EMOTION_ACTION_RULES;
-	return rules.filter((r) => r.actionId === actionId);
+	const rules = customRules ?? ttsEmotionsStore.getBodyActionRules();
+	return rules.filter((r) => r.actionId === actionId && r.enabled !== false);
 }

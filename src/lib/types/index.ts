@@ -1,5 +1,6 @@
 // Module types
 export * from './module';
+export * from './tts-emotion';
 
 // Chat types
 export interface ChatMessage {

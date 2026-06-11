@@ -127,7 +127,9 @@ export class OmniVoiceTTS implements ITTSProvider {
 				numStep: this.numStep,
 				baseUrl: this.baseUrl,
 				language: options?.language,
-				...(options?.speed !== undefined ? { speed: options.speed } : {})
+				...(options?.speed !== undefined ? { speed: options.speed } : {}),
+				...(options?.pitch !== undefined ? { pitch: options.pitch } : {}),
+				...(options?.volume !== undefined ? { volume: options.volume } : {})
 			}),
 			signal: options?.signal
 		});
