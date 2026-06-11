@@ -135,6 +135,16 @@ export interface FactExtractionHint {
 	confidence: number;
 }
 
+// Scheduled reminder
+export interface Reminder {
+	id?: number;
+	triggerAt: Date;
+	content: string;
+	executed: boolean;
+	createdAt: Date;
+	sessionId: number;
+}
+
 // Constants
 export const MAX_WORKING_MEMORY_TURNS = 20;
 export const MAX_RELEVANT_FACTS = 10;

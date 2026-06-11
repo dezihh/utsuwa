@@ -531,6 +531,8 @@ Utsuwa is built on the shoulders of these excellent projects:
 ### Animation Management UI
 A new **Settings > Animations** page lists every built-in and custom VRMA animation in an editable table. You can toggle animations on/off for LLM visibility, add inline descriptions that the LLM receives in its prompt, and delete custom uploads. After uploading a `.vrma` file in Developer Tools you are automatically redirected here. The LLM only sees enabled animations — no more suggestions for missing files.
 
+The page now includes a live **VRM viewport** next to the table. Click the ▶ play button on any row to preview the animation on the currently loaded avatar in real time — perfect for writing accurate descriptions and deciding which animations to enable.
+
 ### Emotion-to-Action Mapping
 Emotion tags like `[laugh]`, `[excited]`, or `[sad]` now automatically trigger matching body animations (e.g. laugh → shoulder shake, excited → jump, sad → sad pose). Each mapping uses probability and cooldown controls so the companion feels natural, not mechanical. Works in both TTS and text-only mode. Explicit `[action:xxx]` tags still take precedence.
 

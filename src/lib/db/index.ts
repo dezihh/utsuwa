@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { CharacterState } from '$lib/types/character';
-import type { Fact, SessionSummary, ConversationTurn, FactLibraryEntry } from '$lib/types/memory';
+import type { Fact, SessionSummary, ConversationTurn, FactLibraryEntry, Reminder } from '$lib/types/memory';
 import type { CompletedEventRecord } from '$lib/types/events';
 
 // Database types with IndexedDB-friendly id handling
@@ -28,6 +28,10 @@ export interface DBFactLibraryEntry extends Omit<FactLibraryEntry, 'id'> {
 	id?: number;
 }
 
+export interface DBReminder extends Omit<Reminder, 'id'> {
+	id?: number;
+}
+
 // Legacy persona storage keys (for migration)
 const LEGACY_PERSONA_CARDS_KEY = 'utsuwa-persona-cards';
 const LEGACY_PERSONA_ACTIVE_KEY = 'utsuwa-persona-active-id';
@@ -39,6 +43,7 @@ class UtsuwaDatabase extends Dexie {
 	conversationTurns!: EntityTable<DBConversationTurn, 'id'>;
 	completedEvents!: EntityTable<DBCompletedEvent, 'id'>;
 	factLibrary!: EntityTable<DBFactLibraryEntry, 'id'>;
+	reminders!: EntityTable<DBReminder, 'id'>;
 
 	constructor() {
 		super('utsuwa-db');
@@ -176,6 +181,17 @@ class UtsuwaDatabase extends Dexie {
 					}
 				});
 			});
+
+		// Version 5: Add reminders table
+		this.version(5).stores({
+			characterStates: '++id, updatedAt',
+			facts: '++id, characterId, category, importance, createdAt',
+			sessions: '++id, characterId, startedAt',
+			conversationTurns: '++id, characterId, sessionId, createdAt',
+			completedEvents: '++id, characterId, eventId, completedAt',
+			factLibrary: '++id, characterId, type, category, confidence, createdAt',
+			reminders: '++id, sessionId, triggerAt, executed'
+		});
 	}
 }
 
