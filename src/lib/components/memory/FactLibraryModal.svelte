@@ -24,6 +24,15 @@
 	let editTags = $state('');
 	let editConfidence = $state(0.5);
 
+	// Add state
+	let isAdding = $state(false);
+	let addKey = $state('');
+	let addValue = $state('');
+	let addType = $state('vocab');
+	let addCategory = $state('');
+	let addTags = $state('');
+	let addConfidence = $state(0.5);
+
 	// Load entries
 	async function loadEntries() {
 		isLoading = true;
@@ -86,6 +95,7 @@
 
 	function startEdit(entry: FactLibraryEntry) {
 		if (entry.id === undefined) return;
+		isAdding = false;
 		editingId = entry.id;
 		editValue = entry.value;
 		editCategory = entry.category || '';
@@ -95,6 +105,43 @@
 
 	function cancelEdit() {
 		editingId = null;
+	}
+
+	function startAdd() {
+		editingId = null;
+		isAdding = true;
+		addKey = '';
+		addValue = '';
+		addType = 'vocab';
+		addCategory = '';
+		addTags = '';
+		addConfidence = 0.5;
+	}
+
+	function cancelAdd() {
+		isAdding = false;
+	}
+
+	async function saveAdd() {
+		if (!addKey.trim() || !addValue.trim()) return;
+		try {
+			await memoryStorage.saveFactLibraryEntry({
+				key: addKey.trim(),
+				value: addValue.trim(),
+				type: addType.trim() || 'vocab',
+				category: addCategory.trim() || undefined,
+				tags: addTags
+					.split(',')
+					.map((t) => t.trim())
+					.filter(Boolean),
+				confidence: Math.max(0, Math.min(1, addConfidence)),
+				characterId: 'default'
+			});
+			isAdding = false;
+			await loadEntries();
+		} catch (e) {
+			console.error('[FactLibrary] Failed to add entry:', e);
+		}
 	}
 
 	async function saveEdit(id: number) {
@@ -173,9 +220,15 @@
 				<h2>Fact Library</h2>
 				<span class="entry-count">{filteredEntries().length} / {entries.length}</span>
 			</div>
-			<button class="close-btn" onclick={onClose} aria-label="Close">
-				<Icon name="x" size={20} />
-			</button>
+			<div class="header-actions">
+				<button class="add-btn" onclick={startAdd} aria-label="Add entry">
+					<Icon name="plus" size={16} />
+					<span>Add</span>
+				</button>
+				<button class="close-btn" onclick={onClose} aria-label="Close">
+					<Icon name="x" size={20} />
+				</button>
+			</div>
 		</header>
 
 		<div class="filters">
@@ -225,6 +278,48 @@
 				</div>
 			{:else}
 				<div class="entries-list">
+						{#if isAdding}
+							<div class="entry-card adding">
+								<div class="edit-form">
+									<div class="edit-field">
+										<span class="field-label">Key</span>
+										<input type="text" bind:value={addKey} placeholder="e.g. Serendipity" />
+									</div>
+									<div class="edit-field">
+										<span class="field-label">Value</span>
+										<textarea bind:value={addValue} rows={3} placeholder="Definition or explanation..."></textarea>
+									</div>
+									<div class="edit-row">
+										<div class="edit-field">
+											<span class="field-label">Type</span>
+											<input type="text" bind:value={addType} placeholder="vocab, exam_fact, concept..." />
+										</div>
+										<div class="edit-field">
+											<span class="field-label">Category</span>
+											<input type="text" bind:value={addCategory} placeholder="e.g. Spanish" />
+										</div>
+										<div class="edit-field">
+											<span class="field-label">Confidence</span>
+											<input type="number" min="0" max="1" step="0.05" bind:value={addConfidence} />
+										</div>
+									</div>
+									<div class="edit-field">
+										<span class="field-label">Tags (comma separated)</span>
+										<input type="text" bind:value={addTags} placeholder="spanish, b1, noun..." />
+									</div>
+									<div class="edit-actions">
+										<button class="btn-save" onclick={saveAdd}>
+											<Icon name="check" size={14} />
+											Save
+										</button>
+										<button class="btn-cancel" onclick={cancelAdd}>
+											<Icon name="x" size={14} />
+											Cancel
+										</button>
+									</div>
+								</div>
+							</div>
+						{/if}
 					{#each filteredEntries() as entry (entry.id)}
 						<div class="entry-card">
 							{#if editingId === entry.id}
@@ -447,6 +542,37 @@
 	.close-btn:hover {
 		background: linear-gradient(180deg, #e8e8e8 0%, #d8d8d8 100%);
 		transform: translateY(-1px);
+	}
+
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.add-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.5rem 0.875rem;
+		background: linear-gradient(180deg, #01B2FF 0%, #0099dd 100%);
+		border: none;
+		border-radius: 0.5rem;
+		color: white;
+		font-size: 0.875rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.add-btn:hover {
+		background: linear-gradient(180deg, #4dd0ff 0%, #01B2FF 100%);
+		transform: translateY(-1px);
+	}
+
+	.entry-card.adding {
+		border: 2px solid rgba(1, 178, 255, 0.3);
+		background: linear-gradient(180deg, rgba(1, 178, 255, 0.04) 0%, rgba(1, 178, 255, 0.02) 100%);
 	}
 
 	.filters {
