@@ -8,6 +8,7 @@
 		getSaveFilePreview,
 		downloadSaveFile,
 		clearAllData,
+		resetMemory,
 		type SaveFile,
 		type SaveFilePreview,
 		type LegacySaveFile
@@ -27,6 +28,8 @@
 	let isImporting = $state(false);
 	let isClearing = $state(false);
 	let showClearConfirm = $state(false);
+	let isResetting = $state(false);
+	let showResetConfirm = $state(false);
 
 	let importFile = $state<File | null>(null);
 	let importPreview = $state<SaveFilePreview | null>(null);
@@ -203,6 +206,27 @@
 		}
 	}
 
+	async function handleResetMemory() {
+		if (!showResetConfirm) {
+			showResetConfirm = true;
+			return;
+		}
+
+		isResetting = true;
+		try {
+			await resetMemory();
+			showResetConfirm = false;
+			// Refresh to reset stores
+			setTimeout(() => {
+				window.location.reload();
+			}, 500);
+		} catch (e) {
+			console.error('Reset memory failed:', e);
+		} finally {
+			isResetting = false;
+		}
+	}
+
 	function formatDate(date: Date): string {
 		return date.toLocaleDateString(undefined, {
 			year: 'numeric',
@@ -343,6 +367,47 @@
 			{/if}
 		</div>
 
+
+		<!-- Reset Memory -->
+		<div class="action-card warning">
+			<div class="action-header">
+				<Icon name="brain" size={20} />
+				<h3>Reset Memory</h3>
+			</div>
+			<p class="action-description">
+				Wipe only conversation history, facts, sessions, and the fact library. Keeps your
+				character profile, settings, VRM models, and expression mappings intact — perfect
+				for starting a new game with the same companion.
+			</p>
+
+			{#if showResetConfirm}
+				<div class="confirm-message">
+					<Icon name="warning" size={16} />
+					This clears all memory but keeps your character and settings. Continue?
+				</div>
+				<div class="confirm-actions">
+					<Button variant="secondary" onclick={() => (showResetConfirm = false)}>
+						{#snippet children()}Cancel{/snippet}
+					</Button>
+					<Button variant="danger" onclick={handleResetMemory} disabled={isResetting}>
+						{#snippet children()}
+							{#if isResetting}
+								Resetting...
+							{:else}
+								Yes, Reset Memory
+							{/if}
+						{/snippet}
+					</Button>
+				</div>
+			{:else}
+				<Button variant="danger" onclick={handleResetMemory}>
+					{#snippet children()}
+						<Icon name="brain" size={16} />
+						Reset Memory
+					{/snippet}
+				</Button>
+			{/if}
+		</div>
 		<!-- Clear Data -->
 		<div class="action-card danger">
 			<div class="action-header">
@@ -535,6 +600,18 @@
 
 	.action-card.danger {
 		border-color: oklch(65% 0.15 25 / 0.3);
+	}
+
+	.action-card.warning {
+		border-color: oklch(70% 0.12 75 / 0.35);
+	}
+
+	.action-card.warning .action-header {
+		color: oklch(60% 0.15 75);
+	}
+
+	:global(.dark) .action-card.warning .action-header {
+		color: oklch(75% 0.12 75);
 	}
 
 	.action-header {

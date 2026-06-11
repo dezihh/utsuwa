@@ -639,6 +639,21 @@ export function downloadSaveFile(saveFile: SaveFile): void {
 	URL.revokeObjectURL(url);
 }
 
+/**
+ * Reset only memory data (facts, sessions, turns, events, fact library).
+ * Keeps character profile, settings, VRM models, and expression mappings.
+ * Useful for starting a "new game" with the same character and avatar.
+ */
+export async function resetMemory(): Promise<void> {
+	await Promise.all([
+		db.facts.clear(),
+		db.sessions.clear(),
+		db.conversationTurns.clear(),
+		db.completedEvents.clear(),
+		db.factLibrary.clear()
+	]);
+}
+
 export async function clearAllData(): Promise<void> {
 	await Promise.all([
 		db.characterStates.clear(),
