@@ -28,6 +28,7 @@
 - **LLM Integration**: Support for 10 LLM providers including OpenAI, Anthropic, Google, xAI, DeepSeek, OpenRouter, **OpenAI Compatible** (LiteLLM, vLLM, custom proxies), Ollama, LM Studio, and llama.cpp
 - **Local Model Discovery**: Ollama and LM Studio discover installed local models directly from your device
 - **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, AllTalk, Chatterbox, and OmniVoice (with per-segment language + expression tags)
+- **Provider-Specific TTS Emotions**: Configure emotion tags per TTS provider under **Settings > TTS Emotions**. Each provider has its own emotion table with adjustable speed, pitch, volume, and provider-specific settings (exaggeration for Chatterbox, native sound tags for OmniVoice). Includes body-action mapping rules with probability and cooldown controls, plus live test buttons.
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
 - **Animations**: 18 built-in VRMA motion clips (idle, talking, emotions, actions) with automatic blinking. Upload your own `.vrma` files under **Settings > Animations**. Each animation has an editable description that the LLM sees in its prompt, plus a toggle to enable/disable it for LLM use — so you control which animations the companion can suggest.
 - **Character Customization**: Customize your companion's name, personality, and system prompt with saveable presets

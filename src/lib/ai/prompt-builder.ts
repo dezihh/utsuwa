@@ -594,9 +594,12 @@ EXAMPLES:
 function buildTTSEmotionsLayer(ctx: PromptContext): string | null {
 	if (!ctx.ttsProvider) return null;
 	const provider = ctx.ttsProvider as import('$lib/types').TTSProvider;
-	const emotions = ttsEmotionsStore.getDefaultEmotions(provider);
-	const enabled = Object.entries(emotions)
-		.filter(([, cfg]) => cfg.enabled)
+	const defaultEmotions = ttsEmotionsStore.getDefaultEmotions(provider);
+	const enabled = Object.entries(defaultEmotions)
+		.filter(([tag]) => {
+			const cfg = ttsEmotionsStore.getEmotionConfig(provider, tag);
+			return cfg?.enabled ?? false;
+		})
 		.map(([tag, cfg]) => `  [${tag}]${cfg.displayText ? ` ${cfg.displayText}` : ''}${cfg.ttsText ? ` — speaks "${cfg.ttsText}"` : ''}`);
 
 	if (enabled.length === 0) return null;
@@ -691,7 +694,16 @@ function buildReminderLayer(ctx: PromptContext): string | null {
 	const parts: string[] = [];
 
 	parts.push(
-		`You can schedule reminders for the user by including a tag like [reminder:5min]check the coffee[/reminder] anywhere in your response. Supported time formats: 30s, 5min, 10m, 1h, 2h30m. The tag will be hidden from the user.`
+		`REMINDER TAG — use this proactively when the user asks you to remind them of something, or when you agree to follow up later.`
+	);
+
+	parts.push(
+		`To schedule a reminder, embed this exact tag format directly in your response text (not in JSON, not in code blocks):\n` +
+		`  [reminder:5min]check the coffee[/reminder]\n` +
+		`  [reminder:1h]call mom[/reminder]\n` +
+		`  [reminder:30s]look at the timer[/reminder]\n\n` +
+		`Supported time formats: 30s, 5min, 10m, 1h, 2h30m.\n` +
+		`The tag will be hidden from the user — only you and the system see it.`
 	);
 
 	if (hasPending) {
