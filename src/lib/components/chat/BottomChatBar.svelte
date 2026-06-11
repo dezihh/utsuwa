@@ -29,7 +29,7 @@
 		onAdjustSensitivity
 	}: Props = $props();
 	let inputValue = $state('');
-	let textareaRef: HTMLTextAreaElement = $state()!;
+	let textareaRef = $state<HTMLTextAreaElement | undefined>(undefined);
 
 	const isListening = $derived(sttStore.isListening);
 	const isTranscribing = $derived(sttStore.isTranscribing);
@@ -209,8 +209,7 @@
 				>
 					<Icon name="mic" size={20} />
 				</button>
-				<!-- svelte-ignore a11y_autofocus -->
-	<textarea
+				<textarea
 					bind:this={textareaRef}
 					bind:value={inputValue}
 					onkeydown={handleKeydown}
