@@ -243,9 +243,11 @@ export const memoryApi = {
 			importance: fact.importance ?? DEFAULT_FACT_IMPORTANCE,
 			confidence: fact.confidence ?? DEFAULT_FACT_CONFIDENCE
 		});
-		// Return the created fact
-		const facts = await memoryStorage.getFacts({ limit: 1 });
-		return facts.find((f) => f.id === id) || {
+		// Return the created fact (fetch directly by ID to avoid sort-order mismatch)
+		const created = await memoryStorage.getFactById(id);
+		if (created) return created;
+		// Fallback (should never happen — the fact was just saved)
+		return {
 			id,
 			...fact,
 			importance: fact.importance ?? DEFAULT_FACT_IMPORTANCE,

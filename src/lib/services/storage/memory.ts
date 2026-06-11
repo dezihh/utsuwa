@@ -95,6 +95,11 @@ export async function saveFact(
 	return id as number;
 }
 
+export async function getFactById(factId: number): Promise<Fact | undefined> {
+	const fact = await db.facts.get(factId);
+	return fact ? deserializeFact(fact) : undefined;
+}
+
 export async function incrementFactReference(factId: number): Promise<void> {
 	const fact = await db.facts.get(factId);
 	if (fact) {
