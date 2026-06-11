@@ -38,6 +38,9 @@
 
 	let { onEventTriggered }: Props = $props();
 
+	// AbortController for cancelling in-flight direct-chat streams
+	let chatAbortController: AbortController | null = null;
+
 	// Track memory hydration state
 	let isMemoryReady = $state(false);
 
@@ -229,6 +232,9 @@
 			const selectedModel = model || providerMeta?.models?.[0]?.id || '';
 
 			if (isTauri()) {
+				// Cancel any previous direct-chat stream before starting a new one
+				chatAbortController?.abort();
+				chatAbortController = new AbortController();
 				await new Promise<void>((resolve, reject) => {
 					streamChatDirect(
 						{
@@ -241,7 +247,8 @@
 						},
 						(text) => { fullContent += text; chatStore.updateLastMessage(fullContent); },
 						(error) => reject(new Error(error)),
-						() => resolve()
+						() => resolve(),
+						chatAbortController!.signal
 					);
 				});
 			} else {
@@ -330,8 +337,13 @@
 			if (lastMsg?.role === 'assistant' && !lastMsg.content) {
 				chatStore.removeLastMessage();
 			}
-			chatStore.setError(err instanceof Error ? err.message : 'Unknown error');
-			console.error('Chat error:', err);
+			if (err instanceof Error && err.name === 'AbortError') {
+				// User cancelled the stream (e.g. sent a new message) — not an error
+				console.log('Chat stream aborted');
+			} else {
+				chatStore.setError(err instanceof Error ? err.message : 'Unknown error');
+				console.error('Chat error:', err);
+			}
 		} finally {
 			chatStore.setLoading(false);
 		}

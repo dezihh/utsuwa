@@ -44,7 +44,8 @@ export async function streamChatDirect(
 	options: ChatOptions,
 	onChunk: (text: string) => void,
 	onError: (error: string) => void,
-	onDone: () => void
+	onDone: () => void,
+	signal?: AbortSignal
 ): Promise<void> {
 	const { messages, provider, model, apiKey, baseURL, systemPrompt } = options;
 
@@ -101,7 +102,7 @@ export async function streamChatDirect(
 			: `${providerBaseURL.replace(/\/+$/, '')}/chat/completions`;
 
 	try {
-		const response = await fetch(url, { method: 'POST', headers, body });
+		const response = await fetch(url, { method: 'POST', headers, body, signal });
 
 		if (!response.ok) {
 			const errorData = await response.json().catch(() => ({}));
@@ -153,6 +154,10 @@ export async function streamChatDirect(
 
 		onDone();
 	} catch (err) {
+		if (err instanceof Error && err.name === 'AbortError') {
+			// Stream was cancelled by the caller — don't report as error
+			return;
+		}
 		const rawMessage = err instanceof Error ? err.message : 'Failed to connect to provider';
 		const msg = isLocal
 			? getLocalProviderConnectionHint(provider, providerBaseURL, getCurrentSiteOrigin())
