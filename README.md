@@ -546,6 +546,9 @@ The evolution analyzer now sends recent session summaries to the LLM for pattern
 ### User-Confirmed Evolution
 Before any personality adaptations are applied, a confirmation modal shows the suggested changes with explanations. The user can select which adaptations to keep, or reject them entirely.
 
+### Temporary VRM Preview in Developer Tools
+**Settings > Developer Tools** now lets you upload a `.vrm` file for temporary preview. The model loads into the viewport immediately — you can test expressions, animations, and look-at behavior. The uploaded model is **never persisted**; clicking **Restore Original** or leaving the page automatically switches back to the previously active avatar.
+
 ### VOX Mode Fix
 The duplex VAD service now correctly resumes the AudioContext after creation. Previously, VOX mode appeared active but never transcribed on a fresh browser session because the AudioContext started in `suspended` state. A one-line `audioContext.resume()` fix resolves this.
 

@@ -117,6 +117,13 @@ function createVrmStore() {
 	// systems (blink, lip-sync, emotion controller, lookAt) and re-applied
 	// every frame so the LookAt system doesn't overwrite them.
 	let developerExpressionOverrides = $state<Map<string, number>>(new Map());
+
+	// ── Temporary model (for Developer Tools preview) ──
+	// When a temp model is loaded we stash the original activeModelId so
+	// we can restore it later.  The temp blob URL is kept in memory only
+	// and is never persisted to storage.
+	let tempModelOriginalId = $state<string | null>(null);
+	let tempModelUrl = $state<string | null>(null);
 	// Default animations
 	const idleAnimationUrl = '/animations/idle.vrma';
 	const talkingAnimationUrl = '/animations/talking.vrma';
@@ -533,6 +540,45 @@ function createVrmStore() {
 		void saveToStorage();
 	}
 
+	async function loadTempModel(file: File): Promise<void> {
+		// Restore any previous temp model first to avoid leaking blob URLs
+		if (tempModelUrl) {
+			URL.revokeObjectURL(tempModelUrl);
+		}
+
+		// Remember which model was active before (only on first temp load)
+		if (!tempModelOriginalId) {
+			tempModelOriginalId = activeModelId;
+		}
+
+		const blob = new Blob([await file.arrayBuffer()], { type: 'model/vrm' });
+		tempModelUrl = URL.createObjectURL(blob);
+		modelUrl = tempModelUrl;
+		// Clear activeModelId so the scene knows this is a temp model
+		activeModelId = null;
+		// Reset expressions for the new model
+		availableExpressions = [];
+	}
+
+	async function restoreOriginalModel(): Promise<void> {
+		if (tempModelUrl) {
+			URL.revokeObjectURL(tempModelUrl);
+			tempModelUrl = null;
+		}
+		if (tempModelOriginalId) {
+			const original = models.find((m) => m.id === tempModelOriginalId);
+			if (original) {
+				activeModelId = tempModelOriginalId;
+				modelUrl = original.url;
+			} else {
+				// Fallback to default if original was deleted in the meantime
+				activeModelId = DEFAULT_MODELS[0].id;
+				modelUrl = DEFAULT_MODELS[0].url;
+			}
+			tempModelOriginalId = null;
+		}
+	}
+
 	async function addModel(file: File, previewDataUrl?: string): Promise<void> {
 		const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 		const name = file.name.replace(/\.vrm$/i, '');
@@ -803,6 +849,9 @@ function createVrmStore() {
 		get developerExpressionOverrides() {
 			return developerExpressionOverrides;
 		},
+		get tempModelActive() {
+			return tempModelUrl !== null;
+		},
 		setModelUrl,
 		setHeadPosition,
 		setHeadScreenPosition,
@@ -830,7 +879,9 @@ function createVrmStore() {
 		setAnimationDescription,
 		setAnimationLlmEnabled,
 		setDeveloperExpressionOverride,
-		clearDeveloperExpressionOverrides
+		clearDeveloperExpressionOverrides,
+		loadTempModel,
+		restoreOriginalModel
 	};
 }
 
