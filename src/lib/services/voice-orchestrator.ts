@@ -535,6 +535,9 @@ export class VoiceOrchestrator {
 				// Already stopped
 			}
 		}
+
+		source.disconnect();
+		analyser.disconnect();
 	}
 
 	/**
@@ -571,161 +574,165 @@ export class VoiceOrchestrator {
 		analyser.connect(audioContext.destination);
 		this.currentAnalyser = analyser;
 
-		// Use first segment for emotion/language params; fire callbacks once.
-		const firstSeg = segments[0];
-		if (firstSeg.emotion) callbacks?.onEmotionChange?.(firstSeg.emotion);
-		if (firstSeg.action) callbacks?.onAction?.(firstSeg.action);
-		callbacks?.onSegmentStart?.(firstSeg, index);
-		callbacks?.onAnalyserUpdate?.(analyser);
-
-		// Build combined text. Ensure each sentence ends with sentence-final punctuation
-		// so Chatterbox's sentence splitter works correctly.
-		const combinedText = segments
-			.map((s, i) => {
-				const t = s.text.trim();
-				if (i < segments.length - 1 && !/[.!?…。！？]$/.test(t)) return t + '.';
-				return t;
-			})
-			.join(' ');
-
-		const streamOpts: StreamOptions = {
-			emotion: firstSeg.emotion,
-			exaggeration: firstSeg.exaggeration,
-			language: firstSeg.language,
-			speed: firstSeg.speed,
-			signal
-		};
-
-		const PCM_HEADER_SIZE = 44;
-		let headerParsed = false;
-		let audioFormat = 3;    // default: IEEE float32
-		let numChannels = 1;
-		let sampleRate = 24000;
-		let bytesPerSample = 4;
-
-		let remainder: Uint8Array = new Uint8Array(0);
-		// nextPlayTime is set on first chunk: audioContext.currentTime + SCHEDULE_AHEAD_S
-		let nextPlayTime = 0;
-		let firstChunk = true;
-		let lastSourceNode: AudioBufferSourceNode | null = null;
-		let lastSourceEndTime = 0; // estimated wall-clock end of the last scheduled chunk
-
-		const sources: AudioBufferSourceNode[] = [];
-
-		// Register abort listener to stop all scheduled sources.
-		const abortHandler = () => {
-			for (const src of sources) {
-				try { src.stop(); } catch { /* already stopped */ }
-			}
-		};
-		signal.addEventListener('abort', abortHandler, { once: true });
-
 		try {
-			const generator = provider.speakStreaming!(combinedText, streamOpts);
+			// Use first segment for emotion/language params; fire callbacks once.
+			const firstSeg = segments[0];
+			if (firstSeg.emotion) callbacks?.onEmotionChange?.(firstSeg.emotion);
+			if (firstSeg.action) callbacks?.onAction?.(firstSeg.action);
+			callbacks?.onSegmentStart?.(firstSeg, index);
+			callbacks?.onAnalyserUpdate?.(analyser);
 
-			for await (const chunk of generator) {
-				if (signal.aborted) break;
-				if (chunk.done) break;
-				if (chunk.data.byteLength === 0) continue;
+			// Build combined text. Ensure each sentence ends with sentence-final punctuation
+			// so Chatterbox's sentence splitter works correctly.
+			const combinedText = segments
+				.map((s, i) => {
+					const t = s.text.trim();
+					if (i < segments.length - 1 && !/[.!?…。！？]$/.test(t)) return t + '.';
+					return t;
+				})
+				.join(' ');
 
-				// Prepend any remainder bytes from the previous iteration.
-				const incoming = new Uint8Array(chunk.data);
-				let raw: Uint8Array;
-				if (remainder.byteLength > 0) {
-					raw = new Uint8Array(remainder.byteLength + incoming.byteLength);
-					raw.set(remainder);
-					raw.set(incoming, remainder.byteLength);
-					remainder = new Uint8Array(0);
-				} else {
-					raw = incoming;
+			const streamOpts: StreamOptions = {
+				emotion: firstSeg.emotion,
+				exaggeration: firstSeg.exaggeration,
+				language: firstSeg.language,
+				speed: firstSeg.speed,
+				signal
+			};
+
+			const PCM_HEADER_SIZE = 44;
+			let headerParsed = false;
+			let audioFormat = 3;    // default: IEEE float32
+			let numChannels = 1;
+			let sampleRate = 24000;
+			let bytesPerSample = 4;
+
+			let remainder: Uint8Array = new Uint8Array(0);
+			// nextPlayTime is set on first chunk: audioContext.currentTime + SCHEDULE_AHEAD_S
+			let nextPlayTime = 0;
+			let firstChunk = true;
+			let lastSourceNode: AudioBufferSourceNode | null = null;
+			let lastSourceEndTime = 0; // estimated wall-clock end of the last scheduled chunk
+
+			const sources: AudioBufferSourceNode[] = [];
+
+			// Register abort listener to stop all scheduled sources.
+			const abortHandler = () => {
+				for (const src of sources) {
+					try { src.stop(); } catch { /* already stopped */ }
 				}
+			};
+			signal.addEventListener('abort', abortHandler, { once: true });
 
-				let pcmBytes: Uint8Array;
+			try {
+				const generator = provider.speakStreaming!(combinedText, streamOpts);
 
-				if (!headerParsed) {
-					// Need at least a full WAV header to parse format.
-					if (raw.byteLength < PCM_HEADER_SIZE) {
-						remainder = raw;
+				for await (const chunk of generator) {
+					if (signal.aborted) break;
+					if (chunk.done) break;
+					if (chunk.data.byteLength === 0) continue;
+
+					// Prepend any remainder bytes from the previous iteration.
+					const incoming = new Uint8Array(chunk.data);
+					let raw: Uint8Array;
+					if (remainder.byteLength > 0) {
+						raw = new Uint8Array(remainder.byteLength + incoming.byteLength);
+						raw.set(remainder);
+						raw.set(incoming, remainder.byteLength);
+						remainder = new Uint8Array(0);
+					} else {
+						raw = incoming;
+					}
+
+					let pcmBytes: Uint8Array;
+
+					if (!headerParsed) {
+						// Need at least a full WAV header to parse format.
+						if (raw.byteLength < PCM_HEADER_SIZE) {
+							remainder = raw;
+							continue;
+						}
+						const hdv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+						audioFormat   = hdv.getUint16(20, true);
+						numChannels   = hdv.getUint16(22, true);
+						sampleRate    = hdv.getUint32(24, true);
+						const bps     = hdv.getUint16(34, true);
+						bytesPerSample = bps / 8;
+						headerParsed  = true;
+						pcmBytes = raw.slice(PCM_HEADER_SIZE);
+					} else {
+						pcmBytes = raw;
+					}
+
+					if (pcmBytes.byteLength === 0) continue;
+
+					// Align to sample frame boundary.
+					const frameSize = bytesPerSample * numChannels;
+					const alignedBytes = Math.floor(pcmBytes.byteLength / frameSize) * frameSize;
+					if (alignedBytes === 0) {
+						remainder = pcmBytes;
 						continue;
 					}
-					const hdv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
-					audioFormat   = hdv.getUint16(20, true);
-					numChannels   = hdv.getUint16(22, true);
-					sampleRate    = hdv.getUint32(24, true);
-					const bps     = hdv.getUint16(34, true);
-					bytesPerSample = bps / 8;
-					headerParsed  = true;
-					pcmBytes = raw.slice(PCM_HEADER_SIZE);
-				} else {
-					pcmBytes = raw;
-				}
+					remainder = pcmBytes.slice(alignedBytes);
 
-				if (pcmBytes.byteLength === 0) continue;
-
-				// Align to sample frame boundary.
-				const frameSize = bytesPerSample * numChannels;
-				const alignedBytes = Math.floor(pcmBytes.byteLength / frameSize) * frameSize;
-				if (alignedBytes === 0) {
-					remainder = pcmBytes;
-					continue;
-				}
-				remainder = pcmBytes.slice(alignedBytes);
-
-				// Decode aligned PCM bytes into Float32.
-				const numSamples = alignedBytes / bytesPerSample;
-				const samplesPerChannel = numSamples / numChannels;
-				const float32 = new Float32Array(numSamples);
-				const pdv = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, alignedBytes);
-				if (audioFormat === 3) {
-					for (let i = 0; i < numSamples; i++) float32[i] = pdv.getFloat32(i * 4, true);
-				} else {
-					for (let i = 0; i < numSamples; i++) float32[i] = pdv.getInt16(i * 2, true) / 32768.0;
-				}
-
-				// Build AudioBuffer.
-				const audioBuffer = audioContext.createBuffer(numChannels, samplesPerChannel, sampleRate);
-				if (numChannels === 1) {
-					audioBuffer.getChannelData(0).set(float32);
-				} else {
-					for (let ch = 0; ch < numChannels; ch++) {
-						const chData = audioBuffer.getChannelData(ch);
-						for (let i = 0; i < samplesPerChannel; i++) chData[i] = float32[i * numChannels + ch];
+					// Decode aligned PCM bytes into Float32.
+					const numSamples = alignedBytes / bytesPerSample;
+					const samplesPerChannel = numSamples / numChannels;
+					const float32 = new Float32Array(numSamples);
+					const pdv = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, alignedBytes);
+					if (audioFormat === 3) {
+						for (let i = 0; i < numSamples; i++) float32[i] = pdv.getFloat32(i * 4, true);
+					} else {
+						for (let i = 0; i < numSamples; i++) float32[i] = pdv.getInt16(i * 2, true) / 32768.0;
 					}
-				}
 
-				// Schedule chunk.
-				if (firstChunk) {
-					nextPlayTime = audioContext.currentTime + SCHEDULE_AHEAD_S;
-					firstChunk = false;
-				}
+					// Build AudioBuffer.
+					const audioBuffer = audioContext.createBuffer(numChannels, samplesPerChannel, sampleRate);
+					if (numChannels === 1) {
+						audioBuffer.getChannelData(0).set(float32);
+					} else {
+						for (let ch = 0; ch < numChannels; ch++) {
+							const chData = audioBuffer.getChannelData(ch);
+							for (let i = 0; i < samplesPerChannel; i++) chData[i] = float32[i * numChannels + ch];
+						}
+					}
 
-				const src = audioContext.createBufferSource();
-				src.buffer = audioBuffer;
-				src.connect(analyser);
-				this.currentSource = src;
-				sources.push(src);
-				src.start(nextPlayTime);
-				lastSourceNode = src;
-				lastSourceEndTime = nextPlayTime + audioBuffer.duration;
-				nextPlayTime = lastSourceEndTime;
+					// Schedule chunk.
+					if (firstChunk) {
+						nextPlayTime = audioContext.currentTime + SCHEDULE_AHEAD_S;
+						firstChunk = false;
+					}
+
+					const src = audioContext.createBufferSource();
+					src.buffer = audioBuffer;
+					src.connect(analyser);
+					this.currentSource = src;
+					sources.push(src);
+					src.start(nextPlayTime);
+					lastSourceNode = src;
+					lastSourceEndTime = nextPlayTime + audioBuffer.duration;
+					nextPlayTime = lastSourceEndTime;
+				}
+			} catch (err) {
+				if ((err as Error).name !== 'AbortError' && !signal.aborted) {
+					console.error('[VoiceOrchestrator] playAllAsOneStream error:', err);
+				}
+			} finally {
+				signal.removeEventListener('abort', abortHandler);
 			}
-		} catch (err) {
-			if ((err as Error).name !== 'AbortError' && !signal.aborted) {
-				console.error('[VoiceOrchestrator] playAllAsOneStream error:', err);
+
+			if (signal.aborted || !lastSourceNode) return;
+
+			// Wait until all scheduled audio has finished playing.
+			const remainingMs = (lastSourceEndTime - audioContext.currentTime) * 1000;
+			if (remainingMs > 0) {
+				await new Promise<void>((resolve) => {
+					const id = setTimeout(resolve, remainingMs + 150);
+					signal.addEventListener('abort', () => { clearTimeout(id); resolve(); }, { once: true });
+				});
 			}
 		} finally {
-			signal.removeEventListener('abort', abortHandler);
-		}
-
-		if (signal.aborted || !lastSourceNode) return;
-
-		// Wait until all scheduled audio has finished playing.
-		const remainingMs = (lastSourceEndTime - audioContext.currentTime) * 1000;
-		if (remainingMs > 0) {
-			await new Promise<void>((resolve) => {
-				const id = setTimeout(resolve, remainingMs + 150);
-				signal.addEventListener('abort', () => { clearTimeout(id); resolve(); }, { once: true });
-			});
+			analyser.disconnect();
 		}
 	}
 }
