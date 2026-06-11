@@ -60,7 +60,7 @@
 	import { splitIntoSegments, stripAllTags, stripForApiContext, isContinueRequest } from '$lib/utils/sentences';
 	import { reminderStore } from '$lib/stores/reminders.svelte';
 	import { tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
-	import { extractImageSearchTags } from '$lib/utils/image-search';
+	import { extractImageSearchTags, tryExtractImageSearchFromUserMessage } from '$lib/utils/image-search';
 	import { imageSearchStore } from '$lib/stores/image-search.svelte';
 	import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
 	import type { ProviderConfig } from '$lib/types';
@@ -560,6 +560,29 @@
 				console.log('[Reminder] Direct fallback saved:', directReminder.content, 'for', directReminder.triggerAt.toLocaleTimeString());
 			} catch (e) {
 				console.error('[Reminder] Direct fallback failed:', e);
+			}
+		}
+
+		// Client-side fallback: parse natural-language image search requests directly
+		const imageQuery = tryExtractImageSearchFromUserMessage(content);
+		if (imageQuery) {
+			const searxUrl = settingsStore.getSearxUrl();
+			if (searxUrl) {
+				try {
+					imageSearchStore.setLoading(true);
+					const res = await fetch(`/api/search/images?q=${encodeURIComponent(imageQuery)}&searxUrl=${encodeURIComponent(searxUrl)}`);
+					const data = await res.json();
+					if (res.ok && data.results?.length > 0) {
+						imageSearchStore.openModal(data.results, imageQuery);
+						chatStore.addSystemMessage('Found images for "' + imageQuery + '": ' + data.results.map((r: { url: string }) => r.url).join(', '));
+					} else if (data.error) {
+						console.warn('[ImageSearch] Search failed:', data.error);
+					}
+				} catch (e) {
+					console.warn('[ImageSearch] Fetch error:', e);
+				} finally {
+					imageSearchStore.setLoading(false);
+				}
 			}
 		}
 

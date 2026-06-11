@@ -69,3 +69,32 @@ function extractHostname(url: string): string {
 		return 'unknown'
 	}
 }
+
+// ── Client-side fallback: parse natural-language image search requests ─────
+// When the LLM refuses to use [search_image:...] tags, we detect the user's
+// intent directly from their message and perform the search anyway.
+
+const IMAGE_SEARCH_PATTERNS = [
+	// German
+	/(?:zeig|zeige|zeig\s+mir|zeige\s+mir|ich\s+will|ich\s+möchte)\s+(?:bitte\s+)?(?:gerne\s+)?(?:ein\s+)?(?:paar\s+)?(?:bilder?|fotos?|bilder|fotos)\s+(?:von|von\s+der|von\s+dem|von\s+einer|von\s+einem)?\s+(.+?)(?:\.|$)/i,
+	/(?:zeig|zeige)\s+(?:mir\s+)?(?:bilder?|fotos?)\s+(?:von|von\s+der|von\s+dem)?\s+(.+?)(?:\.|$)/i,
+	/(?:suche|finde)\s+(?:mir\s+)?(?:bilder?|fotos?)\s+(?:von|von\s+der|von\s+dem)?\s+(.+?)(?:\.|$)/i,
+	/(?:zeig|zeige)\s+(?:mir\s+)?(?:was|etwas)\s+(?:von\s+)?(.+?)(?:\.|$)/i,
+	// English
+	/(?:show|show\s+me|display)\s+(?:me\s+)?(?:some\s+)?(?:images?|pictures?|photos?)\s+(?:of|from|about)?\s+(.+?)(?:\.|$)/i,
+	/(?:search|find)\s+(?:for\s+)?(?:images?|pictures?|photos?)\s+(?:of|from|about)?\s+(.+?)(?:\.|$)/i,
+	/(?:show|show\s+me)\s+(?:me\s+)?(?:something\s+)?(?:about|of|from)?\s+(.+?)(?:\.|$)/i
+]
+
+export function tryExtractImageSearchFromUserMessage(text: string): string | null {
+	for (const pattern of IMAGE_SEARCH_PATTERNS) {
+		const match = text.match(pattern)
+		if (match && match[1]) {
+			const query = match[1].trim()
+			if (query.length > 1) {
+				return query
+			}
+		}
+	}
+	return null
+}
