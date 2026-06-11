@@ -740,6 +740,10 @@ To search for images, embed this exact tag directly in your response text:
   [search_image:beautiful mountain landscape]
 The tag will be hidden from the user. Images will appear in a popup window.
 Use this proactively when the user asks to see pictures, images, photos, or visual references.
+
+CLOSE IMAGES — when you want to close the image popup, embed this tag:
+  [close_images]
+The tag will be hidden from the user and the popup will close immediately.
 </image_search>`;
 }
 

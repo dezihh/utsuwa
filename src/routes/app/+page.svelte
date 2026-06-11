@@ -2,7 +2,7 @@
 	import VrmScene from '$lib/components/vrm/VrmScene.svelte';
 	import CompanionStatus from '$lib/components/ui/CompanionStatus.svelte';
 	import FloatingStatIndicators from '$lib/components/ui/FloatingStatIndicators.svelte';
-	import { TopRightButtons, TopLeftButtons, InfoModal } from '$lib/components/ui';
+	import { TopRightButtons, TopLeftButtons, InfoModal, ImageSearchModal } from '$lib/components/ui';
 	import BottomChatBar from '$lib/components/chat/BottomChatBar.svelte';
 	import SpeechBubble from '$lib/components/chat/SpeechBubble.svelte';
 	import ChatSidebar from '$lib/components/chat/ChatSidebar.svelte';
@@ -60,6 +60,8 @@
 	import { splitIntoSegments, stripAllTags, stripForApiContext, isContinueRequest } from '$lib/utils/sentences';
 	import { reminderStore } from '$lib/stores/reminders.svelte';
 	import { tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
+	import { extractImageSearchTags } from '$lib/utils/image-search';
+	import { imageSearchStore } from '$lib/stores/image-search.svelte';
 	import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
 	import type { ProviderConfig } from '$lib/types';
 
@@ -278,8 +280,33 @@
 		const baselineUpdates = calculateBaselineUpdates(userMessage, state);
 
 		const parsed = parseResponse(companionResponse);
-		const dialogue = parsed.dialogue;
+		const { queries: imageQueries, cleanedText } = extractImageSearchTags(parsed.dialogue);
+		let dialogue = cleanedText;
 		const llmUpdates = parsed.stateUpdates;
+
+		// Image search extraction
+		if (imageQueries.length > 0) {
+			const searxUrl = settingsStore.getSearxUrl();
+			if (searxUrl) {
+				for (const query of imageQueries) {
+					try {
+						imageSearchStore.setLoading(true);
+						const res = await fetch(`/api/search/images?q=${encodeURIComponent(query)}&searxUrl=${encodeURIComponent(searxUrl)}`);
+						const data = await res.json();
+						if (res.ok && data.results?.length > 0) {
+							imageSearchStore.openModal(data.results, query);
+							chatStore.addSystemMessage('Found images for "' + query + '": ' + data.results.map((r: { url: string }) => r.url).join(', '));
+						} else if (data.error) {
+							console.warn('[ImageSearch] Search failed:', data.error);
+						}
+					} catch (e) {
+						console.warn('[ImageSearch] Fetch error:', e);
+					} finally {
+						imageSearchStore.setLoading(false);
+					}
+				}
+			}
+		}
 
 		let validatedLLMUpdates = null;
 		if (llmUpdates) {
@@ -479,7 +506,8 @@
 			continueFromText: options?.continueFromText,
 			availableExpressions: vrmStore.availableExpressions,
 			availableActions: vrmStore.llmActions,
-			emotionMappings
+			emotionMappings,
+			searxUrl: settingsStore.getSearxUrl() || undefined
 		};
 
 		const systemPrompt = buildSystemPrompt(context);
@@ -1015,6 +1043,9 @@
 			showOnboarding = false;
 		}} />
 	{/if}
+
+	<!-- Image Search Modal -->
+	<ImageSearchModal />
 </div>
 
 <style>

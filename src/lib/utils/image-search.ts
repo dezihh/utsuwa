@@ -5,20 +5,35 @@ export interface ImageSearchResult {
 	source: string
 }
 
-export function extractImageSearchTags(text: string): { queries: string[]; cleanedText: string } {
-	const regex = /\[search_image:([^\]]+)\]/gi
+export interface ParsedImageSearch {
+	queries: string[]
+	shouldClose: boolean
+	cleanedText: string
+}
+
+export function extractImageSearchTags(text: string): ParsedImageSearch {
+	const searchRegex = /\[search_image:([^\]]+)\]/gi
+	const closeRegex = /\[close_images\]/gi
+
 	const queries: string[] = []
 	let match: RegExpExecArray | null
 
-	while ((match = regex.exec(text)) !== null) {
+	while ((match = searchRegex.exec(text)) !== null) {
 		const query = match[1].trim()
 		if (query) {
 			queries.push(query)
 		}
 	}
 
-	const cleanedText = text.replace(regex, '').trim()
-	return { queries, cleanedText }
+	const shouldClose = closeRegex.test(text)
+
+	// Strip both tag types from text
+	const cleanedText = text
+		.replace(searchRegex, '')
+		.replace(closeRegex, '')
+		.trim()
+
+	return { queries, shouldClose, cleanedText }
 }
 
 export async function searchImages(query: string, searxUrl: string): Promise<ImageSearchResult[]> {
