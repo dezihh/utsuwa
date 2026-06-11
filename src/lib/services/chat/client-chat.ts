@@ -5,6 +5,7 @@ import {
 	isLocalLLMProvider
 } from '$lib/services/providers/local-endpoints';
 import { normalizeChatBaseURL } from './base-url';
+import { PROVIDER_BASE_URLS } from '$lib/services/providers/base-urls';
 
 interface ChatMessage {
 	role: 'system' | 'user' | 'assistant';
@@ -19,18 +20,6 @@ interface ChatOptions {
 	baseURL?: string;
 	systemPrompt: string;
 }
-
-// Provider base URLs (mirrors server route)
-const PROVIDER_BASE_URLS: Partial<Record<LLMProvider, string>> = {
-	openai: 'https://api.openai.com/v1/',
-	anthropic: 'https://api.anthropic.com/v1/',
-	google: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-	deepseek: 'https://api.deepseek.com/',
-	xai: 'https://api.x.ai/v1/',
-	ollama: 'http://localhost:11434/v1/',
-	lmstudio: 'http://localhost:1234/v1/',
-	llamacpp: 'http://localhost:8080/v1/'
-};
 
 function getCurrentSiteOrigin(): string | undefined {
 	return typeof window !== 'undefined' ? window.location.origin : undefined;

@@ -1,26 +1,9 @@
 import { streamText } from '@xsai/stream-text';
 import type { RequestHandler } from './$types';
 import type { LLMProvider } from '$lib/types';
-import { getChatBaseUrl } from '$lib/services/providers/local-endpoints';
+import { getChatBaseUrl, isLocalLLMProvider } from '$lib/services/providers/local-endpoints';
 import { normalizeChatBaseURL } from '$lib/services/chat/base-url';
-
-// Provider base URLs
-const PROVIDER_BASE_URLS: Partial<Record<LLMProvider, string>> = {
-	// Cloud
-	openai: 'https://api.openai.com/v1/',
-	anthropic: 'https://api.anthropic.com/v1/',
-	google: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-	deepseek: 'https://api.deepseek.com/',
-	xai: 'https://api.x.ai/v1/',
-	openrouter: 'https://openrouter.ai/api/v1/',
-	// Local
-	ollama: 'http://localhost:11434/v1/',
-	lmstudio: 'http://localhost:1234/v1/',
-	llamacpp: 'http://localhost:11435/v1/',
-};
-
-// Providers that don't require API keys
-const LOCAL_PROVIDERS: LLMProvider[] = ['ollama', 'lmstudio', 'llamacpp'];
+import { PROVIDER_BASE_URLS } from '$lib/services/providers/base-urls';
 
 async function streamOpenAICompatibleChat(
 	url: string,
@@ -117,7 +100,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const typedProvider = provider as LLMProvider;
 
 	// Local providers don't require API keys
-	const isLocalProvider = LOCAL_PROVIDERS.includes(typedProvider);
+	const isLocalProvider = isLocalLLMProvider(typedProvider);
 	if (!apiKey && !isLocalProvider) {
 		return new Response(JSON.stringify({ error: 'API key required' }), {
 			status: 400,
