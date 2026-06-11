@@ -565,6 +565,7 @@
 
 		// Client-side fallback: parse natural-language image search requests directly
 		const imageQuery = tryExtractImageSearchFromUserMessage(content);
+		console.log('[ImageSearch] Fallback check:', content, '→ query:', imageQuery);
 		if (imageQuery) {
 			const searxUrl = settingsStore.getSearxUrl();
 			if (searxUrl) {
