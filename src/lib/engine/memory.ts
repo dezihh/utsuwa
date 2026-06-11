@@ -223,8 +223,11 @@ export const memoryApi = {
 	},
 
 	// Get sessions from IndexedDB
-	async getSessions(limit: number = 10): Promise<SessionSummary[]> {
-		return memoryStorage.getSessions({ limit, characterId: 'default' });
+	async getSessions(
+		limit: number = 10,
+		characterId: string = 'default'
+	): Promise<SessionSummary[]> {
+		return memoryStorage.getSessions({ limit, characterId });
 	},
 
 	// Search facts by keywords
@@ -374,6 +377,7 @@ export async function retrieveRelevantContext(userMessage: string): Promise<Rele
 	// Get relevant sessions via semantic search (max 3)
 	let recentSessions: SessionSummary[] = [];
 	try {
+		// TODO: pass dynamic characterId when multi-character support is added
 		const allSessions = await memoryStorage.getSessions({
 			characterId: 'default',
 			ended: true,
@@ -409,6 +413,7 @@ export async function retrieveRelevantContext(userMessage: string): Promise<Rele
 	let factLibraryEntries: import('$lib/types/memory').FactLibraryEntry[] = [];
 	try {
 		const keywords = userMessage.split(/\s+/).filter((w) => w.length > 3);
+		// TODO: pass dynamic characterId when multi-character support is added
 		const entries = await memoryStorage.getFactLibraryEntries({
 			characterId: 'default',
 			limit: 15,
