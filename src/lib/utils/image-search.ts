@@ -1,0 +1,56 @@
+export interface ImageSearchResult {
+	title: string
+	url: string
+	thumbnail: string
+	source: string
+}
+
+export function extractImageSearchTags(text: string): { queries: string[]; cleanedText: string } {
+	const regex = /\[search_image:([^\]]+)\]/gi
+	const queries: string[] = []
+	let match: RegExpExecArray | null
+
+	while ((match = regex.exec(text)) !== null) {
+		const query = match[1].trim()
+		if (query) {
+			queries.push(query)
+		}
+	}
+
+	const cleanedText = text.replace(regex, '').trim()
+	return { queries, cleanedText }
+}
+
+export async function searchImages(query: string, searxUrl: string): Promise<ImageSearchResult[]> {
+	const url = `${searxUrl.replace(/\/+$/, '')}/search?format=json&category_images=1&q=${encodeURIComponent(query)}`
+	const response = await fetch(url)
+	if (!response.ok) {
+		throw new Error(`SearxNG error: ${response.status} ${response.statusText}`)
+	}
+	const data = (await response.json()) as {
+		results?: Array<{
+			title?: string
+			url?: string
+			img_src?: string
+			source?: string
+		}>
+	}
+	const results = (data.results || [])
+		.filter((r) => r.img_src || r.url)
+		.slice(0, 12)
+		.map((r) => ({
+			title: r.title || 'Untitled',
+			url: r.url || r.img_src || '',
+			thumbnail: r.img_src || r.url || '',
+			source: r.source || extractHostname(r.url || r.img_src || '')
+		}))
+	return results
+}
+
+function extractHostname(url: string): string {
+	try {
+		return new URL(url).hostname
+	} catch {
+		return 'unknown'
+	}
+}

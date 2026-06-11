@@ -57,6 +57,9 @@ function createSettingsStore() {
 	let personalityProfiles = $state<PersonalityPreset[]>([...DEFAULT_PERSONALITY_PRESETS]);
 	let activeProfileId = $state<string>('standard');
 
+	// Web search settings
+	let searxUrl = $state<string>('');
+
 	// Load from localStorage on init
 	if (browser) {
 		const saved = localStorage.getItem('utsuwa-settings');
@@ -70,6 +73,7 @@ function createSettingsStore() {
 					personalityProfiles = parsed.personalityProfiles;
 				}
 				if (parsed.activeProfileId) activeProfileId = parsed.activeProfileId;
+				if (parsed.searxUrl !== undefined) searxUrl = parsed.searxUrl;
 
 				// Migrate old settings format if needed
 				if (parsed.anthropicApiKey && !providerConfigs.anthropic) {
@@ -110,7 +114,8 @@ function createSettingsStore() {
 					addedProviders,
 					hotkeys,
 					personalityProfiles,
-					activeProfileId
+					activeProfileId,
+					searxUrl
 				})
 			);
 		}
@@ -127,6 +132,7 @@ function createSettingsStore() {
 					hotkeys = { ...DEFAULT_HOTKEYS, ...parsed.hotkeys };
 					if (Array.isArray(parsed.personalityProfiles)) personalityProfiles = parsed.personalityProfiles;
 					if (parsed.activeProfileId) activeProfileId = parsed.activeProfileId;
+					if (parsed.searxUrl !== undefined) searxUrl = parsed.searxUrl;
 				} catch {
 					// Ignore malformed data from other window
 				}
@@ -331,6 +337,15 @@ function createSettingsStore() {
 		save();
 	}
 
+	function getSearxUrl(): string {
+		return searxUrl;
+	}
+
+	function setSearxUrl(url: string) {
+		searxUrl = url;
+		save();
+	}
+
 	return {
 		// Provider configs
 		get providerConfigs() {
@@ -389,7 +404,11 @@ function createSettingsStore() {
 		setActiveProfileId,
 		updatePersonalityProfile,
 		addPersonalityProfile,
-		removePersonalityProfile
+		removePersonalityProfile,
+
+		// Web search
+		getSearxUrl,
+		setSearxUrl
 	};
 }
 

@@ -34,6 +34,8 @@ export interface PromptContext {
 	emotionMappings?: Record<string, string>;
 	/** Pending reminders for the current session */
 	pendingReminders?: Array<{ triggerAt: Date; content: string }>;
+	/** When set, injects image search tag instructions */
+	searxUrl?: string;
 }
 
 // Build the complete system prompt
@@ -43,6 +45,7 @@ export function buildSystemPrompt(context: PromptContext): string {
 		return buildCompanionModePrompt(context);
 	}
 	const reminderLayer = buildReminderLayer(context);
+	const imageSearchLayer = buildImageSearchLayer(context);
 
 	const layers = [
 		buildSystemLayer(context),
@@ -54,6 +57,7 @@ export function buildSystemPrompt(context: PromptContext): string {
 	];
 
 	if (reminderLayer) layers.splice(1, 0, reminderLayer);
+	if (imageSearchLayer) layers.push(imageSearchLayer);
 
 	const voiceTags = buildVoiceTagLayer(context);
 	if (voiceTags) layers.push(voiceTags);
@@ -168,6 +172,9 @@ NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affecti
 
 	const reminderLayer = buildReminderLayer(ctx);
 	if (reminderLayer) parts.push(reminderLayer);
+
+	const imageSearchLayer = buildImageSearchLayer(ctx);
+	if (imageSearchLayer) parts.push(imageSearchLayer);
 
 	const voiceTags = buildVoiceTagLayer(ctx);
 	if (voiceTags) parts.push(voiceTags);
@@ -721,6 +728,19 @@ function buildReminderLayer(ctx: PromptContext): string | null {
 	}
 
 	return `<reminders>\n${parts.join('\n\n')}\n</reminders>`;
+}
+
+function buildImageSearchLayer(ctx: PromptContext): string | null {
+	if (!ctx.searxUrl) return null;
+
+	return `<image_search>
+IMAGE SEARCH TAG — use this when the user wants to see images of something.
+To search for images, embed this exact tag directly in your response text:
+  [search_image:cute cats]
+  [search_image:beautiful mountain landscape]
+The tag will be hidden from the user. Images will appear in a popup window.
+Use this proactively when the user asks to see pictures, images, photos, or visual references.
+</image_search>`;
 }
 
 // Helper functions for descriptions
