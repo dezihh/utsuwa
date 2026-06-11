@@ -141,12 +141,13 @@ export function analyzeMessage(content: string): MessageAnalysis {
 		if (NEGATIVE_KEYWORDS.some((kw) => word.includes(kw))) negativeCount++;
 	}
 
-	// Also check for emoticons/emoji in full content
+	// Also check for emoticons/emoji in full content (non-word characters only,
+	// so regular keywords aren't counted twice)
 	for (const kw of POSITIVE_KEYWORDS) {
-		if (lowerContent.includes(kw)) positiveCount++;
+		if (/[^a-z0-9]/.test(kw) && lowerContent.includes(kw)) positiveCount++;
 	}
 	for (const kw of NEGATIVE_KEYWORDS) {
-		if (lowerContent.includes(kw)) negativeCount++;
+		if (/[^a-z0-9]/.test(kw) && lowerContent.includes(kw)) negativeCount++;
 	}
 
 	const totalSentiment = positiveCount + negativeCount;
