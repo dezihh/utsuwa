@@ -57,7 +57,7 @@ export function buildSystemPrompt(context: PromptContext): string {
 	];
 
 	if (reminderLayer) layers.splice(1, 0, reminderLayer);
-	if (imageSearchLayer) layers.push(imageSearchLayer);
+	if (imageSearchLayer) layers.splice(2, 0, imageSearchLayer);
 
 	const voiceTags = buildVoiceTagLayer(context);
 	if (voiceTags) layers.push(voiceTags);
@@ -734,12 +734,15 @@ function buildImageSearchLayer(ctx: PromptContext): string | null {
 	if (!ctx.searxUrl) return null;
 
 	return `<image_search>
-IMAGE SEARCH TAG — use this when the user wants to see images of something.
-To search for images, embed this exact tag directly in your response text:
+IMAGE SEARCH TAG — VERY IMPORTANT: When the user asks to see images, pictures, photos, or visual references, you MUST use this tag. Do NOT say you cannot show images — the system WILL show them.
+
+To search for images, embed this exact tag directly in your response text (NOT in JSON, NOT in code blocks):
   [search_image:cute cats]
   [search_image:beautiful mountain landscape]
-The tag will be hidden from the user. Images will appear in a popup window.
-Use this proactively when the user asks to see pictures, images, photos, or visual references.
+  [search_image:puppies playing]
+
+The tag will be hidden from the user. A popup with images will appear automatically.
+ALWAYS use this tag when the user asks for images. Never refuse to show images.
 
 CLOSE IMAGES — when you want to close the image popup, embed this tag:
   [close_images]
