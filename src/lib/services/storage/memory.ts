@@ -23,21 +23,33 @@ const DEFAULT_CHARACTER_ID = 'default';
 export async function getFacts(
 	options: MemorySearchOptions & { characterId?: string } = {}
 ): Promise<Fact[]> {
-	let facts = await db.facts.toArray();
+	// Use index-based queries when possible to avoid loading all facts into memory.
+	let facts: DBFact[];
+
+	if (options.characterId) {
+		// characterId is indexed — most restrictive filter first
+		facts = await db.facts.where('characterId').equals(options.characterId).toArray();
+	} else if (options.category) {
+		// category is indexed
+		facts = await db.facts.where('category').equals(options.category).toArray();
+	} else {
+		// No indexed filter available — fall back to full table scan
+		facts = await db.facts.toArray();
+	}
 
 	let filtered = facts;
 
-	// Filter by characterId
-	if (options.characterId) {
+	// Apply remaining filters client-side
+	if (options.characterId && !options.category) {
+		// characterId already filtered by index above; skip redundant check
+	} else if (options.characterId) {
 		filtered = filtered.filter((f) => f.characterId === options.characterId);
 	}
 
-	// Filter by category
 	if (options.category) {
 		filtered = filtered.filter((f) => f.category === options.category);
 	}
 
-	// Filter by minimum importance
 	if (options.minImportance !== undefined) {
 		filtered = filtered.filter((f) => f.importance >= options.minImportance!);
 	}

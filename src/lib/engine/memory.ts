@@ -77,9 +77,23 @@ export function clearWorkingMemory(): void {
 export async function hydrateWorkingMemory(): Promise<void> {
 	if (workingMemory.turns.length > 0) return;
 
-	const recentTurns = await memoryStorage.getConversationTurns({ limit: 20 });
-	workingMemory.turns = recentTurns;
-	workingMemory.messageCount = recentTurns.length;
+	// Find the most recent open session (not ended)
+	const openSessions = await memoryStorage.getSessions({ ended: false, limit: 1 });
+	const currentSession = openSessions[0];
+
+	if (currentSession) {
+		// Only load turns belonging to the current open session
+		const recentTurns = await memoryStorage.getConversationTurns({
+			sessionId: currentSession.id,
+			limit: 20
+		});
+		workingMemory.turns = recentTurns;
+		workingMemory.messageCount = recentTurns.length;
+	} else {
+		// No open session — start fresh
+		workingMemory.turns = [];
+		workingMemory.messageCount = 0;
+	}
 }
 
 // Analyze sessions for personality evolution suggestions
@@ -463,10 +477,40 @@ function extractTriggerWords(message: string): string[] {
 	}
 
 	// Name extraction (might trigger facts about the user)
+	// Exclude common sentence-start words to avoid false positives like "What", "The"
+	const COMMON_WORDS = new Set([
+		'The','This','That','These','Those','There','They','Then','Than',
+		'What','When','Where','Why','How','Who','Whose','Which',
+		'You','Your','Yours','We','Our','Us','I','My','Me','Mine',
+		'He','His','Him','She','Her','Hers','It','Its','They','Their','Them',
+		'A','An','And','As','At','Are','Am','Is','Was','Were','Be','Been','Being',
+		'Have','Has','Had','Do','Does','Did','Will','Would','Could','Should',
+		'May','Might','Must','Can','Shall','Need','Dare','Ought','Used',
+		'If','In','Into','On','Of','Or','For','From','By','With','Without',
+		'About','Above','Across','After','Against','Along','Among','Around',
+		'Before','Behind','Below','Beneath','Beside','Between','Beyond',
+		'Down','During','Except','Inside','Outside','Over','Through','To','Toward',
+		'Under','Until','Up','Upon','Within','Not','No','Now','Nor','But','So','Yet',
+		'Yes','Just','Only','Also','Too','Very','Really','Actually','Probably',
+		'Please','Thanks','Thank','Sorry','Hello','Hi','Hey','Goodbye','Bye',
+		'Here','Today','Yesterday','Tomorrow','Always','Sometimes','Never',
+		'Often','Usually','Already','Still','Even','Ever','Once','Twice',
+		'Some','Any','All','None','Many','Much','More','Most','Less','Least',
+		'Few','Several','Both','Either','Neither','Each','Every','Other','Another',
+		'Such','Same','Different','Own','Same','Last','First','Next','Previous',
+		'New','Old','Young','Big','Small','Long','Short','High','Low','Good','Bad',
+		'Great','Little','Large','Early','Late','Right','Wrong','True','False',
+		'Possible','Impossible','Available','Certain','Sure','Likely','Unlikely',
+		'Happy','Glad','Sad','Sorry','Nice','Fine','Okay','Ok','Well','Better',
+		'Best','Worse','Worst','Pretty','Quite','Rather','Fairly','Almost',
+		'Definitely','Absolutely','Certainly','Exactly','Perhaps','Maybe'
+	]);
 	const namePattern = /\b([A-Z][a-z]+)\b/g;
 	let nameMatch;
 	while ((nameMatch = namePattern.exec(message)) !== null) {
-		triggers.push(nameMatch[1]);
+		if (!COMMON_WORDS.has(nameMatch[1])) {
+			triggers.push(nameMatch[1]);
+		}
 	}
 
 	return triggers.filter((t) => t.length > 2);
