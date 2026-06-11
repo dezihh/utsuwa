@@ -10,7 +10,7 @@ import type {
 	RelationshipStage,
 	PersonalityProfile
 } from '$lib/types/character';
-import type { Fact, SessionSummary, ConversationTurn } from '$lib/types/memory';
+import type { Fact, SessionSummary, ConversationTurn, FactLibraryEntry } from '$lib/types/memory';
 import type { CompletedEventRecord } from '$lib/types/events';
 
 export const SAVE_FILE_VERSION = '3.2';
@@ -66,6 +66,8 @@ export interface SaveFile {
 		sessions: SessionSummary[];
 		conversationTurns: ConversationTurn[];
 		completedEvents: CompletedEventRecord[];
+		/** v3.2+: structured fact library entries */
+		factLibraryEntries?: FactLibraryEntry[];
 		/** v3+: settings, module configs, VRM models */
 		settings?: ExportedSettings;
 	};
@@ -96,6 +98,7 @@ export interface SaveFilePreview {
 		sessions: number;
 		conversationTurns: number;
 		completedEvents: number;
+		factLibraryEntries?: number;
 		vrmModels?: number;
 		expressionProfiles?: number;
 	};
@@ -104,15 +107,15 @@ export interface SaveFilePreview {
 }
 
 export async function exportSave(): Promise<SaveFile> {
-	const [characterStates, facts, sessions, conversationTurns, completedEvents] = await Promise.all(
-		[
+	const [characterStates, facts, sessions, conversationTurns, completedEvents, factLibraryEntries] =
+		await Promise.all([
 			db.characterStates.toArray(),
 			db.facts.toArray(),
 			db.sessions.toArray(),
 			db.conversationTurns.toArray(),
-			db.completedEvents.toArray()
-		]
-	);
+			db.completedEvents.toArray(),
+			db.factLibrary.toArray()
+		]);
 
 	// Get the single character state (or use current store state)
 	const characterState = characterStates[0] || $state.snapshot(characterStore.state);
@@ -125,6 +128,9 @@ export async function exportSave(): Promise<SaveFile> {
 	const cleanEvents = completedEvents.map(
 		({ id: _id, ...rest }) => rest
 	) as CompletedEventRecord[];
+	const cleanFactLibrary = factLibraryEntries.map(
+		({ id: _id, embedding: _embedding, ...rest }) => rest
+	) as FactLibraryEntry[];
 
 	// Collect settings from localStorage and localforage
 	const settings = await collectSettings();
@@ -139,6 +145,7 @@ export async function exportSave(): Promise<SaveFile> {
 			sessions: cleanSessions,
 			conversationTurns: cleanTurns,
 			completedEvents: cleanEvents,
+			factLibraryEntries: cleanFactLibrary,
 			settings
 		}
 	};
@@ -261,7 +268,8 @@ export async function importSave(
 			db.facts.clear(),
 			db.sessions.clear(),
 			db.conversationTurns.clear(),
-			db.completedEvents.clear()
+			db.completedEvents.clear(),
+			db.factLibrary.clear()
 		]);
 	}
 
@@ -316,6 +324,15 @@ export async function importSave(
 		for (const event of v2File.data.completedEvents) {
 			await db.completedEvents.add(event);
 			imported++;
+		}
+
+		// Import fact library entries (v3.2+, gracefully skip if missing in older saves)
+		const factLibraryEntries = (v2File.data as SaveFile['data']).factLibraryEntries;
+		if (factLibraryEntries) {
+			for (const entry of factLibraryEntries) {
+				await db.factLibrary.add(entry);
+				imported++;
+			}
 		}
 
 		// V3+: restore settings
@@ -597,6 +614,7 @@ export function getSaveFilePreview(saveFile: SaveFile | LegacySaveFile): SaveFil
 			sessions: saveFile.data.sessions?.length ?? 0,
 			conversationTurns: saveFile.data.conversationTurns?.length ?? 0,
 			completedEvents: saveFile.data.completedEvents?.length ?? 0,
+			factLibraryEntries: (saveFile as SaveFile).data.factLibraryEntries?.length,
 			vrmModels: v3Settings?.vrmModels.length,
 			expressionProfiles: v3Settings ? Object.keys(v3Settings.expressionProfilesByModel ?? {}).length : undefined
 		},
@@ -627,7 +645,8 @@ export async function clearAllData(): Promise<void> {
 		db.facts.clear(),
 		db.sessions.clear(),
 		db.conversationTurns.clear(),
-		db.completedEvents.clear()
+		db.completedEvents.clear(),
+		db.factLibrary.clear()
 	]);
 
 	// Clear settings from localStorage
