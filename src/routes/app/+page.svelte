@@ -471,6 +471,7 @@
 
 	// Handle send message
 	async function handleSend(content: string) {
+		console.log('[DEBUG] handleSend called with:', content);
 		if (!content.trim() || chatStore.isLoading) return;
 
 		if (!modulesStore.isModuleEnabled('consciousness')) {
@@ -497,7 +498,9 @@
 
 		// Client-side fallback: parse natural-language reminder requests directly
 		const wm = getWorkingMemory();
+		console.log('[DEBUG] sessionId:', wm.currentSessionId, 'content:', content);
 		const directReminder = tryExtractReminderFromUserMessage(content);
+		console.log('[DEBUG] directReminder:', directReminder);
 		if (directReminder && wm.currentSessionId) {
 			try {
 				await reminderStore.addReminder(directReminder.content, directReminder.triggerAt, wm.currentSessionId);
