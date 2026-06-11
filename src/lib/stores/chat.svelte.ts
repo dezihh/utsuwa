@@ -1,6 +1,6 @@
 export interface Message {
 	id: string;
-	role: 'user' | 'assistant';
+	role: 'user' | 'assistant' | 'system';
 	content: string;
 	/** Original content with [lang:xx]/[voice:xxx] control tags kept — used as API context
 	 *  so the LLM sees its own tag usage and continues the pattern correctly. */
@@ -15,7 +15,7 @@ function createChatStore() {
 	let streamingContent = $state('');
 	let errorTimeout: ReturnType<typeof setTimeout> | null = null;
 
-	function addMessage(role: 'user' | 'assistant', content: string) {
+	function addMessage(role: 'user' | 'assistant' | 'system', content: string) {
 		const message: Message = {
 			id: crypto.randomUUID(),
 			role,
@@ -24,6 +24,10 @@ function createChatStore() {
 		};
 		messages = [...messages, message];
 		return message;
+	}
+
+	function addSystemMessage(content: string) {
+		return addMessage('system', content);
 	}
 
 	function updateLastMessage(content: string, apiContent?: string) {
@@ -82,6 +86,7 @@ function createChatStore() {
 			return streamingContent;
 		},
 		addMessage,
+		addSystemMessage,
 		updateLastMessage,
 		removeLastMessage,
 		setLoading,

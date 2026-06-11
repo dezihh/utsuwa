@@ -31,6 +31,8 @@ export interface PromptContext {
 	availableActions?: { id: string; description?: string }[];
 	/** Emotion-to-expression mappings active for the current model (tag → expressionName) */
 	emotionMappings?: Record<string, string>;
+	/** Pending reminders for the current session */
+	pendingReminders?: Array<{ triggerAt: Date; content: string }>;
 }
 
 // Build the complete system prompt
@@ -62,6 +64,9 @@ export function buildSystemPrompt(context: PromptContext): string {
 
 	const continueLayer = buildContinueLayer(context);
 	if (continueLayer) layers.push(continueLayer);
+
+	const reminderLayer = buildReminderLayer(context);
+	if (reminderLayer) layers.push(reminderLayer);
 
 	return layers.join('\n\n');
 }
@@ -170,6 +175,9 @@ NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affecti
 
 	const continueLayer = buildContinueLayer(ctx);
 	if (continueLayer) parts.push(continueLayer);
+
+	const reminderLayer = buildReminderLayer(ctx);
+	if (reminderLayer) parts.push(reminderLayer);
 
 	return parts.join('\n\n');
 }
@@ -644,6 +652,25 @@ CRITICAL RULES FOR CONTINUATION:
 Already written (do not repeat):
 "${ctx.continueFromText.slice(-500)}"
 </continue_mode>`;
+}
+
+function buildReminderLayer(ctx: PromptContext): string | null {
+	const reminders = ctx.pendingReminders;
+	const hasPending = reminders && reminders.length > 0;
+	const parts: string[] = [];
+
+	parts.push(
+		`You can schedule reminders for the user by including a tag like [reminder:5min]check the coffee[/reminder] anywhere in your response. Supported time formats: 30s, 5min, 10m, 1h, 2h30m. The tag will be hidden from the user.`
+	);
+
+	if (hasPending) {
+		const list = reminders!
+			.map((r) => `- "${r.content}" at ${r.triggerAt.toLocaleTimeString()}`)
+			.join('\n');
+		parts.push(`Pending reminders for this session:\n${list}`);
+	}
+
+	return `<reminders>\n${parts.join('\n\n')}\n</reminders>`;
 }
 
 // Helper functions for descriptions

@@ -42,6 +42,7 @@
 - **Scene Backgrounds**: 9 built-in presets (gradients, solid colors, studio grid) plus custom image upload (PNG/JPG/WEBP) and HDRI/EXR environment maps for realistic PBR lighting
 - **Data Export/Import**: Download your data as a save file, restore anytime
 - **Theming**: Light and dark mode support with system preference detection
+- **Scheduled Reminders**: The companion can set time-based reminders (e.g., "remind me in 5 minutes to check the coffee") using inline `[reminder:5min]...[/reminder]` tags. Reminders are stored locally per session, polled in the background, and when triggered they are injected into the chat so the LLM sees them and can respond. Upcoming reminders are shown in a bell dropdown in the chat header.
 - **Desktop App** *(beta, macOS only)*: Native desktop app with transparent overlay mode — your companion floats on your desktop
 
 ### Local-First Storage

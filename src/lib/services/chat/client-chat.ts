@@ -52,6 +52,12 @@ export async function streamChatDirect(
 		return;
 	}
 
+	const extraSystem = messages
+		.filter((m) => m.role === 'system')
+		.map((m) => m.content)
+		.join('\n\n');
+	const combinedSystem = extraSystem ? `${systemPrompt}\n\n${extraSystem}` : systemPrompt;
+
 	const messagesWithSystem: ChatMessage[] = [
 		{ role: 'system', content: systemPrompt },
 		...messages
@@ -80,7 +86,7 @@ export async function streamChatDirect(
 			? JSON.stringify({
 					model,
 					max_tokens: 4096,
-					system: systemPrompt,
+					system: combinedSystem,
 					messages: messages.filter((m) => m.role !== 'system'),
 					stream: true
 				})

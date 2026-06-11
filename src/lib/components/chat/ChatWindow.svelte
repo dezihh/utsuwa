@@ -14,6 +14,11 @@
 	import { isTauri } from '$lib/services/platform';
 	import type { TTSProvider } from '$lib/types';
 	import type { EventDefinition } from '$lib/types/events';
+	import { reminderStore } from '$lib/stores/reminders.svelte';
+	import { extractReminderTags } from '$lib/utils/reminders';
+	import { db } from '$lib/db';
+	import { getWorkingMemory } from '$lib/engine/memory';
+	import Dropdown from '$lib/components/ui/Dropdown.svelte';
 
 	// V2 companion system imports
 	import { buildSystemPrompt, type PromptContext } from '$lib/ai/prompt-builder';
@@ -53,6 +58,23 @@
 		})();
 	});
 
+	// Start reminder polling and set up fired callback
+	$effect(() => {
+		reminderStore.setOnReminderFired((reminder) => {
+			const msg = `[Reminder] It's time: ${reminder.content}`;
+			if (chatStore.isLoading) {
+				chatStore.addMessage('user', msg);
+			} else {
+				handleSend(msg);
+			}
+		});
+		reminderStore.startPolling();
+		return () => {
+			reminderStore.stopPolling();
+			reminderStore.setOnReminderFired(null);
+		};
+	});
+
 	// Process companion response with v2 system
 	async function processCompanionResponse(userMessage: string, companionResponse: string): Promise<string> {
 		const state = characterStore.state;
@@ -62,8 +84,21 @@
 
 		// 2. Parse companion response for LLM-suggested updates
 		const parsed = parseResponse(companionResponse);
-		const dialogue = parsed.dialogue;
+		const { reminders, cleanedText } = extractReminderTags(parsed.dialogue);
+		const dialogue = cleanedText;
 		const llmUpdates = parsed.stateUpdates;
+
+		// 2b. Schedule any extracted reminders
+		const sessionId = getWorkingMemory().currentSessionId;
+		if (sessionId) {
+			for (const r of reminders) {
+				try {
+					await reminderStore.addReminder(r.content, r.triggerAt, sessionId);
+				} catch (e) {
+					console.error('[Reminder] Failed to save reminder:', e);
+				}
+			}
+		}
 		if (parsed.parseError) {
 			console.debug('LLM JSON parse error (using heuristics only):', parsed.parseError);
 		}
@@ -170,6 +205,23 @@
 				)
 			: undefined;
 
+		// Fetch pending reminders for this session
+		const sessionId = getWorkingMemory().currentSessionId;
+		let pendingReminders: Array<{ triggerAt: Date; content: string }> = [];
+		if (sessionId) {
+			try {
+				pendingReminders = (await db.reminders
+					.where('sessionId')
+					.equals(sessionId)
+					.and((r) => !r.executed)
+					.toArray())
+					.sort((a, b) => a.triggerAt.getTime() - b.triggerAt.getTime())
+					.map((r) => ({ triggerAt: r.triggerAt, content: r.content }));
+			} catch {
+				// ignore reminder fetch errors
+			}
+		}
+
 		const context: PromptContext = {
 			persona,
 			state,
@@ -180,7 +232,8 @@
 			ttsLanguage: ttsConfig?.language || undefined,
 			availableExpressions: vrmStore.availableExpressions,
 			availableActions: vrmStore.llmActions,
-			emotionMappings
+			emotionMappings,
+			pendingReminders
 		};
 
 		return buildSystemPrompt(context);
@@ -238,7 +291,7 @@
 				await new Promise<void>((resolve, reject) => {
 					streamChatDirect(
 						{
-							messages: chatStore.messages.slice(0, -1).filter((m) => m.content).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+							messages: chatStore.messages.slice(0, -1).filter((m) => m.content).map((m) => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content })),
 							provider: provider as import('$lib/types').LLMProvider,
 							model: selectedModel,
 							apiKey: apiKey || undefined,
@@ -358,6 +411,24 @@
 	<header class="chat-header">
 		<h2>{personaStore.activeCard.name}</h2>
 		<div class="header-actions">
+			{#if reminderStore.upcoming.length > 0}
+				<Dropdown align="end" side="bottom" sideOffset={4}>
+					{#snippet trigger()}
+						<button class="btn btn-ghost icon-btn relative" title="Upcoming reminders">
+							<Icon name="bell" size={16} />
+							<span class="reminder-badge">{reminderStore.upcoming.length}</span>
+						</button>
+					{/snippet}
+					<div class="reminder-dropdown">
+						{#each reminderStore.upcoming as reminder (reminder.id)}
+							<div class="reminder-item">
+								<span class="reminder-content">{reminder.content}</span>
+								<span class="reminder-time">{reminder.triggerAt.toLocaleTimeString()}</span>
+							</div>
+						{/each}
+					</div>
+				</Dropdown>
+			{/if}
 			{#if chatStore.messages.length > 0}
 				<button class="btn btn-ghost icon-btn" onclick={handleClear} title="Clear messages">
 					<Icon name="trash" size={16} />
@@ -422,5 +493,54 @@
 		border-radius: 0.5rem;
 		color: var(--color-error);
 		font-size: 0.75rem;
+	}
+
+	.reminder-badge {
+		position: absolute;
+		top: -2px;
+		right: -2px;
+		min-width: 16px;
+		height: 16px;
+		padding: 0 4px;
+		background: var(--color-error);
+		color: white;
+		border-radius: 8px;
+		font-size: 0.625rem;
+		font-weight: 600;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.reminder-dropdown {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 0.5rem;
+		min-width: 12rem;
+	}
+
+	.reminder-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		padding: 0.375rem 0.5rem;
+		border-radius: 0.375rem;
+		background: var(--color-neutral-100);
+	}
+
+	:global(.dark) .reminder-item {
+		background: var(--color-neutral-800);
+	}
+
+	.reminder-content {
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--text-primary);
+	}
+
+	.reminder-time {
+		font-size: 0.6875rem;
+		color: var(--color-neutral-400);
 	}
 </style>
