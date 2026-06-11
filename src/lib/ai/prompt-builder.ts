@@ -695,16 +695,22 @@ function buildReminderLayer(ctx: PromptContext): string | null {
 	const parts: string[] = [];
 
 	parts.push(
-		`REMINDER TAG — use this proactively when the user asks you to remind them of something, or when you agree to follow up later.`
+		`REMINDER TAG — use this proactively in these situations:\n` +
+		`  1. The user asks you to remind them of something.\n` +
+		`  2. You want to follow up on something later.\n` +
+		`  3. You want to perform an action yourself after a delay (e.g., jump, wave, laugh, change topic).\n` +
+		`     In this case, put the action description inside the tag — the system will remind YOU when it's time.`
 	);
 
 	parts.push(
 		`To schedule a reminder, embed this exact tag format directly in your response text (not in JSON, not in code blocks):\n` +
 		`  [reminder:5min]check the coffee[/reminder]\n` +
 		`  [reminder:1h]call mom[/reminder]\n` +
-		`  [reminder:30s]look at the timer[/reminder]\n\n` +
+		`  [reminder:30s]jump enthusiastically[/reminder]\n` +
+		`  [reminder:2min]wave at the user[/reminder]\n\n` +
 		`Supported time formats: 30s, 5min, 10m, 1h, 2h30m.\n` +
-		`The tag will be hidden from the user — only you and the system see it.`
+		`The tag will be hidden from the user — only you and the system see it.\n` +
+		`When the reminder fires, you will receive a system message with the reminder text. React to it by performing the described action or saying something fitting.`
 	);
 
 	if (hasPending) {

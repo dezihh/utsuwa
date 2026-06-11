@@ -246,13 +246,21 @@
 	// Start reminder polling and handle fired reminders
 	$effect(() => {
 		reminderStore.setOnReminderFired((reminder) => {
-			const msg = `[Reminder] It's time: ${reminder.content}`;
-			console.log('[Reminder] Fired callback:', msg);
+			const msg = `⏰ REMINDER TRIGGERED: "${reminder.content}" — This is your reminder. React to it NOW by performing the described action or saying something enthusiastic and fitting.`;
+			console.log('[Reminder] Fired:', reminder.content);
 			if (chatStore.isLoading) {
-				chatStore.addSystemMessage(msg);
-				console.log('[Reminder] Queued as system message (chat is loading)');
+				// Wait for the current LLM response to finish, then send the reminder
+				console.log('[Reminder] Chat is busy, waiting to send...');
+				const waitInterval = setInterval(() => {
+					if (!chatStore.isLoading) {
+						clearInterval(waitInterval);
+						console.log('[Reminder] Chat ready, sending now');
+						handleSend(msg);
+					}
+				}, 500);
+				// Safety timeout: stop waiting after 60 seconds
+				setTimeout(() => clearInterval(waitInterval), 60000);
 			} else {
-				console.log('[Reminder] Triggering handleSend with:', msg);
 				handleSend(msg);
 			}
 		});
@@ -491,7 +499,6 @@
 
 	// Handle send message
 	async function handleSend(content: string) {
-		console.log('[DEBUG] handleSend called with:', content);
 		if (!content.trim() || chatStore.isLoading) return;
 
 		if (!modulesStore.isModuleEnabled('consciousness')) {
@@ -518,9 +525,7 @@
 
 		// Client-side fallback: parse natural-language reminder requests directly
 		const wm = getWorkingMemory();
-		console.log('[DEBUG] sessionId:', wm.currentSessionId, 'content:', content);
 		const directReminder = tryExtractReminderFromUserMessage(content);
-		console.log('[DEBUG] directReminder:', directReminder);
 		if (directReminder && wm.currentSessionId) {
 			try {
 				await reminderStore.addReminder(directReminder.content, directReminder.triggerAt, wm.currentSessionId);
