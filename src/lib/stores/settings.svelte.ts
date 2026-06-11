@@ -2,11 +2,14 @@ import { browser } from '$app/environment';
 import type { ProviderConfig } from '$lib/types';
 import { LLM_PROVIDERS, TTS_PROVIDERS, STT_PROVIDERS } from '$lib/services/providers/registry';
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '$lib/services/platform/hotkeys';
+import { vrmStore } from './vrm.svelte';
 
 export interface PersonalityPreset {
 	id: string;
 	name: string;
 	systemPrompt: string;
+	/** VRM model ID to auto-switch when this preset is active */
+	vrmModelId?: string;
 }
 
 export const DEFAULT_PERSONALITY_PRESETS: PersonalityPreset[] = [
@@ -142,6 +145,11 @@ function createSettingsStore() {
 
 	function setActiveProfileId(id: string) {
 		activeProfileId = id;
+		// Auto-switch VRM avatar when preset defines one
+		const preset = personalityProfiles.find((p) => p.id === id);
+		if (preset?.vrmModelId) {
+			vrmStore.setActiveModel(preset.vrmModelId).catch(() => {});
+		}
 		save();
 	}
 

@@ -1006,6 +1006,32 @@
 							rows="8"
 							onblur={saveSystemPrompt}
 						></textarea>
+
+						<!-- Avatar binding per preset -->
+						<div class="preset-avatar-row">
+							<span class="preset-avatar-label">
+								<Icon name="user" size={14} />
+								Avatar
+							</span>
+							<select
+								class="preset-avatar-select"
+								value={activeProfile?.vrmModelId ?? ''}
+								onchange={(e) => {
+									const modelId = (e.target as HTMLSelectElement).value || undefined;
+									settingsStore.updatePersonalityProfile(activeProfileId, { vrmModelId: modelId });
+								}}
+							>
+								<option value="">— Keep current avatar —</option>
+								{#each vrmStore.models as model}
+									<option value={model.id}>{model.name}</option>
+								{/each}
+							</select>
+							{#if activeProfile?.vrmModelId}
+								<span class="preset-avatar-hint">
+									Switches to {vrmStore.models.find(m => m.id === activeProfile.vrmModelId)?.name ?? 'unknown'} when active
+								</span>
+							{/if}
+						</div>
 					</div>
 				{/if}
 			</div>
@@ -4278,6 +4304,60 @@
 
 		.model-name {
 			font-size: 0.7rem;
+		}
+	}
+
+	/* Preset avatar binding */
+	.preset-avatar-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-top: 0.75rem;
+		padding: 0.5rem 0.75rem;
+		background: rgba(1, 178, 255, 0.04);
+		border: 1px solid rgba(1, 178, 255, 0.15);
+		border-radius: 0.5rem;
+	}
+
+	.preset-avatar-label {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: var(--text-secondary);
+		white-space: nowrap;
+	}
+
+	.preset-avatar-select {
+		flex: 1;
+		padding: 0.4rem 0.6rem;
+		border: 1px solid rgba(0, 0, 0, 0.1);
+		border-radius: 0.375rem;
+		background: var(--bg-primary);
+		color: var(--text-primary);
+		font-size: 0.85rem;
+		cursor: pointer;
+	}
+
+	:global(.dark) .preset-avatar-select {
+		border-color: rgba(255, 255, 255, 0.1);
+		background: var(--bg-primary);
+	}
+
+	.preset-avatar-hint {
+		font-size: 0.75rem;
+		color: var(--text-tertiary);
+		white-space: nowrap;
+	}
+
+	@media (max-width: 640px) {
+		.preset-avatar-row {
+			flex-wrap: wrap;
+		}
+		.preset-avatar-hint {
+			width: 100%;
+			padding-left: 1.5rem;
 		}
 	}
 </style>

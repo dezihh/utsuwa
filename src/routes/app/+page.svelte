@@ -154,6 +154,21 @@
 			stopWaitTone();
 		}
 	});
+
+	// Auto-switch VRM avatar when active preset defines one
+	$effect(() => {
+		const models = vrmStore.models;
+		if (models.length === 0) return;
+		const activeProfileId = settingsStore.getActiveProfileId();
+		const preset = settingsStore.getPersonalityProfiles().find((p) => p.id === activeProfileId);
+		if (preset?.vrmModelId) {
+			const model = models.find((m) => m.id === preset.vrmModelId);
+			if (model && vrmStore.activeModelId !== preset.vrmModelId) {
+				vrmStore.setActiveModel(preset.vrmModelId);
+			}
+		}
+	});
+
 	const SIDEBAR_WIDTH = 320;
 	const sidebarEffective = $derived(sidebarOpen && showSidebarBtn);
 	const leftOffset = $derived(
