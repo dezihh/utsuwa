@@ -586,6 +586,15 @@ function createVrmStore() {
 		await saveToStorage();
 	}
 
+		async function renameModel(id: string, name: string): Promise<void> {
+			const model = models.find((m) => m.id === id);
+			if (!model || !name.trim()) return;
+
+			model.name = name.trim();
+			models = [...models]; // trigger reactivity
+			await saveToStorage();
+		}
+
 	async function loadModelBlob(id: string): Promise<string | null> {
 		const model = models.find((m) => m.id === id);
 		if (!model) return null;
@@ -812,6 +821,7 @@ function createVrmStore() {
 		resetEmotionMappingsForActiveModel,
 		addModel,
 		removeModel,
+		renameModel,
 		loadModelBlob,
 		getActiveModel,
 		setModelPreview,

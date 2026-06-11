@@ -96,6 +96,8 @@
 	let expressionMappingExpanded = $state(false);
 	let eventsExpanded = $state(false);
 	let uploadModalOpen = $state(false);
+	let editingModelId = $state<string | null>(null);
+	let editingModelName = $state('');
 	let modeConfirmOpen = $state(false);
 	let pendingMode = $state<'companion' | 'dating_sim' | null>(null);
 	const emotionTags = getKnownEmotionTags();
@@ -508,6 +510,18 @@
 		personaStore.updateCard({ systemPrompt: formSystemPrompt });
 	}
 
+	function startModelRename(model: { id: string; name: string }) {
+		editingModelId = model.id;
+		editingModelName = model.name;
+	}
+
+	function commitModelRename() {
+		if (editingModelId) {
+			vrmStore.renameModel(editingModelId, editingModelName);
+		}
+		editingModelId = null;
+	}
+
 	function switchProfile(profileId: string) {
 		// Persist current textarea to current profile before switching
 		const currentId = settingsStore.getActiveProfileId();
@@ -846,25 +860,47 @@
 
 				<div class="gallery-grid">
 					{#each vrmStore.models as model (model.id)}
-						<button
-							class="model-card"
-							class:active={model.id === vrmStore.activeModelId}
-							onclick={() => vrmStore.setActiveModel(model.id)}
-						>
-							<div class="model-preview">
-								{#if model.previewUrl}
-									<img src={model.previewUrl} alt={model.name} />
-								{:else}
-									<Icon name="user" size={24} />
-								{/if}
-								{#if model.id === vrmStore.activeModelId}
-									<div class="active-check">
-										<Icon name="check" size={12} strokeWidth={3} />
-									</div>
-								{/if}
+						{#if editingModelId === model.id}
+							<div class="model-card editing">
+								<div class="model-preview">
+									{#if model.previewUrl}
+										<img src={model.previewUrl} alt={model.name} />
+									{:else}
+										<Icon name="user" size={24} />
+									{/if}
+								</div>
+								<!-- svelte-ignore a11y_autofocus -->
+								<input
+									class="model-name-input"
+									type="text"
+									bind:value={editingModelName}
+									onblur={commitModelRename}
+									onkeydown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') commitModelRename(); }}
+									autofocus
+								/>
 							</div>
-							<span class="model-name">{model.name}</span>
-						</button>
+						{:else}
+							<button
+								class="model-card"
+								class:active={model.id === vrmStore.activeModelId}
+								onclick={() => vrmStore.setActiveModel(model.id)}
+								ondblclick={() => startModelRename(model)}
+							>
+								<div class="model-preview">
+									{#if model.previewUrl}
+										<img src={model.previewUrl} alt={model.name} />
+									{:else}
+										<Icon name="user" size={24} />
+									{/if}
+									{#if model.id === vrmStore.activeModelId}
+										<div class="active-check">
+											<Icon name="check" size={12} strokeWidth={3} />
+										</div>
+									{/if}
+								</div>
+								<span class="model-name">{model.name}</span>
+							</button>
+						{/if}
 					{/each}
 				</div>
 			</div>
@@ -2502,6 +2538,30 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 100%;
+	}
+
+	.model-card.editing {
+		cursor: default;
+		border-color: rgba(1, 178, 255, 0.4);
+		box-shadow: 0 0 0 3px rgba(1, 178, 255, 0.15);
+	}
+
+	.model-name-input {
+		width: 100%;
+		font-size: 0.75rem;
+		font-weight: 500;
+		padding: 0.25rem 0.375rem;
+		border: 1px solid rgba(1, 178, 255, 0.4);
+		border-radius: 0.375rem;
+		background: var(--bg-primary);
+		color: var(--text-primary);
+		text-align: center;
+		outline: none;
+	}
+
+	.model-name-input:focus {
+		border-color: #01B2FF;
+		box-shadow: 0 0 0 2px rgba(1, 178, 255, 0.2);
 	}
 
 	.expression-content {
