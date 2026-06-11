@@ -291,7 +291,8 @@
 				for (const query of imageQueries) {
 					try {
 						imageSearchStore.setLoading(true);
-						const res = await fetch(`/api/search/images?q=${encodeURIComponent(query)}&searxUrl=${encodeURIComponent(searxUrl)}`);
+						const searxParam = searxUrl ? `&searxUrl=${encodeURIComponent(searxUrl)}` : '';
+						const res = await fetch(`/api/search/images?q=${encodeURIComponent(query)}${searxParam}`);
 						const data = await res.json();
 						if (res.ok && data.results?.length > 0) {
 							imageSearchStore.openModal(data.results, query);
@@ -570,7 +571,8 @@
 			if (searxUrl) {
 				try {
 					imageSearchStore.setLoading(true);
-					const res = await fetch(`/api/search/images?q=${encodeURIComponent(imageQuery)}&searxUrl=${encodeURIComponent(searxUrl)}`);
+					const searxParam = searxUrl ? `&searxUrl=${encodeURIComponent(searxUrl)}` : '';
+					const res = await fetch(`/api/search/images?q=${encodeURIComponent(imageQuery)}${searxParam}`);
 					const data = await res.json();
 					if (res.ok && data.results?.length > 0) {
 						imageSearchStore.openModal(data.results, imageQuery);

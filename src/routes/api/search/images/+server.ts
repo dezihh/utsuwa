@@ -3,7 +3,7 @@ import type { ImageSearchResult } from '$lib/utils/image-search'
 
 export const GET: RequestHandler = async ({ url }) => {
 	const q = url.searchParams.get('q')
-	const searxUrl = url.searchParams.get('searxUrl') || ''
+	const searxUrl = url.searchParams.get('searxUrl') || process.env.SEARXNG_URL || ''
 
 	if (!q) {
 		return new Response(JSON.stringify({ error: 'Missing query parameter' }), {
