@@ -243,6 +243,26 @@
 		}
 	});
 
+	// Start reminder polling and handle fired reminders
+	$effect(() => {
+		reminderStore.setOnReminderFired((reminder) => {
+			const msg = `[Reminder] It's time: ${reminder.content}`;
+			console.log('[Reminder] Fired callback:', msg);
+			if (chatStore.isLoading) {
+				chatStore.addSystemMessage(msg);
+				console.log('[Reminder] Queued as system message (chat is loading)');
+			} else {
+				console.log('[Reminder] Triggering handleSend with:', msg);
+				handleSend(msg);
+			}
+		});
+		reminderStore.startPolling();
+		return () => {
+			reminderStore.stopPolling();
+			reminderStore.setOnReminderFired(null);
+		};
+	});
+
 	// Process companion response with v2 system
 	async function processCompanionResponse(userMessage: string, companionResponse: string): Promise<string> {
 		const state = characterStore.state;
