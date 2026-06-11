@@ -171,16 +171,21 @@ export const POST: RequestHandler = async ({ request }) => {
 			});
 		}
 
-		// Suppress ALL background promise/stream rejections so they don't crash Node.
+		// Suppress background promise/stream rejections so they don't crash Node.
 		// xsai rejects every promise and errors every stream when the provider request fails.
-		const silentCatch = () => {};
-		result.messages?.catch?.(silentCatch);
-		result.steps?.catch?.(silentCatch);
-		result.totalUsage?.catch?.(silentCatch);
-		result.usage?.catch?.(silentCatch);
+		// Only silence AbortErrors; log genuine unexpected errors so they don't go unnoticed.
+		const quietCatch = (err: unknown) => {
+			if (err instanceof Error && err.name !== 'AbortError') {
+				console.warn('[Chat API] xsai background promise/stream error:', err.message);
+			}
+		};
+		result.messages?.catch?.(quietCatch);
+		result.steps?.catch?.(quietCatch);
+		result.totalUsage?.catch?.(quietCatch);
+		result.usage?.catch?.(quietCatch);
 		// Consume errored ReadableStreams so they don't become unhandled
-		result.fullStream?.getReader().read().catch(silentCatch);
-		result.reasoningTextStream?.getReader().read().catch(silentCatch);
+		result.fullStream?.getReader().read().catch(quietCatch);
+		result.reasoningTextStream?.getReader().read().catch(quietCatch);
 
 		const { textStream } = result;
 
