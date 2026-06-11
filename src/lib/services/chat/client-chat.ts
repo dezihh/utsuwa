@@ -65,7 +65,12 @@ export async function streamChatDirect(
 		headers['x-api-key'] = apiKey || '';
 		headers['anthropic-version'] = '2023-06-01';
 		headers['anthropic-dangerous-direct-browser-access'] = 'true';
-	} else if (apiKey) {
+	} else if (provider === 'openrouter') {
+		headers['HTTP-Referer'] = 'https://utsuwa.app';
+		headers['X-Title'] = 'Utsuwa';
+	}
+
+	if (apiKey) {
 		headers['Authorization'] = `Bearer ${apiKey}`;
 	}
 
