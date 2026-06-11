@@ -58,7 +58,7 @@ function createSettingsStore() {
 	let activeProfileId = $state<string>('standard');
 
 	// Web search settings
-	let searxUrl = $state<string>('');
+	let searxUrl = $state<string>('http://192.168.10.4:8090');
 
 	// Load from localStorage on init
 	if (browser) {
