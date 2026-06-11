@@ -17,7 +17,7 @@
 	import { reminderStore } from '$lib/stores/reminders.svelte';
 	import { extractReminderTags } from '$lib/utils/reminders';
 	import { db } from '$lib/db';
-	import { getWorkingMemory } from '$lib/engine/memory';
+	import { getWorkingMemory, startNewSession, shouldStartNewSession } from '$lib/engine/memory';
 	import Dropdown from '$lib/components/ui/Dropdown.svelte';
 
 	// V2 companion system imports
@@ -63,7 +63,8 @@
 		reminderStore.setOnReminderFired((reminder) => {
 			const msg = `[Reminder] It's time: ${reminder.content}`;
 			if (chatStore.isLoading) {
-				chatStore.addMessage('user', msg);
+				// Queue as system message so the LLM sees it in the next prompt
+				chatStore.addSystemMessage(msg);
 			} else {
 				handleSend(msg);
 			}
@@ -246,6 +247,16 @@
 		if (!modulesStore.isModuleEnabled('consciousness')) {
 			chatStore.setError('Chat is disabled. Enable it in Settings > Character > AI Services.');
 			return;
+		}
+
+		// Ensure a session exists before sending
+		const wm = getWorkingMemory();
+		if (!wm.currentSessionId) {
+			try {
+				await startNewSession('default', characterStore.state.name);
+			} catch (e) {
+				console.error('[Session] Failed to start new session:', e);
+			}
 		}
 
 		// Add user message

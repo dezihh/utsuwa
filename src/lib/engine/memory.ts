@@ -89,10 +89,12 @@ export async function hydrateWorkingMemory(): Promise<void> {
 		});
 		workingMemory.turns = recentTurns;
 		workingMemory.messageCount = recentTurns.length;
+		workingMemory.currentSessionId = currentSession.id;
 	} else {
 		// No open session — start fresh
 		workingMemory.turns = [];
 		workingMemory.messageCount = 0;
+		workingMemory.currentSessionId = undefined;
 	}
 }
 

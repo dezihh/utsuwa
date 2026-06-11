@@ -4,7 +4,7 @@ export interface ParsedReminder {
 }
 
 export function extractReminderTags(text: string): { reminders: ParsedReminder[]; cleanedText: string } {
-	const regex = /\[reminder:([^\]]+)\](.*?)\[\/reminder\]/gi;
+	const regex = /\[reminder:([^\]]+)\]([\s\S]*?)\[\/reminder\]/gi;
 	const reminders: ParsedReminder[] = [];
 	let match;
 
