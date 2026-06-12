@@ -725,6 +725,10 @@ function buildReminderLayer(ctx: PromptContext): string | null {
 		`  [reminder:1h]call mom[/reminder]\n` +
 		`  [reminder:30s]jump enthusiastically[/reminder]\n` +
 		`  [reminder:2min]wave at the user[/reminder]\n\n` +
+		`You can ALSO combine reminders with image search — show images after a delay:\n` +
+		`  [reminder:2min]search_image:beautiful roses[/reminder]\n` +
+		`  [reminder:30s]search_image:cute puppies[/reminder]\n` +
+		`When the timer fires, images will appear in a popup automatically. You will then receive a system message so you can describe them enthusiastically.\n\n` +
 		`Supported time formats: 30s, 5min, 10m, 1h, 2h30m.\n` +
 		`The tag will be hidden from the user — only you and the system see it.\n` +
 		`When the reminder fires, you will receive a system message with the reminder text. React to it by performing the described action or saying something fitting.`

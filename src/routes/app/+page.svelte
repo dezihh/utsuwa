@@ -61,7 +61,8 @@
 	import { splitIntoSegments, stripAllTags, stripForApiContext, isContinueRequest } from '$lib/utils/sentences';
 	import { reminderStore } from '$lib/stores/reminders.svelte';
 	import { tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
-	import { extractImageSearchTags, tryExtractImageSearchFromUserMessage } from '$lib/utils/image-search';
+	import { extractImageSearchTags, tryExtractImageSearchFromUserMessage, tryExtractDelayedImageSearch } from '$lib/utils/image-search';
+	import { extractReminderTags } from '$lib/utils/reminders';
 	import { imageSearchStore } from '$lib/stores/image-search.svelte';
 	import { extractVocabTags } from '$lib/utils/vocabulary';
 	import * as vocabularyStorage from '$lib/services/storage/vocabulary';
@@ -253,24 +254,41 @@
 
 	// Start reminder polling and handle fired reminders
 	$effect(() => {
-		reminderStore.setOnReminderFired((reminder) => {
-			const msg = `⏰ REMINDER TRIGGERED: "${reminder.content}" — This is your reminder. React to it NOW by performing the described action or saying something enthusiastic and fitting.`;
-			console.log('[Reminder] Fired:', reminder.content);
-			if (chatStore.isLoading) {
-				// Wait for the current LLM response to finish, then send the reminder
-				console.log('[Reminder] Chat is busy, waiting to send...');
-				const waitInterval = setInterval(() => {
-					if (!chatStore.isLoading) {
-						clearInterval(waitInterval);
-						console.log('[Reminder] Chat ready, sending now');
-						handleSend(msg);
+		reminderStore.setOnReminderFired(async (reminder) => {
+			const content = reminder.content;
+			console.log('[Reminder] Fired:', content);
+
+			// Check if this is an image-search reminder
+			if (content.startsWith('search_image:')) {
+				const query = content.slice('search_image:'.length).trim();
+				console.log('[Reminder] Image search query:', query);
+				const searxUrl = settingsStore.getSearxUrl();
+				if (searxUrl && query) {
+					try {
+						imageSearchStore.setLoading(true);
+						const searxParam = `&searxUrl=${encodeURIComponent(searxUrl)}`;
+						const res = await fetch(`/api/search/images?q=${encodeURIComponent(query)}${searxParam}`);
+						const data = await res.json();
+						if (res.ok && data.results?.length > 0) {
+							imageSearchStore.openModal(data.results, query);
+							// Notify LLM so it can comment on the images
+							const notifyMsg = `⏰ REMINDER TRIGGERED — Image search results for "${query}" are now displayed in the popup. Describe what you see enthusiastically!`;
+							await sendReminderMessage(notifyMsg);
+						} else {
+							console.warn('[Reminder] Image search failed:', data.error);
+						}
+					} catch (e) {
+						console.warn('[Reminder] Image search fetch error:', e);
+					} finally {
+						imageSearchStore.setLoading(false);
 					}
-				}, 500);
-				// Safety timeout: stop waiting after 60 seconds
-				setTimeout(() => clearInterval(waitInterval), 60000);
-			} else {
-				handleSend(msg);
+				}
+				return;
 			}
+
+			// Regular text reminder
+			const msg = `⏰ REMINDER TRIGGERED: "${content}" — This is your reminder. React to it NOW by performing the described action or saying something enthusiastic and fitting.`;
+			await sendReminderMessage(msg);
 		});
 		reminderStore.startPolling();
 		return () => {
@@ -279,6 +297,20 @@
 		};
 	});
 
+	async function sendReminderMessage(msg: string) {
+		if (chatStore.isLoading) {
+			const waitInterval = setInterval(() => {
+				if (!chatStore.isLoading) {
+					clearInterval(waitInterval);
+					handleSend(msg);
+				}
+			}, 500);
+			setTimeout(() => clearInterval(waitInterval), 60000);
+		} else {
+			handleSend(msg);
+		}
+	}
+
 	// Process companion response with v2 system
 	async function processCompanionResponse(userMessage: string, companionResponse: string): Promise<string> {
 		const state = characterStore.state;
@@ -286,9 +318,24 @@
 		const baselineUpdates = calculateBaselineUpdates(userMessage, state);
 
 		const parsed = parseResponse(companionResponse);
-		const { queries: imageQueries, cleanedText } = extractImageSearchTags(parsed.dialogue);
-		let dialogue = cleanedText;
+		const { queries: imageQueries, cleanedText: imageCleaned } = extractImageSearchTags(parsed.dialogue);
+		let dialogue = imageCleaned;
 		const llmUpdates = parsed.stateUpdates;
+
+		// Reminder tag extraction from LLM response
+		const { reminders: llmReminders, cleanedText: reminderCleaned } = extractReminderTags(dialogue);
+		dialogue = reminderCleaned;
+		const currentSessionId = getWorkingMemory().currentSessionId;
+		if (currentSessionId && llmReminders.length > 0) {
+			for (const r of llmReminders) {
+				try {
+					await reminderStore.addReminder(r.content, r.triggerAt, currentSessionId);
+					console.log('[Reminder] Saved from LLM:', r.content, 'for', r.triggerAt.toLocaleTimeString());
+				} catch (e) {
+					console.error('[Reminder] Failed to save LLM reminder:', e);
+				}
+			}
+		}
 
 		// Vocabulary tag extraction
 		const { tags: vocabTags, cleanedText: vocabCleaned } = extractVocabTags(dialogue);
@@ -593,6 +640,22 @@
 				console.log('[Reminder] Direct fallback saved:', directReminder.content, 'for', directReminder.triggerAt.toLocaleTimeString());
 			} catch (e) {
 				console.error('[Reminder] Direct fallback failed:', e);
+			}
+		}
+
+		// Client-side fallback: "Zeige mir in 2 Minuten Bilder von Rosen"
+		// → creates a delayed image-search reminder instead of immediate search
+		const delayedImage = tryExtractDelayedImageSearch(content);
+		if (delayedImage && wm.currentSessionId) {
+			try {
+				await reminderStore.addReminder(
+					`search_image:${delayedImage.query}`,
+					delayedImage.triggerAt,
+					wm.currentSessionId
+				);
+				console.log('[Reminder] Delayed image search saved:', delayedImage.query, 'for', delayedImage.triggerAt.toLocaleTimeString());
+			} catch (e) {
+				console.error('[Reminder] Failed to save delayed image search:', e);
 			}
 		}
 

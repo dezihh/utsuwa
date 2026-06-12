@@ -76,6 +76,52 @@ function extractHostname(url: string): string {
 
 const IMAGE_KEYWORDS = ['bild', 'bilder', 'foto', 'fotos', 'image', 'images', 'picture', 'pictures', 'photo', 'photos'];
 
+// ── Delayed image search: "Zeige mir in 2 Minuten Bilder von Rosen" ───────
+// Detects image search requests with a time delay and returns query + trigger time.
+
+const DELAYED_IMAGE_PATTERNS = [
+	// German: "in/nach X [Zeit] ... bilder von ..."
+	/(?:in|nach)\s+(\d[\d\s]*(?:minuten?|min|sekunden?|sek|stunden?|h)?)\b[\s\S]*?(?:bilder?|fotos?)\s+(?:von|von\s+der|von\s+dem|von\s+einer|von\s+einem)?\s+(.+?)(?:\.|!|\?|$)/i,
+	// German: "zeige mir ... in X [Zeit]"
+	/(?:zeig|zeige)\s+(?:mir\s+)?(?:bilder?|fotos?)\s+(?:von|von\s+der|von\s+dem)?\s+(.+?)\s+(?:in|nach)\s+(\d[\d\s]*(?:minuten?|min|sekunden?|sek|stunden?|h)?)(?:\.|!|\?|$)/i,
+	// English: "show me images of ... in X [time]"
+	/(?:show|show\s+me)\s+(?:me\s+)?(?:images?|pictures?|photos?)\s+(?:of|from|about)?\s+(.+?)\s+(?:in|after)\s+(\d[\d\s]*(?:minutes?|mins?|seconds?|secs?|hours?|h)?)(?:\.|!|\?|$)/i,
+	// English: "in X [time] ... images of ..."
+	/(?:in|after)\s+(\d[\d\s]*(?:minutes?|mins?|seconds?|secs?|hours?|h)?)\b[\s\S]*?(?:images?|pictures?|photos?)\s+(?:of|from|about)?\s+(.+?)(?:\.|!|\?|$)/i
+]
+
+function parseTimeToMs(timeStr: string): number {
+	let totalMs = 0
+	const hMatch = timeStr.match(/(\d+)\s*h(?:our)?s?/i)
+	const mMatch = timeStr.match(/(\d+)\s*m(?:in)?/i)
+	const sMatch = timeStr.match(/(\d+)\s*s(?:ec)?/i)
+	if (hMatch) totalMs += parseInt(hMatch[1], 10) * 60 * 60 * 1000
+	if (mMatch) totalMs += parseInt(mMatch[1], 10) * 60 * 1000
+	if (sMatch) totalMs += parseInt(sMatch[1], 10) * 1000
+	return totalMs
+}
+
+export function tryExtractDelayedImageSearch(text: string): { query: string; triggerAt: Date } | null {
+	const lower = text.toLowerCase()
+	const hasImageKeyword = IMAGE_KEYWORDS.some((k) => lower.includes(k))
+	if (!hasImageKeyword) return null
+
+	for (const pattern of DELAYED_IMAGE_PATTERNS) {
+		const match = text.match(pattern)
+		if (match) {
+			const s = pattern.source
+			const g1Time = s.startsWith('(?:in|nach)') || s.startsWith('(?:in|after)')
+			const timeStr = (g1Time ? match[1] : match[2]).trim()
+			const query = (g1Time ? match[2] : match[1]).trim()
+			const totalMs = parseTimeToMs(timeStr)
+			if (totalMs > 0 && query.length > 1) {
+				return { query, triggerAt: new Date(Date.now() + totalMs) }
+			}
+		}
+	}
+	return null
+}
+
 export function tryExtractImageSearchFromUserMessage(text: string): string | null {
 	const lower = text.toLowerCase();
 
