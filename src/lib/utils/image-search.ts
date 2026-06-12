@@ -122,6 +122,23 @@ export function tryExtractDelayedImageSearch(text: string): { query: string; tri
 	return null
 }
 
+// Generic fallback queries when the user asks for images but gives no specific subject
+const GENERIC_IMAGE_QUERIES = [
+	'beautiful scenery', 'cute animals', 'stunning landscape', 'amazing nature',
+	'beautiful sunset', 'cute puppies', 'adorable kittens', 'beautiful flowers',
+	'schöne landschaft', 'niedliche tiere', 'toller sonnenuntergang', 'süße katzen'
+];
+
+function pickGenericQuery(): string {
+	return GENERIC_IMAGE_QUERIES[Math.floor(Math.random() * GENERIC_IMAGE_QUERIES.length)];
+}
+
+/**
+ * Extract a search query from the user's message.
+ * Returns a SPECIFIC query if the user mentions a subject (e.g. "Bilder von Katzen" → "Katzen").
+ * Returns a GENERIC query if the user asks vaguely (e.g. "zeig mir ein Bild, das dir gefällt" → "beautiful scenery").
+ * Returns null if no image intent is detected.
+ */
 export function tryExtractImageSearchFromUserMessage(text: string): string | null {
 	const lower = text.toLowerCase();
 
@@ -129,21 +146,42 @@ export function tryExtractImageSearchFromUserMessage(text: string): string | nul
 	const hasImageKeyword = IMAGE_KEYWORDS.some((k) => lower.includes(k));
 	if (!hasImageKeyword) return null;
 
-	// Try to extract subject after a preposition (von/of/über/about/etc.)
-	const afterPrep = text.match(/(?:von|of|über|about|zu|with|from|for|featuring)\s+(.+?)(?:\?|\.|!|$)/i);
+	// 1. Try to extract specific subject after "von/of/from/about"
+	const afterPrep = text.match(/(?:von|of|from|about|featuring)\s+([a-zA-ZäöüÄÖÜß\s]+?)(?:\?|\.|!|,|$)/i);
 	if (afterPrep && afterPrep[1]) {
 		const query = afterPrep[1].trim();
-		if (query.length > 1) return query;
+		// Only use if it's a short, concrete noun phrase (max 4 words)
+		const words = query.split(/\s+/).filter((w) => w.length > 1);
+		if (words.length >= 1 && words.length <= 4) {
+			return query;
+		}
 	}
 
-	// Fallback: strip all known filler words and return the rest
-	let query = text
-		.replace(/\b(?:zeig|zeige|show|suche|find|finde|gib|get|display|mir|me|doch|bitte|please|gerne|maybe|can\s+you|could\s+you|will\s+you|would\s+you|ein|some|paar|a\s+few|ein\s+paar|bilder?|fotos?|images?|pictures?|photos?|von|of|über|about|zu|with|from|for|featuring)\b/gi, ' ')
+	// 2. Try to extract quoted text: "zeig mir Bilder von "Katzen"" → "Katzen"
+	const quoted = text.match(/"([^"]{2,40})"/);
+	if (quoted && quoted[1]) {
+		return quoted[1].trim();
+	}
+
+	// 3. Vague request (no specific subject) → generic fallback
+	// Detect vague patterns like "was dir gefällt", "etwas schönes", "irgendwas"
+	const vaguePatterns = /(was dir gefällt|etwas schönes|irgendwas|irgendwelche|was schönes|something nice|anything|whatever you like)/i;
+	if (vaguePatterns.test(text)) {
+		return pickGenericQuery();
+	}
+
+	// 4. Last resort: try to strip filler words and see if anything concrete remains
+	let stripped = text
+		.replace(/\b(?:zeig|zeige|show|suche|find|finde|gib|get|display|mir|me|doch|bitte|please|gerne|maybe|can\s+you|could\s+you|will\s+you|would\s+you|ein|some|paar|a\s+few|ein\s+paar|bilder?|fotos?|images?|pictures?|photos?|von|of|über|about|zu|with|from|for|featuring|aus\s+dem\s+internet|from\s+the\s+internet)\b/gi, ' ')
 		.replace(/\s+/g, ' ')
 		.trim();
+	stripped = stripped.replace(/[.!?]+$/, '').trim();
 
-	query = query.replace(/[.!?]+$/, '').trim();
+	const strippedWords = stripped.split(/\s+/).filter((w) => w.length > 1);
+	if (strippedWords.length >= 1 && strippedWords.length <= 4 && stripped.length > 2) {
+		return stripped;
+	}
 
-	if (query.length > 1) return query;
-	return null;
+	// 5. Nothing concrete found → generic fallback
+	return pickGenericQuery();
 }

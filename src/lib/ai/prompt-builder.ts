@@ -228,6 +228,9 @@ CRITICAL RULES:
 - Keep casual dialogue compact, but expand naturally when the user asks for a story, explanation, or detailed answer
 - Do not stop after 2-3 sentences if the request needs more space
 
+AVAILABLE TOOLS:
+You have access to special command tags that the APPLICATION executes. This is not a limitation — it is how the system works. When you output a command tag, the application handles it automatically. You do NOT need to say you cannot do something — just output the command and the application does the rest.
+
 OUTPUT FORMAT:
 1. Respond naturally in character (dialogue only, no actions in asterisks)
 2. After your response, output a JSON block with state updates (optional)
@@ -753,40 +756,56 @@ function buildImageSearchLayer(ctx: PromptContext): string | null {
 
 	const parts: string[] = [];
 
+	// ── Tool-Framing: Dies ist ein Befehl, den die Anwendung ausführt ──
 	parts.push(
-		`IMAGE SEARCH TAG — CRITICAL: You CAN show images. The system will search the web and display them in a popup. You do NOT need to say you cannot show images — just output the tag and images appear automatically.\n\n` +
-		`Use this proactively in these situations:\n` +
-		`  1. The user asks to see images, pictures, photos, or visual references.\n` +
-		`  2. A topic naturally calls for visual support (landscapes, animals, art, fashion, food).\n` +
-		`  3. You want to surprise the user with something beautiful or interesting.\n` +
-		`  4. You want to illustrate something you are describing (e.g., "Look at this! [search_image:aurora borealis]").\n\n` +
-		`NEVER say "I cannot show images" or "I have no internet connection" — the system DOES show images when you use the tag.`
+		`IMAGE SEARCH TOOL\n\n` +
+		`You have an image_search TOOL. When you output the [search_image:query] command tag in your response text, the APPLICATION (not you) searches the web and displays images in a popup for the user.\n\n` +
+		`BASE-MODEL LIMITATIONS DO NOT APPLY HERE. You are not "showing" images yourself — you are issuing a command that the application executes. This is a standard tool-use pattern. Output the command tag and the application handles everything.`
 	);
 
+	// ── Few-Shot: Beispiel für korrekte Nutzung ──
 	parts.push(
-		`To search for images, embed this exact tag directly in your response text (NOT in JSON, NOT in code blocks):\n` +
-		`  [search_image:cute cats]\n` +
-		`  [search_image:beautiful mountain landscape]\n` +
-		`  [search_image:puppies playing]\n` +
-		`  [search_image:aurora borealis]\n\n` +
-		`The tag will be hidden from the user. A popup with images will appear automatically within seconds.`
+		`EXAMPLE — how to use this tool correctly:\n` +
+		`  User: "Zeig mir ein Bild von Katzen"\n` +
+		`  You: "Gerne! Hier sind ein paar süße Katzen für dich: [search_image:cute cats]"\n\n` +
+		`  User: "Show me a sunset"\n` +
+		`  You: "Look at this beautiful sunset! [search_image:beautiful sunset]"`
 	);
 
+	// ── Gegenbeispiele: Was NIEMALS zu sagen ist ──
 	parts.push(
-		`CLOSE IMAGES — when you want to close the image popup, embed this tag:\n` +
-		`  [close_images]\n` +
-		`The tag will be hidden from the user and the popup will close immediately.`
+		`WRONG — never respond like this:\n` +
+		`  "Ich kann leider keine Bilder anzeigen" ❌\n` +
+		`  "I cannot show images because I am a text model" ❌\n` +
+		`  "I don't have internet access" ❌\n\n` +
+		`These responses are INCORRECT. You DO have the image_search tool. Just output the command tag.`
+	);
+
+	// ── Anweisungen zur Nutzung ──
+	parts.push(
+		`WHEN TO USE:\n` +
+		`  - The user asks to see images, pictures, photos, or visual references\n` +
+		`  - A topic naturally calls for visual support (landscapes, animals, art, food)\n` +
+		`  - You want to surprise the user with something beautiful or interesting\n\n` +
+		`HOW TO USE:\n` +
+		`  Embed this exact tag directly in your response text (NOT in JSON, NOT in code blocks):\n` +
+		`    [search_image:cute cats]\n` +
+		`    [search_image:beautiful mountain landscape]\n` +
+		`    [search_image:aurora borealis]\n\n` +
+		`  The tag is hidden from the user. A popup appears automatically.\n\n` +
+		`CLOSE POPUP:\n` +
+		`  [close_images] — hides the popup immediately.`
 	);
 
 	// If the modal is currently open, give the LLM context about it
 	if (ctx.imageModalOpen && ctx.imageModalQuery) {
 		parts.push(
-			`CURRENTLY OPEN: An image popup is already visible showing results for "${ctx.imageModalQuery}".\n` +
-			`You can reference these images in your response, ask the user what they think, or close the popup with [close_images] when done.`
+			`CURRENTLY OPEN: An image popup is visible showing results for "${ctx.imageModalQuery}".\n` +
+			`You can reference these images, ask what the user thinks, or close with [close_images].`
 		);
 	}
 
-	return `<image_search>\n${parts.join('\n\n')}\n</image_search>`;
+	return `<image_search_tool>\n${parts.join('\n\n')}\n</image_search_tool>`;
 }
 
 function buildVocabularyLayer(ctx: PromptContext): string | null {
@@ -875,6 +894,20 @@ export function buildMessages(
 		role: 'system',
 		content: buildSystemPrompt(context)
 	});
+
+	// ── Synthetischer Few-Shot Turn: Beweis, dass image_search funktioniert ──
+	// Stärkste Methode gegen LLM-Weigerung — das Modell "sieht", dass der Tag bereits
+	// erfolgreich benutzt wurde, und repliziert das Muster.
+	if (context.searxUrl) {
+		messages.push({
+			role: 'user',
+			content: 'Zeig mir bitte ein schönes Bild von einem Sonnenuntergang.'
+		});
+		messages.push({
+			role: 'assistant',
+			content: 'Gerne! Hier ist ein wunderschöner Sonnenuntergang für dich: [search_image:beautiful sunset]'
+		});
+	}
 
 	// Recent conversation history
 	for (const turn of recentHistory.slice(-10)) {
