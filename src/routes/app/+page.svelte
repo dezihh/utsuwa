@@ -11,6 +11,7 @@
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import MemoryGraphModal from '$lib/components/memory/MemoryGraphModal.svelte';
 	import FactLibraryModal from '$lib/components/memory/FactLibraryModal.svelte';
+	import VocabularyModal from '$lib/components/vocabulary/VocabularyModal.svelte';
 	import EvolutionConfirmModal from '$lib/components/ui/EvolutionConfirmModal.svelte';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 	import { expressionController } from '$lib/services/vrm/expression-controller';
@@ -62,6 +63,8 @@
 	import { tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
 	import { extractImageSearchTags, tryExtractImageSearchFromUserMessage } from '$lib/utils/image-search';
 	import { imageSearchStore } from '$lib/stores/image-search.svelte';
+	import { extractVocabTags } from '$lib/utils/vocabulary';
+	import * as vocabularyStorage from '$lib/services/storage/vocabulary';
 	import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
 	import type { ProviderConfig } from '$lib/types';
 
@@ -100,6 +103,9 @@
 
 	// Fact library modal state
 	let showFactLibrary = $state(false);
+
+	// Vocabulary modal state
+	let showVocabulary = $state(false);
 
 	// Evolution confirmation modal state
 	let pendingEvolutionSuggestions = $state<Array<{ adaptation: string; reason: string }> | null>(null);
@@ -283,6 +289,31 @@
 		const { queries: imageQueries, cleanedText } = extractImageSearchTags(parsed.dialogue);
 		let dialogue = cleanedText;
 		const llmUpdates = parsed.stateUpdates;
+
+		// Vocabulary tag extraction
+		const { tags: vocabTags, cleanedText: vocabCleaned } = extractVocabTags(dialogue);
+		dialogue = vocabCleaned;
+
+		if (vocabTags.length > 0 && settingsStore.isVocabularyEnabled()) {
+			for (const tag of vocabTags) {
+				try {
+					const entries = await vocabularyStorage.getVocabularyEntries({
+						mode: tag.mode,
+						filter: tag.filter,
+						count: tag.count,
+						characterId: 'default'
+					});
+					if (entries.length > 0) {
+						chatStore.addSystemMessage(
+							'Vocabulary for practice:\n' +
+								entries.map((e) => `${e.sourceWord} = ${e.targetWord}`).join('\n')
+						);
+					}
+				} catch (e) {
+					console.warn('[Vocabulary] Failed to load entries:', e);
+				}
+			}
+		}
 
 		// Image search extraction
 		if (imageQueries.length > 0) {
@@ -507,7 +538,9 @@
 			availableExpressions: vrmStore.availableExpressions,
 			availableActions: vrmStore.llmActions,
 			emotionMappings,
-			searxUrl: settingsStore.getSearxUrl() || undefined
+			searxUrl: settingsStore.getSearxUrl() || undefined,
+			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
+			factLibraryEnabled: true
 		};
 
 		const systemPrompt = buildSystemPrompt(context);
@@ -952,7 +985,7 @@
 </script>
 
 <div class="app-container">
-	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} onOpenFactLibrary={() => showFactLibrary = true} {leftOffset} />
+	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} onOpenFactLibrary={() => showFactLibrary = true} onOpenVocabulary={() => showVocabulary = true} {leftOffset} />
 	<TopRightButtons
 		onInfoClick={() => showInfoModal = true}
 		{showSidebarBtn}
@@ -968,6 +1001,9 @@
 	{/if}
 	{#if showFactLibrary}
 		<FactLibraryModal onClose={() => showFactLibrary = false} />
+	{/if}
+	{#if showVocabulary}
+		<VocabularyModal onClose={() => showVocabulary = false} />
 	{/if}
 	{#if pendingEvolutionSuggestions}
 		<EvolutionConfirmModal

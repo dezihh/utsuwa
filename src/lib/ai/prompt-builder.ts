@@ -14,6 +14,7 @@ export interface PromptContext {
 	memories: RelevantContext;
 	userMessage: string;
 	systemTime: Date;
+	factLibraryEnabled: boolean;
 	/** When set, injects voice tag instructions for the active TTS provider */
 	ttsProvider?: string;
 	/** Default language code for [lang:xx] hints (e.g. 'de', 'es') */
@@ -36,6 +37,8 @@ export interface PromptContext {
 	pendingReminders?: Array<{ triggerAt: Date; content: string }>;
 	/** When set, injects image search tag instructions */
 	searxUrl?: string;
+	/** When true, injects vocabulary tag instructions */
+	vocabularyEnabled?: boolean;
 }
 
 // Build the complete system prompt
@@ -76,6 +79,9 @@ export function buildSystemPrompt(context: PromptContext): string {
 
 	const continueLayer = buildContinueLayer(context);
 	if (continueLayer) layers.push(continueLayer);
+
+	const vocabLayer = buildVocabularyLayer(context);
+	if (vocabLayer) layers.push(vocabLayer);
 
 	return layers.join('\n\n');
 }
@@ -193,6 +199,9 @@ NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affecti
 
 	const continueLayer = buildContinueLayer(ctx);
 	if (continueLayer) parts.push(continueLayer);
+
+	const vocabLayer = buildVocabularyLayer(ctx);
+	if (vocabLayer) parts.push(vocabLayer);
 
 	return parts.join('\n\n');
 }
@@ -353,6 +362,7 @@ function buildMemoryLayer(ctx: PromptContext): string {
 
 // Fact library layer — structured facts relevant to current context
 function buildFactLibraryLayer(ctx: PromptContext): string | null {
+	if (!ctx.factLibraryEnabled) return null;
 	const entries = ctx.memories.factLibraryEntries;
 	if (entries.length === 0) return null;
 
@@ -748,6 +758,21 @@ CLOSE IMAGES — when you want to close the image popup, embed this tag:
   [close_images]
 The tag will be hidden from the user and the popup will close immediately.
 </image_search>`;
+}
+
+function buildVocabularyLayer(ctx: PromptContext): string | null {
+	if (!ctx.vocabularyEnabled) return null;
+
+	return `<vocabulary>
+When the user wants to practice vocabulary, use the [vocab:MODE:FILTER:COUNT] tag:
+  [vocab:category:Begrüßung:10] — 10 words from category "Begrüßung"
+  [vocab:level:A1:20] — 20 A1-level words
+  [vocab:review:5] — 5 words to review (lowest familiarity)
+  [vocab:new:10] — 10 new/unfamiliar words
+  [vocab:random:15] — 15 random words
+
+The tag will be hidden from the user. Focused vocabulary will appear in the next prompt.
+</vocabulary>`;
 }
 
 // Helper functions for descriptions

@@ -221,7 +221,9 @@
 			ttsLanguage: ttsConfig?.language || undefined,
 			availableExpressions: vrmStore.availableExpressions,
 			availableActions: vrmStore.llmActions,
-			emotionMappings
+			emotionMappings,
+			factLibraryEnabled: true,
+			vocabularyEnabled: settingsStore.isVocabularyEnabled()
 		};
 
 		return buildSystemPrompt(context);

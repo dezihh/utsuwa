@@ -241,7 +241,9 @@
 			availableExpressions: vrmStore.availableExpressions,
 			availableActions: vrmStore.llmActions,
 			emotionMappings,
-			pendingReminders
+			pendingReminders,
+			factLibraryEnabled: true,
+			vocabularyEnabled: settingsStore.isVocabularyEnabled()
 		};
 
 		return buildSystemPrompt(context);

@@ -33,6 +33,15 @@
 	let addTags = $state('');
 	let addConfidence = $state(0.5);
 
+	// Import state
+	let showImport = $state(false);
+	let importText = $state('');
+	let importType = $state('vocab');
+	let importCategory = $state('');
+	let importDelimiter = $state('auto');
+	let importCount = $state(0);
+	let importErrors = $state<string[]>([]);
+
 	// Load entries
 	async function loadEntries() {
 		isLoading = true;
@@ -142,6 +151,81 @@
 		} catch (e) {
 			console.error('[FactLibrary] Failed to add entry:', e);
 		}
+	}
+
+	// ── Bulk import ─────────────────────────────────────────────────────────
+	function detectDelimiter(line: string): string | null {
+		const delimiters = ['\t', ',', ';', '|', ' = ', ': ', ' – ', ' - ']
+		for (const d of delimiters) {
+			if (line.includes(d)) return d
+		}
+		return null
+	}
+
+	function parseImportLine(line: string): { key: string; value: string } | null {
+		line = line.trim()
+		if (!line || line.startsWith('#')) return null
+
+		const delim = importDelimiter === 'auto' ? detectDelimiter(line) : importDelimiter
+		if (!delim) return null
+
+		const idx = line.indexOf(delim)
+		if (idx === -1) return null
+
+		const key = line.slice(0, idx).trim()
+		const value = line.slice(idx + delim.length).trim()
+		if (!key || !value) return null
+
+		return { key, value }
+	}
+
+	function previewImport() {
+		const lines = importText.split('\n')
+		const parsed: { key: string; value: string }[] = []
+		const errors: string[] = []
+
+		for (let i = 0; i < lines.length; i++) {
+			const result = parseImportLine(lines[i])
+			if (result) {
+				parsed.push(result)
+			} else if (lines[i].trim() && !lines[i].trim().startsWith('#')) {
+				errors.push(`Line ${i + 1}: "${lines[i].trim()}"`)
+			}
+		}
+
+		importCount = parsed.length
+		importErrors = errors
+		return parsed
+	}
+
+	async function executeImport() {
+		const entries = previewImport()
+		if (entries.length === 0) return
+
+		let saved = 0
+		for (const e of entries) {
+			try {
+				await memoryStorage.saveFactLibraryEntry({
+					key: e.key,
+					value: e.value,
+					type: importType.trim() || 'vocab',
+					category: importCategory.trim() || undefined,
+					tags: [],
+					confidence: 0.5,
+					characterId: 'default'
+				})
+				saved++
+			} catch (err) {
+				console.error('[FactLibrary] Import failed for:', e.key, err)
+			}
+		}
+
+		showImport = false
+		importText = ''
+		importCount = 0
+		importErrors = []
+		await loadEntries()
+		console.log(`[FactLibrary] Imported ${saved} of ${entries.length} entries`)
 	}
 
 	async function saveEdit(id: number) {
