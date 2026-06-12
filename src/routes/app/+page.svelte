@@ -591,6 +591,8 @@
 			availableActions: vrmStore.llmActions,
 			emotionMappings,
 			searxUrl: settingsStore.getSearxUrl() || undefined,
+			imageModalOpen: imageSearchStore.isOpen,
+			imageModalQuery: imageSearchStore.isOpen ? imageSearchStore.currentQuery : undefined,
 			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
 			factLibraryEnabled: true
 		};

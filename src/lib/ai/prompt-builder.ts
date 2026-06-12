@@ -37,6 +37,10 @@ export interface PromptContext {
 	pendingReminders?: Array<{ triggerAt: Date; content: string }>;
 	/** When set, injects image search tag instructions */
 	searxUrl?: string;
+	/** When true, the image search modal is currently open */
+	imageModalOpen?: boolean;
+	/** The query that triggered the currently open image modal */
+	imageModalQuery?: string;
 	/** When true, injects vocabulary tag instructions */
 	vocabularyEnabled?: boolean;
 }
@@ -747,21 +751,39 @@ function buildReminderLayer(ctx: PromptContext): string | null {
 function buildImageSearchLayer(ctx: PromptContext): string | null {
 	if (!ctx.searxUrl) return null;
 
-	return `<image_search>
-IMAGE SEARCH TAG — VERY IMPORTANT: When the user asks to see images, pictures, photos, or visual references, you MUST use this tag. Do NOT say you cannot show images — the system WILL show them.
+	const parts: string[] = [];
 
-To search for images, embed this exact tag directly in your response text (NOT in JSON, NOT in code blocks):
-  [search_image:cute cats]
-  [search_image:beautiful mountain landscape]
-  [search_image:puppies playing]
+	parts.push(
+		`IMAGE SEARCH TAG — use this proactively in these situations:\n` +
+		`  1. The user asks to see images, pictures, photos, or visual references.\n` +
+		`  2. A topic naturally calls for visual support (landscapes, animals, art, fashion, food).\n` +
+		`  3. You want to surprise the user with something beautiful or interesting.\n` +
+		`  4. You want to illustrate something you are describing (e.g., "Look at this! [search_image:aurora borealis]").`
+	);
 
-The tag will be hidden from the user. A popup with images will appear automatically.
-ALWAYS use this tag when the user asks for images. Never refuse to show images.
+	parts.push(
+		`To search for images, embed this exact tag directly in your response text (NOT in JSON, NOT in code blocks):\n` +
+		`  [search_image:cute cats]\n` +
+		`  [search_image:beautiful mountain landscape]\n` +
+		`  [search_image:puppies playing]\n\n` +
+		`The tag will be hidden from the user. A popup with images will appear automatically.`
+	);
 
-CLOSE IMAGES — when you want to close the image popup, embed this tag:
-  [close_images]
-The tag will be hidden from the user and the popup will close immediately.
-</image_search>`;
+	parts.push(
+		`CLOSE IMAGES — when you want to close the image popup, embed this tag:\n` +
+		`  [close_images]\n` +
+		`The tag will be hidden from the user and the popup will close immediately.`
+	);
+
+	// If the modal is currently open, give the LLM context about it
+	if (ctx.imageModalOpen && ctx.imageModalQuery) {
+		parts.push(
+			`CURRENTLY OPEN: An image popup is already visible showing results for "${ctx.imageModalQuery}".\n` +
+			`You can reference these images in your response, ask the user what they think, or close the popup with [close_images] when done.`
+		);
+	}
+
+	return `<image_search>\n${parts.join('\n\n')}\n</image_search>`;
 }
 
 function buildVocabularyLayer(ctx: PromptContext): string | null {
