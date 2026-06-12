@@ -74,6 +74,7 @@
 	// ── Callbacks set on startDuplex() ──────────────────────────────────────────
 	let onTranscript: ((text: string) => void) | null = null;
 	let onInterrupt: (() => void) | null = null;
+	let isProcessing: (() => boolean) | null = null;
 
 	// ── Internal state ───────────────────────────────────────────────────────────
 	/** True while TTS audio is playing (so we know when to interrupt). */
@@ -191,11 +192,14 @@
 				return;
 			}
 
-			// Confirmed real speech — interrupt TTS now (not earlier, so background
-			// noise that produces no transcription never stops the assistant).
+			// Confirmed real speech — interrupt TTS or ongoing LLM generation now.
+			// (Not earlier, so background noise that produces no transcription
+			// never stops the assistant.)
 			if (ttsActive) {
 				onInterrupt?.();
 				ttsActive = false;
+			} else if (isProcessing?.()) {
+				onInterrupt?.();
 			}
 
 			setPhase('thinking');
@@ -215,12 +219,14 @@
 	export async function startDuplex(callbacks: {
 		onTranscript: (text: string) => void;
 		onInterrupt: () => void;
+		isProcessing?: () => boolean;
 	}): Promise<boolean> {
 		if (!browser) return false;
 		if (isDuplexActive) return true;
 
 		onTranscript = callbacks.onTranscript;
 		onInterrupt = callbacks.onInterrupt;
+		isProcessing = callbacks.isProcessing || null;
 		ttsActive = false;
 
 		const started = await vadService.start(
@@ -240,9 +246,11 @@
 				onSegmentReady: (blob, mimeType) => {
 					console.debug(`[Duplex] Segment ready: ${blob.size} bytes, phase=${duplexPhase}, active=${isDuplexActive}`);
 					if (!isDuplexActive) return;
-					// Skip if a transcription or LLM call is already in flight to avoid
+					// Skip only if a transcription is already in flight to avoid
 					// concurrent whisper requests which cause intermittent 500 errors.
-					if (duplexPhase === 'transcribing' || duplexPhase === 'thinking') return;
+					// During 'thinking' (LLM generating), we still transcribe — real speech
+					// will trigger an interrupt via transcribeSegment().
+					if (duplexPhase === 'transcribing') return;
 					transcribeSegment(blob, mimeType);
 				},
 				onNoiseDetected: () => {
@@ -284,6 +292,7 @@
 		ttsActive = false;
 		onTranscript = null;
 		onInterrupt = null;
+		isProcessing = null;
 		vadService.stop();
 		setPhase('idle');
 		duplexAudioLevel = 0;

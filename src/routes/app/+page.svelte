@@ -1015,7 +1015,8 @@
 					ttsStore.stop();
 					llmAbortController?.abort();
 					chatStore.setLoading(false);
-				}
+				},
+				isProcessing: () => chatStore.isLoading
 			});
 		}
 	}
