@@ -216,7 +216,7 @@
 	<div class="modal-container">
 		<header class="modal-header">
 			<div class="header-info">
-				<Icon name="book-open" size={20} />
+				<Icon name="book" size={20} />
 				<h2>Fact Library</h2>
 				<span class="entry-count">{filteredEntries().length} / {entries.length}</span>
 			</div>
@@ -270,7 +270,7 @@
 				</div>
 			{:else if filteredEntries().length === 0}
 				<div class="empty-state">
-					<Icon name="book-open" size={48} />
+					<Icon name="book" size={48} />
 					<p>No entries found</p>
 					{#if entries.length === 0}
 						<p class="hint">Facts are automatically extracted from conversations.</p>

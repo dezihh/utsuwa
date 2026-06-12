@@ -26,7 +26,7 @@
 	{/if}
 	{#if onOpenFactLibrary}
 		<button class="icon-btn" onclick={onOpenFactLibrary} aria-label="Open fact library">
-			<Icon name="book-open" size={20} />
+			<Icon name="book" size={20} />
 		</button>
 	{/if}
 </div>
