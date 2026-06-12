@@ -318,9 +318,14 @@
 		const baselineUpdates = calculateBaselineUpdates(userMessage, state);
 
 		const parsed = parseResponse(companionResponse);
-		const { queries: imageQueries, cleanedText: imageCleaned } = extractImageSearchTags(parsed.dialogue);
+		const { queries: imageQueries, shouldClose: shouldCloseImages, cleanedText: imageCleaned } = extractImageSearchTags(parsed.dialogue);
 		let dialogue = imageCleaned;
 		const llmUpdates = parsed.stateUpdates;
+
+		// Close image modal if LLM requested it
+		if (shouldCloseImages) {
+			imageSearchStore.closeModal();
+		}
 
 		// Reminder tag extraction from LLM response
 		const { reminders: llmReminders, cleanedText: reminderCleaned } = extractReminderTags(dialogue);
