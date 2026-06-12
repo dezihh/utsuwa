@@ -216,7 +216,7 @@
 		isMemoryReady = false;
 		(async () => {
 			try {
-				await hydrateWorkingMemory();
+				await hydrateWorkingMemory(currentCharacterId);
 				isMemoryReady = true;
 			} catch (e) {
 				console.error('Failed to hydrate working memory:', e);

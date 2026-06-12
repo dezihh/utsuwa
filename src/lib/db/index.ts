@@ -234,7 +234,10 @@ class UtsuwaDatabase extends Dexie {
 					if (!cs.characterId) cs.characterId = 'default';
 				});
 				await facts.toCollection().modify((f: Record<string, unknown>) => {
-					if (!f.characterId) f.characterId = 'default';
+					if (!f.characterId) {
+						// User facts are shared across all characters
+						f.characterId = f.category === 'user' ? 'shared' : 'default';
+					}
 				});
 				await sessions.toCollection().modify((s: Record<string, unknown>) => {
 					if (!s.characterId) s.characterId = 'default';
