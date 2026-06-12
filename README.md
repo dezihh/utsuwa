@@ -35,8 +35,8 @@
 - **Companion System**: Multi-axis relationship tracking with mood, events, and semantic memory
 - **Semantic Memory**: Local AI-powered memory search using Transformers.js — finds memories by meaning, not just keywords
 - **Memory Graph**: Interactive visualization showing how memories connect semantically
-- **5-Layer Memory Architecture**: Structured memory system with Base Soul (immutable core), Evolved Persona (learned adaptations), User Model (semantic facts), Episodic Memory (session summaries), and Fact Library (structured knowledge like vocabulary)
-- **Fact Library**: Type-agnostic structured storage for vocabulary, concepts, exam facts, and more — automatically managed by the app with confidence-based review scheduling. Browse, search, edit, and review entries via the in-app UI (book icon in top-left)
+- **5-Layer Memory Architecture**: Structured memory system with Base Soul (immutable core), Evolved Persona (learned adaptations), User Model (semantic facts), Episodic Memory (session summaries), and Fact Library (structured knowledge like concepts and exam facts). Vocabulary training is handled by a separate dedicated system.
+- **Fact Library**: Type-agnostic structured storage for concepts, exam facts, and general knowledge — automatically managed by the app with confidence-based review scheduling. Browse, search, edit, and review entries via the in-app UI (book icon in top-left). For vocabulary training, use the dedicated Vocabulary System instead.
 - **Personality Evolution**: The companion learns communication patterns from conversations and develops an evolving personality profile over time. LLM-powered analysis of session summaries with user confirmation before applying adaptations
 - **Lazy Session Compaction**: Sessions are automatically summarized via LLM when a new session starts (robust against browser tab closure)
 - **Debug Environment**: Real-time logging panel with filterable categories (Prompts, Memory, Sessions, Facts) and live system prompt inspection. Toggle categories in Settings > Developer
@@ -44,6 +44,8 @@
 - **Data Export/Import**: Download your data as a save file, restore anytime
 - **Theming**: Light and dark mode support with system preference detection
 - **Scheduled Reminders**: The companion can set time-based reminders (e.g., "remind me in 5 minutes to check the coffee") using inline `[reminder:5min]...[/reminder]` tags. Reminders are stored locally per session, polled in the background, and when triggered they are injected into the chat so the LLM sees them and can respond. Upcoming reminders are shown in a bell dropdown in the chat header.
+- **Image Search via SearxNG**: The companion can search for images on the web using SearxNG. When the user asks for pictures (e.g., "show me images of cats"), the companion outputs a `[search_image:cats]` tag and images appear in a popup modal. The companion can also close the popup with `[close_images]`. Requires a SearxNG instance (configured via `SEARXNG_URL` environment variable or MCP Tools settings).
+- **Vocabulary Training System**: Dedicated vocabulary management separate from the Fact Library. Import vocabulary via CSV upload (drag & drop or paste), then practice with the companion using tag-based retrieval. The companion outputs `[vocab:MODE:FILTER:COUNT]` tags (e.g., `[vocab:category:Begrüßung:10]`, `[vocab:review:5]`, `[vocab:level:A1:20]`) and receives only the requested subset in the next prompt — never all words at once. Familiarity tracking per word. Enable/disable in Settings > Data.
 - **Desktop App** *(beta, macOS only)*: Native desktop app with transparent overlay mode — your companion floats on your desktop
 
 ### Local-First Storage
@@ -67,6 +69,27 @@ Build a meaningful relationship with your AI companion through a dating sim-insp
 - **Time-Aware**: Your companion notices when you've been away and reacts accordingly
 
 See the [Companion System Architecture](https://utsuwa.ai/docs/technology/companion-system) for full details.
+
+### Vocabulary Training
+
+A dedicated system for language learning, separate from the general Fact Library:
+
+- **CSV Import**: Upload vocabulary lists via drag & drop or paste. Format:
+  ```csv
+  sourceWord,targetWord,context,category,level,tags
+  Hola,Hola,"¡Hola! ¿Qué tal?",Begrüßung,A1,grußformel
+  Casa,Casa,"Mi casa es grande",Wohnen,A1,noun
+  Comer,Comer,"Yo como una manzana",Verben,A1,verb
+  ```
+- **Tag-Based Retrieval**: The companion never sees all vocabulary at once. Instead, it uses tags to request subsets:
+  - `[vocab:category:Begrüßung:10]` — 10 words from a category
+  - `[vocab:level:A1:20]` — 20 words at a specific level
+  - `[vocab:review:5]` — 5 words with lowest familiarity (weakest first)
+  - `[vocab:new:10]` — 10 unfamiliar words (familiarity < 0.3)
+  - `[vocab:random:15]` — 15 random words
+- **Familiarity Tracking**: Each word has a familiarity score (0.0–1.0) that updates as the user practices
+- **Prompt-Safe**: Only the requested subset is injected into the prompt (~150 tokens for 20 words), never the full list
+- **Enable/Disable**: Toggle vocabulary training in Settings > Data
 
 ### Desktop Application (Beta)
 
