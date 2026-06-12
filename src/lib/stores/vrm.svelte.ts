@@ -315,6 +315,17 @@ function createVrmStore() {
 			const savedMeta = await animationStorage?.getItem<Record<string, { description?: string; llmEnabled?: boolean }>>('animation-metadata');
 			if (savedMeta) {
 				animationMetadata = savedMeta;
+				// Apply saved metadata back onto STATIC_ANIMATIONS so user edits survive reloads
+				for (let i = 0; i < STATIC_ANIMATIONS.length; i++) {
+					const meta = savedMeta[STATIC_ANIMATIONS[i].id];
+					if (meta) {
+						STATIC_ANIMATIONS[i] = {
+							...STATIC_ANIMATIONS[i],
+							...(meta.description !== undefined && { description: meta.description }),
+							...(meta.llmEnabled !== undefined && { llmEnabled: meta.llmEnabled })
+						};
+					}
+				}
 			}
 		} catch (e) {
 			console.error('Failed to load VRM storage:', e);
