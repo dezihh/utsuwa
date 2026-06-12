@@ -617,7 +617,22 @@
 			factLibraryEnabled: true
 		};
 
-		const systemPrompt = buildSystemPrompt(context);
+		let systemPrompt = buildSystemPrompt(context);
+
+		// If user asks for images but hasn't seen any yet, add an extra nudge
+		const imageKeywords = ['bild', 'bilder', 'foto', 'fotos', 'image', 'images', 'picture', 'pictures', 'photo', 'photos', 'zeig', 'show me'];
+		const lowerMsg = userMessage.toLowerCase();
+		const asksForImages = imageKeywords.some((k) => lowerMsg.includes(k));
+		const hasRecentImageSearch = memories.recentTurns.some(
+			(t) => t.role === 'assistant' && t.content.includes('[search_image:')
+		);
+		if (asksForImages && !hasRecentImageSearch && context.searxUrl) {
+			systemPrompt += `
+
+<image_search_nudge>
+The user just asked for images. Use [search_image:relevant query] NOW in your response. Do NOT say you cannot show images — the system WILL display them.
+</image_search_nudge>`;
+		}
 
 		// Debug logging
 		debugStore.logMemory({
