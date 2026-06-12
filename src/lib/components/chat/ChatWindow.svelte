@@ -31,7 +31,8 @@
 		hydrateWorkingMemory,
 		memoryApi,
 		determineFactCategory,
-		calculateFactImportance
+		calculateFactImportance,
+		SHARED_CHARACTER_ID
 	} from '$lib/engine/memory';
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
 	import { allEvents } from '$lib/data/events';
@@ -49,11 +50,14 @@
 	// Track memory hydration state
 	let isMemoryReady = $state(false);
 
+	// Current character ID for multi-character isolation
+	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
+
 	// Hydrate working memory from IndexedDB on mount
 	$effect(() => {
 		isMemoryReady = false;
 		(async () => {
-			await hydrateWorkingMemory();
+			await hydrateWorkingMemory(currentCharacterId);
 			isMemoryReady = true;
 		})();
 	});
@@ -130,10 +134,12 @@
 		// 5b. Save LLM-generated memory observation if present
 		if (finalUpdates.newMemory) {
 			try {
+				const isUserFact = finalUpdates.newMemory.toLowerCase().startsWith('user');
 				await memoryApi.createFact({
 					content: finalUpdates.newMemory,
 					category: determineFactCategory(finalUpdates.newMemory),
-					importance: calculateFactImportance(finalUpdates.newMemory)
+					importance: calculateFactImportance(finalUpdates.newMemory),
+					characterId: isUserFact ? SHARED_CHARACTER_ID : currentCharacterId
 				});
 			} catch (e) {
 				console.debug('[Memory] Failed to save LLM observation:', e);
@@ -158,10 +164,12 @@
 		for (const factContent of potentialFacts.slice(0, 2)) {
 			try {
 				const userAnalysis = analyzeMessage(userMessage);
+				const isUserFact = factContent.toLowerCase().startsWith('user');
 				await memoryApi.createFact({
 					content: factContent,
 					category: determineFactCategory(factContent),
-					importance: calculateFactImportance(factContent, userAnalysis.sentiment)
+					importance: calculateFactImportance(factContent, userAnalysis.sentiment),
+					characterId: isUserFact ? SHARED_CHARACTER_ID : currentCharacterId
 				});
 			} catch (e) {
 				console.debug('Failed to save fact:', e);
@@ -197,7 +205,7 @@
 	async function buildCompanionSystemPrompt(userMessage: string): Promise<string> {
 		const state = characterStore.state;
 		const persona = personaStore.activeCard;
-		const memories = await retrieveRelevantContext(userMessage);
+		const memories = await retrieveRelevantContext(userMessage, currentCharacterId);
 
 		const speechSettings = modulesStore.getModuleSettings('speech');
 		const activeTTSProvider = speechSettings?.activeProvider as string | undefined;
@@ -262,7 +270,7 @@
 		const wm = getWorkingMemory();
 		if (!wm.currentSessionId) {
 			try {
-				await startNewSession('default', characterStore.state.name);
+				await startNewSession(currentCharacterId, characterStore.state.name);
 			} catch (e) {
 				console.error('[Session] Failed to start new session:', e);
 			}

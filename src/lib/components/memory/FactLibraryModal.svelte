@@ -2,6 +2,7 @@
 	import { Icon } from '$lib/components/ui';
 	import type { FactLibraryEntry } from '$lib/types/memory';
 	import * as memoryStorage from '$lib/services/storage/memory';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 
 	interface Props {
 		onClose: () => void;
@@ -42,11 +43,14 @@
 	let importCount = $state(0);
 	let importErrors = $state<string[]>([]);
 
+	// Current character ID for multi-character isolation
+	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
+
 	// Load entries
 	async function loadEntries() {
 		isLoading = true;
 		try {
-			const all = await memoryStorage.getFactLibraryEntries({ characterId: 'default' });
+			const all = await memoryStorage.getFactLibraryEntries({ characterId: currentCharacterId });
 			entries = all;
 		} catch (e) {
 			console.error('[FactLibrary] Failed to load entries:', e);
@@ -144,7 +148,7 @@
 					.map((t) => t.trim())
 					.filter(Boolean),
 				confidence: Math.max(0, Math.min(1, addConfidence)),
-				characterId: 'default'
+				characterId: currentCharacterId
 			});
 			isAdding = false;
 			await loadEntries();
@@ -212,7 +216,7 @@
 					category: importCategory.trim() || undefined,
 					tags: [],
 					confidence: 0.5,
-					characterId: 'default'
+					characterId: currentCharacterId
 				})
 				saved++
 			} catch (err) {

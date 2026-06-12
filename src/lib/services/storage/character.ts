@@ -2,29 +2,34 @@ import { db, type DBCharacterState } from '$lib/db';
 import { createDefaultCharacterState, type CharacterState } from '$lib/types/character';
 
 /**
- * Get the single character state from IndexedDB.
- * Returns the first (and only) record, or creates a default if none exists.
+ * Get a character state from IndexedDB by characterId.
+ * Returns the matching record, or creates a default if none exists.
  */
-export async function getCharacterState(): Promise<CharacterState> {
-	const state = await db.characterStates.toCollection().first();
+export async function getCharacterState(characterId: string = 'default'): Promise<CharacterState> {
+	const state = await db.characterStates.where('characterId').equals(characterId).first();
 
 	if (state) {
 		return deserializeCharacterState(state);
 	}
 
 	// Return default state (not saved until explicitly saved)
-	return createDefaultCharacterState() as CharacterState;
+	const defaultState = createDefaultCharacterState() as CharacterState;
+	defaultState.characterId = characterId;
+	return defaultState;
 }
 
 /**
  * Save the character state to IndexedDB.
- * Clears existing records and saves the new state (single record model).
+ * Upserts by characterId (multi-character model).
  */
 export async function saveCharacterState(state: CharacterState): Promise<number> {
 	const serialized = serializeCharacterState(state);
 
-	// Check if a record exists
-	const existing = await db.characterStates.toCollection().first();
+	// Ensure characterId is set
+	const characterId = state.characterId ?? 'default';
+
+	// Check if a record exists for this characterId
+	const existing = await db.characterStates.where('characterId').equals(characterId).first();
 
 	if (existing && existing.id !== undefined) {
 		// Update existing record
@@ -38,10 +43,18 @@ export async function saveCharacterState(state: CharacterState): Promise<number>
 }
 
 /**
- * Delete all character state data (used for reset).
+ * Delete character state data for a specific characterId (used for reset).
+ * If no characterId is provided, deletes all character states.
  */
-export async function deleteCharacterState(): Promise<void> {
-	await db.characterStates.clear();
+export async function deleteCharacterState(characterId?: string): Promise<void> {
+	if (characterId) {
+		const existing = await db.characterStates.where('characterId').equals(characterId).first();
+		if (existing && existing.id !== undefined) {
+			await db.characterStates.delete(existing.id);
+		}
+	} else {
+		await db.characterStates.clear();
+	}
 }
 
 // Serialize dates for storage

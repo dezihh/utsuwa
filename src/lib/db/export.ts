@@ -352,6 +352,7 @@ export async function importSave(
 			if (!existing || mode === 'replace') {
 				// Build merged character state
 				const mergedState = {
+					characterId: 'default',
 					// Persona fields from persona or defaults
 					name: (firstPersona?.name as string) || 'Utsuwa',
 					systemPrompt:

@@ -71,6 +71,7 @@ export interface PersonaExtensions {
 // Combines persona metadata + character stats in single unified record
 export interface CharacterState {
 	id?: number;
+	characterId: string;
 
 	// Persona fields (unified - no more separate persona storage)
 	name: string;
@@ -179,6 +180,7 @@ const DEFAULT_SYSTEM_PROMPT =
 export function createDefaultCharacterState(): Omit<CharacterState, 'id'> {
 	const now = new Date();
 	return {
+		characterId: 'default',
 		// Persona fields
 		name: 'Utsuwa',
 		soulPrompt: DEFAULT_SYSTEM_PROMPT,

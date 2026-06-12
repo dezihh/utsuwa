@@ -27,6 +27,9 @@ let isLoading = $state(true);
 let isReady = $state(false);
 let error = $state<string | null>(null);
 
+// Current character ID for multi-character isolation
+let currentCharacterId = $state<string>('default');
+
 // Debounce save timeout
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -60,15 +63,16 @@ function createCharacterStore() {
 		return Math.round(energy * 0.3 + trust * 0.35 + comfort * 0.35);
 	});
 
-	// Load state from IndexedDB
-	async function loadState(): Promise<void> {
+	// Load state from IndexedDB for a specific character
+	async function loadState(characterId: string = 'default'): Promise<void> {
 		if (!browser) return;
 
 		isLoading = true;
 		error = null;
+		currentCharacterId = characterId;
 
 		try {
-			const loaded = await getCharacterState();
+			const loaded = await getCharacterState(characterId);
 			state = loaded;
 
 			// Apply time-based recovery/decay based on time since last interaction
@@ -146,6 +150,7 @@ function createCharacterStore() {
 				const plainState = $state.snapshot(state);
 				await saveCharacterState({
 					...plainState,
+					characterId: currentCharacterId,
 					updatedAt: new Date()
 				});
 			} catch (e) {
@@ -404,13 +409,24 @@ function createCharacterStore() {
 		save();
 	}
 
+	// Get current character ID
+	function getCurrentCharacterId(): string {
+		return currentCharacterId;
+	}
+
+	// Set current character ID (does not load state — call loadState separately)
+	function setCurrentCharacterId(id: string): void {
+		currentCharacterId = id;
+	}
+
 	// Reset state (delete and recreate)
 	async function resetState(): Promise<void> {
 		if (!browser) return;
 
 		try {
-			await deleteCharacterState();
+			await deleteCharacterState(currentCharacterId);
 			state = createDefaultCharacterState() as CharacterState;
+			state.characterId = currentCharacterId;
 			await save(true);
 		} catch (e) {
 			console.error('Failed to reset character state:', e);
@@ -428,7 +444,7 @@ function createCharacterStore() {
 				clearTimeout(saveTimeout);
 				saveTimeout = null;
 				const plainState = $state.snapshot(state);
-				saveCharacterState({ ...plainState, updatedAt: new Date() });
+				saveCharacterState({ ...plainState, characterId: currentCharacterId, updatedAt: new Date() });
 			}
 		});
 	}
@@ -490,7 +506,9 @@ function createCharacterStore() {
 		resetState,
 		incrementSessionCount,
 		isEvolutionDue,
-		applyEvolution
+		applyEvolution,
+		getCurrentCharacterId,
+		setCurrentCharacterId
 	};
 }
 

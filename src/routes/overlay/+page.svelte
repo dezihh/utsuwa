@@ -39,7 +39,8 @@
 		determineFactCategory,
 		calculateFactImportance,
 		backfillEmbeddings,
-		getEmbeddingBackfillStatus
+		getEmbeddingBackfillStatus,
+		SHARED_CHARACTER_ID
 	} from '$lib/engine/memory';
 	import { initEmbeddingModel, subscribeToEmbeddingState } from '$lib/services/embeddings';
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
@@ -50,13 +51,14 @@
 	let activeEvent = $state<EventDefinition | null>(null);
 
 	const chatExpanded = $derived(overlayStore.chatExpanded);
+	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
 
 	// Hydrate working memory on start
 	$effect(() => {
 		isMemoryReady = false;
 		(async () => {
 			try {
-				await hydrateWorkingMemory();
+				await hydrateWorkingMemory(currentCharacterId);
 				isMemoryReady = true;
 			} catch (e) {
 				console.error('Failed to hydrate working memory:', e);
@@ -141,10 +143,12 @@
 
 		if (finalUpdates.newMemory) {
 			try {
+				const isUserFact = finalUpdates.newMemory.toLowerCase().startsWith('user');
 				await memoryApi.createFact({
 					content: finalUpdates.newMemory,
 					category: determineFactCategory(finalUpdates.newMemory),
-					importance: calculateFactImportance(finalUpdates.newMemory)
+					importance: calculateFactImportance(finalUpdates.newMemory),
+					characterId: isUserFact ? SHARED_CHARACTER_ID : currentCharacterId
 				});
 			} catch (e) {
 				console.debug('[Memory] Failed to save LLM observation:', e);
@@ -166,10 +170,12 @@
 		for (const factContent of potentialFacts.slice(0, 2)) {
 			try {
 				const userAnalysis = analyzeMessage(userMessage);
+				const isUserFact = factContent.toLowerCase().startsWith('user');
 				await memoryApi.createFact({
 					content: factContent,
 					category: determineFactCategory(factContent),
-					importance: calculateFactImportance(factContent, userAnalysis.sentiment)
+					importance: calculateFactImportance(factContent, userAnalysis.sentiment),
+					characterId: isUserFact ? SHARED_CHARACTER_ID : currentCharacterId
 				});
 			} catch (e) {
 				console.debug('Failed to save fact:', e);
@@ -195,7 +201,7 @@
 	async function buildCompanionSystemPrompt(userMessage: string): Promise<string> {
 		const state = characterStore.state;
 		const persona = personaStore.activeCard;
-		const memories = await retrieveRelevantContext(userMessage);
+		const memories = await retrieveRelevantContext(userMessage, currentCharacterId);
 
 		const speechSettings = modulesStore.getModuleSettings('speech');
 		const activeTTSProvider = speechSettings?.activeProvider as string | undefined;

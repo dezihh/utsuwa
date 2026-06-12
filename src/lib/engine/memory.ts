@@ -16,6 +16,9 @@ import { analyzePersonalityEvolution } from '$lib/services/memory/analyze-person
 // Session inactivity threshold (30 minutes)
 const SESSION_INACTIVITY_MS = 30 * 60 * 1000;
 
+// Shared character ID for user facts visible to all characters
+export const SHARED_CHARACTER_ID = 'shared';
+
 // Working memory store (single instance for the session)
 let workingMemory: WorkingMemory = {
 	turns: [],
@@ -74,17 +77,18 @@ export function clearWorkingMemory(): void {
 }
 
 // Hydrate working memory from IndexedDB (call on page load)
-export async function hydrateWorkingMemory(): Promise<void> {
+export async function hydrateWorkingMemory(characterId: string = 'default'): Promise<void> {
 	if (workingMemory.turns.length > 0) return;
 
-	// Find the most recent open session (not ended)
-	const openSessions = await memoryStorage.getSessions({ ended: false, limit: 1 });
+	// Find the most recent open session (not ended) for this character
+	const openSessions = await memoryStorage.getSessions({ characterId, ended: false, limit: 1 });
 	const currentSession = openSessions[0];
 
 	if (currentSession) {
 		// Only load turns belonging to the current open session
 		const recentTurns = await memoryStorage.getConversationTurns({
 			sessionId: currentSession.id,
+			characterId,
 			limit: 20
 		});
 		workingMemory.turns = recentTurns;
@@ -234,8 +238,8 @@ export async function startNewSession(
 // Memory API - uses IndexedDB storage directly
 export const memoryApi = {
 	// Get facts from IndexedDB
-	async getFacts(limit: number = 50): Promise<Fact[]> {
-		return memoryStorage.getFacts({ limit });
+	async getFacts(limit: number = 50, characterId: string = 'default'): Promise<Fact[]> {
+		return memoryStorage.getFacts({ limit, characterId });
 	},
 
 	// Get sessions from IndexedDB
@@ -247,10 +251,15 @@ export const memoryApi = {
 	},
 
 	// Search facts by keywords
-	async searchFacts(query: string, options: MemorySearchOptions = {}): Promise<Fact[]> {
+	async searchFacts(
+		query: string,
+		options: MemorySearchOptions = {},
+		characterId: string = 'default'
+	): Promise<Fact[]> {
 		const keywords = query.split(/\s+/).filter((w) => w.length > 2);
 		return memoryStorage.getFacts({
 			...options,
+			characterId,
 			keywords: keywords.length > 0 ? keywords : undefined
 		});
 	},
@@ -314,7 +323,10 @@ export const memoryApi = {
 };
 
 // Retrieve relevant context for prompt building
-export async function retrieveRelevantContext(userMessage: string): Promise<RelevantContext> {
+export async function retrieveRelevantContext(
+	userMessage: string,
+	characterId: string = 'default'
+): Promise<RelevantContext> {
 	// Get recent turns from working memory
 	const recentTurns = getRecentTurns(10);
 
@@ -327,13 +339,25 @@ export async function retrieveRelevantContext(userMessage: string): Promise<Rele
 		if (isEmbeddingReady()) {
 			const queryEmbedding = await embedText(userMessage);
 			if (queryEmbedding) {
-				// Get all facts with embeddings for semantic search
-				const allFacts = await memoryStorage.getAllFactsWithEmbeddings();
-				const semanticResults = findSimilarFacts(queryEmbedding, allFacts, MAX_RELEVANT_FACTS, {
-					similarityWeight: 0.7,
-					importanceWeight: 0.3,
-					minSimilarity: 0.3
+				// Get character-specific + shared facts for semantic search
+				const characterFacts = await memoryStorage.getFacts({ characterId, limit: 1000 });
+				const sharedFacts = await memoryStorage.getFacts({
+					characterId: SHARED_CHARACTER_ID,
+					limit: 1000
 				});
+				const allFacts = [...characterFacts, ...sharedFacts];
+				const factsWithEmbeddings = allFacts.filter((f) => f.embedding && f.embedding.length > 0);
+
+				const semanticResults = findSimilarFacts(
+					queryEmbedding,
+					factsWithEmbeddings,
+					MAX_RELEVANT_FACTS,
+					{
+						similarityWeight: 0.7,
+						importanceWeight: 0.3,
+						minSimilarity: 0.3
+					}
+				);
 				relevantFacts = semanticResults.map((r) => r.fact);
 
 				// For triggered memories, use higher similarity threshold
@@ -342,7 +366,7 @@ export async function retrieveRelevantContext(userMessage: string): Promise<Rele
 					const triggerQuery = triggerWords.join(' ');
 					const triggerEmbedding = await embedText(triggerQuery);
 					if (triggerEmbedding) {
-						const triggerResults = findSimilarFacts(triggerEmbedding, allFacts, 5, {
+						const triggerResults = findSimilarFacts(triggerEmbedding, factsWithEmbeddings, 5, {
 							similarityWeight: 0.6,
 							importanceWeight: 0.4,
 							minSimilarity: 0.5
@@ -358,16 +382,28 @@ export async function retrieveRelevantContext(userMessage: string): Promise<Rele
 		// Fall back to keyword search if semantic search didn't work or returned nothing
 		if (relevantFacts.length === 0) {
 			// Get high-importance facts (always include these regardless of keywords)
-			const importantFacts = await memoryApi.getFacts(5);
+			const importantFacts = await memoryStorage.getFacts({ limit: 5, characterId });
+			const sharedImportantFacts = await memoryStorage.getFacts({
+				limit: 5,
+				characterId: SHARED_CHARACTER_ID
+			});
 
 			// Search by keywords in user message
-			const keywordFacts = await memoryApi.searchFacts(userMessage, {
-				limit: MAX_RELEVANT_FACTS
+			const keywords = userMessage.split(/\s+/).filter((w) => w.length > 2);
+			const keywordFacts = await memoryStorage.getFacts({
+				characterId,
+				limit: MAX_RELEVANT_FACTS,
+				keywords: keywords.length > 0 ? keywords : undefined
+			});
+			const sharedKeywordFacts = await memoryStorage.getFacts({
+				characterId: SHARED_CHARACTER_ID,
+				limit: MAX_RELEVANT_FACTS,
+				keywords: keywords.length > 0 ? keywords : undefined
 			});
 
 			// Merge important facts with keyword-matched facts, dedupe by id
-			const allFacts = [...importantFacts];
-			for (const fact of keywordFacts) {
+			const allFacts = [...importantFacts, ...sharedImportantFacts];
+			for (const fact of [...keywordFacts, ...sharedKeywordFacts]) {
 				if (!allFacts.some((f) => f.id === fact.id)) {
 					allFacts.push(fact);
 				}
@@ -377,11 +413,19 @@ export async function retrieveRelevantContext(userMessage: string): Promise<Rele
 			// Check for triggered memories (specific keywords)
 			const triggerWords = extractTriggerWords(userMessage);
 			if (triggerWords.length > 0) {
-				const triggered = await memoryApi.searchFacts(triggerWords.join(' '), {
+				const triggered = await memoryStorage.getFacts({
+					characterId,
 					minImportance: 70,
-					limit: 5
+					limit: 5,
+					keywords: triggerWords
 				});
-				triggeredMemories = triggered.filter(
+				const sharedTriggered = await memoryStorage.getFacts({
+					characterId: SHARED_CHARACTER_ID,
+					minImportance: 70,
+					limit: 5,
+					keywords: triggerWords
+				});
+				triggeredMemories = [...triggered, ...sharedTriggered].filter(
 					(t) => !relevantFacts.some((r) => r.id === t.id)
 				);
 			}
@@ -393,9 +437,8 @@ export async function retrieveRelevantContext(userMessage: string): Promise<Rele
 	// Get relevant sessions via semantic search (max 3)
 	let recentSessions: SessionSummary[] = [];
 	try {
-		// TODO: pass dynamic characterId when multi-character support is added
 		const allSessions = await memoryStorage.getSessions({
-			characterId: 'default',
+			characterId,
 			ended: true,
 			limit: 50
 		});
@@ -403,7 +446,9 @@ export async function retrieveRelevantContext(userMessage: string): Promise<Rele
 		if (isEmbeddingReady()) {
 			const queryEmbedding = await embedText(userMessage);
 			if (queryEmbedding) {
-				const sessionsWithEmbeddings = allSessions.filter((s) => s.embedding && s.embedding.length > 0);
+				const sessionsWithEmbeddings = allSessions.filter(
+					(s) => s.embedding && s.embedding.length > 0
+				);
 				const results: Array<{ session: SessionSummary; similarity: number }> = [];
 				for (const session of sessionsWithEmbeddings) {
 					if (!session.embedding) continue;
@@ -429,9 +474,8 @@ export async function retrieveRelevantContext(userMessage: string): Promise<Rele
 	let factLibraryEntries: import('$lib/types/memory').FactLibraryEntry[] = [];
 	try {
 		const keywords = userMessage.split(/\s+/).filter((w) => w.length > 3);
-		// TODO: pass dynamic characterId when multi-character support is added
 		const entries = await memoryStorage.getFactLibraryEntries({
-			characterId: 'default',
+			characterId,
 			limit: 15,
 			keywords: keywords.length > 0 ? keywords : undefined
 		});

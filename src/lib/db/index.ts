@@ -210,6 +210,42 @@ class UtsuwaDatabase extends Dexie {
 			reminders: '++id, sessionId, triggerAt, executed',
 			vocabulary: '++id, sourceWord, targetWord, category, level, familiarity, characterId, createdAt'
 		});
+
+		// Version 7: Multi-character isolation - add characterId to characterStates and migrate all existing data
+		this.version(7)
+			.stores({
+				characterStates: '++id, characterId, updatedAt',
+				facts: '++id, characterId, category, importance, createdAt',
+				sessions: '++id, characterId, startedAt',
+				conversationTurns: '++id, characterId, sessionId, createdAt',
+				completedEvents: '++id, characterId, eventId, completedAt',
+				factLibrary: '++id, characterId, type, category, confidence, createdAt',
+				reminders: '++id, sessionId, triggerAt, executed',
+				vocabulary: '++id, sourceWord, targetWord, category, level, familiarity, characterId, createdAt'
+			})
+			.upgrade(async (tx) => {
+				const characterStates = tx.table('characterStates');
+				const facts = tx.table('facts');
+				const sessions = tx.table('sessions');
+				const conversationTurns = tx.table('conversationTurns');
+				const factLibrary = tx.table('factLibrary');
+
+				await characterStates.toCollection().modify((cs: Record<string, unknown>) => {
+					if (!cs.characterId) cs.characterId = 'default';
+				});
+				await facts.toCollection().modify((f: Record<string, unknown>) => {
+					if (!f.characterId) f.characterId = 'default';
+				});
+				await sessions.toCollection().modify((s: Record<string, unknown>) => {
+					if (!s.characterId) s.characterId = 'default';
+				});
+				await conversationTurns.toCollection().modify((t: Record<string, unknown>) => {
+					if (!t.characterId) t.characterId = 'default';
+				});
+				await factLibrary.toCollection().modify((e: Record<string, unknown>) => {
+					if (!e.characterId) e.characterId = 'default';
+				});
+			});
 	}
 }
 

@@ -2,6 +2,7 @@
 	import { Icon } from '$lib/components/ui';
 	import Button from '$lib/components/ui/Button.svelte';
 	import { vocabularyStore } from '$lib/stores/vocabulary.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import {
 		saveVocabularyEntries,
 		deleteAllVocabulary,
@@ -22,8 +23,11 @@
 	let showDeleteConfirm = $state(false);
 	let isDeleting = $state(false);
 
+	// Current character ID for multi-character isolation
+	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
+
 	$effect(() => {
-		vocabularyStore.loadStats('default');
+		vocabularyStore.loadStats(currentCharacterId);
 	});
 
 	function parseCSVLine(line: string): string[] {
@@ -126,7 +130,7 @@
 						category: cols[3] || 'General',
 						level: cols[4] || 'A1',
 						tags: cols[5] ? cols[5].split(',').map((t) => t.trim()).filter(Boolean) : [],
-						characterId: 'default'
+						characterId: currentCharacterId
 					};
 				})
 				.filter((e): e is NonNullable<typeof e> => e !== null && !!e.sourceWord && !!e.targetWord);
@@ -136,7 +140,7 @@
 			await saveVocabularyEntries(entries);
 			csvText = '';
 			previewRows = [];
-			await vocabularyStore.loadStats('default');
+			await vocabularyStore.loadStats(currentCharacterId);
 		} catch (e) {
 			importError = e instanceof Error ? e.message : 'Import failed';
 		} finally {
@@ -151,9 +155,9 @@
 		}
 		isDeleting = true;
 		try {
-			await deleteAllVocabulary('default');
+			await deleteAllVocabulary(currentCharacterId);
 			showDeleteConfirm = false;
-			await vocabularyStore.loadStats('default');
+			await vocabularyStore.loadStats(currentCharacterId);
 		} catch (e) {
 			console.error('[Vocabulary] Failed to delete all:', e);
 		} finally {

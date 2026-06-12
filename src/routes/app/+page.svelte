@@ -44,6 +44,7 @@
 		retrieveRelevantContext,
 		addTurnToWorkingMemory,
 		hydrateWorkingMemory,
+		clearWorkingMemory,
 		getWorkingMemory,
 		memoryApi,
 		determineFactCategory,
@@ -51,7 +52,8 @@
 		backfillEmbeddings,
 		getEmbeddingBackfillStatus,
 		shouldStartNewSession,
-		startNewSession
+		startNewSession,
+		SHARED_CHARACTER_ID
 	} from '$lib/engine/memory';
 	import * as memoryStorage from '$lib/services/storage/memory';
 	import { initEmbeddingModel, subscribeToEmbeddingState, type EmbeddingState } from '$lib/services/embeddings';
@@ -166,6 +168,9 @@
 		}
 	});
 
+	// Derived current character ID from active preset
+	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
+
 	// Auto-switch VRM avatar when active preset defines one
 	$effect(() => {
 		const models = vrmStore.models;
@@ -178,6 +183,17 @@
 				vrmStore.setActiveModel(preset.vrmModelId);
 			}
 		}
+	});
+
+	// Preset switch effect: clear working memory and load character state when preset changes
+	let prevProfileId = settingsStore.getActiveProfileId();
+	$effect(() => {
+		const newId = settingsStore.getActiveProfileId();
+		if (newId === prevProfileId) return;
+		prevProfileId = newId;
+		clearWorkingMemory();
+		characterStore.loadState(newId);
+		chatStore.clearMessages();
 	});
 
 	const SIDEBAR_WIDTH = 320;
@@ -353,7 +369,7 @@
 						mode: tag.mode,
 						filter: tag.filter,
 						count: tag.count,
-						characterId: 'default'
+						characterId: currentCharacterId
 					});
 					if (entries.length > 0) {
 						chatStore.addSystemMessage(
@@ -403,10 +419,12 @@
 		// Save LLM memory observation
 		if (finalUpdates.newMemory) {
 			try {
+				const isUserFact = finalUpdates.newMemory.toLowerCase().startsWith('user');
 				await memoryApi.createFact({
 					content: finalUpdates.newMemory,
 					category: determineFactCategory(finalUpdates.newMemory),
-					importance: calculateFactImportance(finalUpdates.newMemory)
+					importance: calculateFactImportance(finalUpdates.newMemory),
+					characterId: isUserFact ? SHARED_CHARACTER_ID : currentCharacterId
 				});
 			} catch (e) {
 				console.debug('[Memory] Failed to save LLM observation:', e);
@@ -420,7 +438,7 @@
 				const existing = await memoryStorage.getFactLibraryEntryByKey(
 					fact.key,
 					fact.type,
-					'default'
+					currentCharacterId
 				);
 				if (existing && existing.id !== undefined) {
 					// Update existing entry
@@ -435,7 +453,7 @@
 				} else {
 					// Create new entry
 					await memoryStorage.saveFactLibraryEntry({
-						characterId: 'default',
+						characterId: currentCharacterId,
 						type: fact.type,
 						key: fact.key,
 						value: fact.value,
@@ -468,14 +486,14 @@
 		if (sessionId) {
 			try {
 				await memoryStorage.saveConversationTurn({
-					characterId: 'default',
+					characterId: currentCharacterId,
 					role: 'user',
 					content: userMessage,
 					sessionId,
 					createdAt: new Date()
 				});
 				await memoryStorage.saveConversationTurn({
-					characterId: 'default',
+					characterId: currentCharacterId,
 					role: 'assistant',
 					content: dialogue,
 					sessionId,
@@ -491,10 +509,12 @@
 		for (const factContent of potentialFacts.slice(0, 2)) {
 			try {
 				const userAnalysis = analyzeMessage(userMessage);
+				const isUserFact = factContent.toLowerCase().startsWith('user');
 				await memoryApi.createFact({
 					content: factContent,
 					category: determineFactCategory(factContent),
-					importance: calculateFactImportance(factContent, userAnalysis.sentiment)
+					importance: calculateFactImportance(factContent, userAnalysis.sentiment),
+					characterId: isUserFact ? SHARED_CHARACTER_ID : currentCharacterId
 				});
 			} catch (e) {
 				console.debug('Failed to save fact:', e);
@@ -521,7 +541,7 @@
 	async function triggerEvolutionAnalysis() {
 		try {
 			const sessions = await memoryStorage.getSessions({
-				characterId: 'default',
+				characterId: currentCharacterId,
 				ended: true,
 				limit: characterStore.state.evolutionThreshold
 			});
@@ -558,7 +578,7 @@
 	): Promise<string> {
 		const state = characterStore.state;
 		const persona = personaStore.activeCard;
-		const memories = await retrieveRelevantContext(userMessage);
+		const memories = await retrieveRelevantContext(userMessage, currentCharacterId);
 
 		const speechSettings = modulesStore.getModuleSettings('speech');
 		const activeTTSProvider = speechSettings?.activeProvider as string | undefined;
@@ -625,7 +645,7 @@
 		const state = characterStore.state;
 		if (shouldStartNewSession(state.lastInteraction)) {
 			try {
-				const session = await startNewSession('default', characterStore.state.name);
+				const session = await startNewSession(currentCharacterId, characterStore.state.name);
 				debugStore.logSession('Session started', `Session ID: ${session.id}`);
 				// Increment session count and check for evolution
 				characterStore.incrementSessionCount();
