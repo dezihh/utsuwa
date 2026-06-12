@@ -21,13 +21,14 @@ export function extractVocabTags(text: string): { tags: ParsedVocabTag[]; cleane
 }
 
 export function parseVocabTag(tag: string): ParsedVocabTag | null {
-	const match = tag.match(/^\[vocab:(\w+)(?::([^\]]*))?:(\d+)\]$/);
+	// Use [^\]:]+ instead of \w+ to support Unicode characters (Umlaute, accents, etc.)
+	const match = tag.match(/^\[vocab:([^\]:]+)(?::([^\]]*))?:(\d+)\]$/);
 	if (!match) return null;
 
-	const mode = match[1] as ParsedVocabTag['mode'];
+	const mode = match[1].trim() as ParsedVocabTag['mode'];
 	if (!['category', 'level', 'review', 'new', 'random'].includes(mode)) return null;
 
-	const filter = match[2] || undefined;
+	const filter = match[2]?.trim() || undefined;
 	const count = parseInt(match[3], 10);
 	if (isNaN(count) || count <= 0) return null;
 
