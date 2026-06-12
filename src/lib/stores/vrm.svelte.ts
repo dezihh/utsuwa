@@ -151,7 +151,6 @@ function createVrmStore() {
 		{ id: 'blush', name: 'Blush', url: '/animations/Blush.vrma' },
 		{ id: 'clapping', name: 'Clapping', url: '/animations/Clapping.vrma' },
 		{ id: 'goodbye', name: 'Goodbye', url: '/animations/Goodbye.vrma' },
-		{ id: 'jump', name: 'Jump', url: '/animations/Jump.vrma' },
 		{ id: 'lookaround', name: 'Look Around', url: '/animations/LookAround.vrma' },
 		{ id: 'relax', name: 'Relax', url: '/animations/Relax.vrma' },
 		{ id: 'sad-pose', name: 'Sad', url: '/animations/Sad.vrma' },
