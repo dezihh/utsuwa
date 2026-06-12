@@ -63,8 +63,8 @@ export function buildSystemPrompt(context: PromptContext): string {
 		buildInstructionLayer(context)
 	];
 
+	if (imageSearchLayer) layers.splice(1, 0, imageSearchLayer);
 	if (reminderLayer) layers.splice(1, 0, reminderLayer);
-	if (imageSearchLayer) layers.splice(2, 0, imageSearchLayer);
 
 	const voiceTags = buildVoiceTagLayer(context);
 	if (voiceTags) layers.push(voiceTags);
@@ -180,11 +180,11 @@ If the user learns a new vocabulary word, concept, or fact, include "structured_
 NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affection, trust, intimacy, comfort, or respect changes - these relationship stats are disabled.
 </instructions>`);
 
-	const reminderLayer = buildReminderLayer(ctx);
-	if (reminderLayer) parts.push(reminderLayer);
-
 	const imageSearchLayer = buildImageSearchLayer(ctx);
 	if (imageSearchLayer) parts.push(imageSearchLayer);
+
+	const reminderLayer = buildReminderLayer(ctx);
+	if (reminderLayer) parts.push(reminderLayer);
 
 	const voiceTags = buildVoiceTagLayer(ctx);
 	if (voiceTags) parts.push(voiceTags);
@@ -754,19 +754,22 @@ function buildImageSearchLayer(ctx: PromptContext): string | null {
 	const parts: string[] = [];
 
 	parts.push(
-		`IMAGE SEARCH TAG — use this proactively in these situations:\n` +
+		`IMAGE SEARCH TAG — CRITICAL: You CAN show images. The system will search the web and display them in a popup. You do NOT need to say you cannot show images — just output the tag and images appear automatically.\n\n` +
+		`Use this proactively in these situations:\n` +
 		`  1. The user asks to see images, pictures, photos, or visual references.\n` +
 		`  2. A topic naturally calls for visual support (landscapes, animals, art, fashion, food).\n` +
 		`  3. You want to surprise the user with something beautiful or interesting.\n` +
-		`  4. You want to illustrate something you are describing (e.g., "Look at this! [search_image:aurora borealis]").`
+		`  4. You want to illustrate something you are describing (e.g., "Look at this! [search_image:aurora borealis]").\n\n` +
+		`NEVER say "I cannot show images" or "I have no internet connection" — the system DOES show images when you use the tag.`
 	);
 
 	parts.push(
 		`To search for images, embed this exact tag directly in your response text (NOT in JSON, NOT in code blocks):\n` +
 		`  [search_image:cute cats]\n` +
 		`  [search_image:beautiful mountain landscape]\n` +
-		`  [search_image:puppies playing]\n\n` +
-		`The tag will be hidden from the user. A popup with images will appear automatically.`
+		`  [search_image:puppies playing]\n` +
+		`  [search_image:aurora borealis]\n\n` +
+		`The tag will be hidden from the user. A popup with images will appear automatically within seconds.`
 	);
 
 	parts.push(

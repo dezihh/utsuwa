@@ -63,7 +63,7 @@
 	import { splitIntoSegments, stripAllTags, stripForApiContext, isContinueRequest } from '$lib/utils/sentences';
 	import { reminderStore } from '$lib/stores/reminders.svelte';
 	import { tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
-	import { extractImageSearchTags, tryExtractImageSearchFromUserMessage, tryExtractDelayedImageSearch } from '$lib/utils/image-search';
+	import { extractImageSearchTags, tryExtractDelayedImageSearch } from '$lib/utils/image-search';
 	import { extractReminderTags } from '$lib/utils/reminders';
 	import { imageSearchStore } from '$lib/stores/image-search.svelte';
 	import { extractVocabTags } from '$lib/utils/vocabulary';
@@ -686,28 +686,9 @@
 			}
 		}
 
-		// Client-side fallback: parse natural-language image search requests directly
-		const imageQuery = tryExtractImageSearchFromUserMessage(content);
-		if (imageQuery) {
-			const searxUrl = settingsStore.getSearxUrl();
-			if (searxUrl) {
-				try {
-					imageSearchStore.setLoading(true);
-					const searxParam = searxUrl ? `&searxUrl=${encodeURIComponent(searxUrl)}` : '';
-					const res = await fetch(`/api/search/images?q=${encodeURIComponent(imageQuery)}${searxParam}`);
-					const data = await res.json();
-					if (res.ok && data.results?.length > 0) {
-						imageSearchStore.openModal(data.results, imageQuery);
-					} else if (data.error) {
-						console.warn('[ImageSearch] Search failed:', data.error);
-					}
-				} catch (e) {
-					console.warn('[ImageSearch] Fetch error:', e);
-				} finally {
-					imageSearchStore.setLoading(false);
-				}
-			}
-		}
+		// NOTE: Immediate image search fallback removed.
+		// The LLM must decide what to search for via [search_image:query] tags.
+		// This prevents showing irrelevant images before the LLM responds.
 
 		const continueMode = isContinueRequest(content);
 
