@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Icon } from '$lib/components/ui';
 	import { ttsEmotionsStore } from '$lib/stores/tts-emotions.svelte';
-	import type { TTSEmotionProvider, TTSEmotionConfig, TTSBodyActionRule } from '$lib/types/tts-emotion';
+	import type { TTSEmotionProvider, TTSEmotionConfig } from '$lib/types/tts-emotion';
 	import { EMOTION_TAGS } from '$lib/utils/sentences';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 
@@ -26,7 +26,6 @@
 	);
 
 	const caps = $derived(ttsEmotionsStore.getProviderCapabilities(activeProvider));
-	const bodyRules = $derived(ttsEmotionsStore.bodyActionRules);
 	const availableActions = $derived(vrmStore.availableAnimations.filter((a) => !a.missing).map((a) => a.id));
 
 	function updateEmotion(tag: string, patch: Partial<TTSEmotionConfig>) {
@@ -44,10 +43,6 @@
 		} finally {
 			testingTag = null;
 		}
-	}
-
-	function updateRule(index: number, patch: Partial<TTSBodyActionRule>) {
-		ttsEmotionsStore.updateBodyActionRule(index, patch);
 	}
 
 	function formatSlider(val: number | undefined, digits = 2) {
@@ -208,6 +203,49 @@
 										</select>
 									</div>
 								{/if}
+
+								{#if config.enabled}
+									<div class="slider-group native-tag">
+										<span class="slider-label">Animation</span>
+										<select
+											value={config.animationId ?? ''}
+											onchange={(e) => updateEmotion(tag, { animationId: e.currentTarget.value || undefined })}
+										>
+											<option value="">(none)</option>
+											{#each availableActions as action}
+												<option value={action}>{action}</option>
+											{/each}
+										</select>
+									</div>
+
+									{#if config.animationId}
+										<div class="slider-group">
+											<span class="slider-label">Trigger %</span>
+											<input
+												type="range"
+												min="0"
+												max="1"
+												step="0.05"
+												value={config.animationProbability ?? 0.5}
+												oninput={(e) => updateEmotion(tag, { animationProbability: parseFloat(e.currentTarget.value) })}
+											/>
+											<span class="slider-value">{((config.animationProbability ?? 0.5) * 100).toFixed(0)}%</span>
+										</div>
+
+										<div class="slider-group">
+											<span class="slider-label">Cooldown (ms)</span>
+											<input
+												type="range"
+												min="1000"
+												max="10000"
+												step="500"
+												value={config.animationCooldownMs ?? 4000}
+												oninput={(e) => updateEmotion(tag, { animationCooldownMs: parseInt(e.currentTarget.value) })}
+											/>
+											<span class="slider-value">{config.animationCooldownMs ?? 4000} ms</span>
+										</div>
+									{/if}
+								{/if}
 							</div>
 						</div>
 					{/if}
@@ -215,74 +253,6 @@
 			</div>
 		</section>
 
-		<!-- Body-Action Mapping -->
-		<section class="section">
-			<div class="section-header-row">
-				<h3>Body-Action Mapping</h3>
-				<span class="hint">Trigger avatar animations when emotions are spoken.</span>
-			</div>
-
-			<div class="rules-list">
-				{#each bodyRules as rule, i}
-					<div class="rule-row">
-						<div class="rule-info">
-							<span class="rule-tag">{rule.emotionTag}</span>
-							<span class="rule-arrow">→</span>
-							<select
-								value={rule.actionId}
-								onchange={(e) => updateRule(i, { actionId: e.currentTarget.value })}
-								class="rule-action-select"
-							>
-								{#each availableActions as action}
-									<option value={action}>{action}</option>
-								{/each}
-							</select>
-						</div>
-
-						<div class="rule-sliders">
-							<div class="slider-group compact">
-								<span class="slider-label">Chance</span>
-								<input
-									type="range"
-									min="0"
-									max="1"
-									step="0.05"
-									value={rule.probability}
-									oninput={(e) => updateRule(i, { probability: parseFloat(e.currentTarget.value) })}
-								/>
-								<span class="slider-value">{(rule.probability * 100).toFixed(0)}%</span>
-							</div>
-
-							<div class="slider-group compact">
-								<span class="slider-label">Cooldown</span>
-								<input
-									type="range"
-									min="0"
-									max="10000"
-									step="500"
-									value={rule.cooldownMs}
-									oninput={(e) => updateRule(i, { cooldownMs: parseInt(e.currentTarget.value) })}
-								/>
-								<span class="slider-value">{(rule.cooldownMs / 1000).toFixed(1)}s</span>
-							</div>
-						</div>
-
-						<div class="rule-toggle">
-							<label class="toggle" title="Enabled">
-								<input
-									type="checkbox"
-									checked={rule.enabled}
-									onchange={(e) => updateRule(i, { enabled: e.currentTarget.checked })}
-								/>
-								<span class="toggle-track">
-									<span class="toggle-thumb"></span>
-								</span>
-							</label>
-						</div>
-					</div>
-				{/each}
-			</div>
-		</section>
 	</div>
 </div>
 
@@ -345,11 +315,6 @@
 		margin: 0;
 	}
 
-	.hint {
-		margin: 0;
-		font-size: 0.875rem;
-		color: var(--text-tertiary);
-	}
 
 	.reset-btn {
 		display: inline-flex;
@@ -592,9 +557,6 @@
 		flex: 1;
 	}
 
-	.slider-group.compact {
-		min-width: 8rem;
-	}
 
 	.slider-group.native-tag {
 		min-width: 8rem;
@@ -755,91 +717,6 @@
 		transform: translateX(18px);
 	}
 
-	/* Body-Action Rules */
-	.rules-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.625rem;
-	}
-
-	.rule-row {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 0.75rem 1rem;
-		background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 14px;
-		box-shadow:
-			0 3px 10px rgba(0, 0, 0, 0.06),
-			0 1px 3px rgba(0, 0, 0, 0.04),
-			inset 0 1px 0 rgba(255, 255, 255, 0.9);
-		flex-wrap: wrap;
-	}
-
-	:global(.dark) .rule-row {
-		background: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
-		border-color: rgba(255, 255, 255, 0.08);
-		box-shadow:
-			0 3px 10px rgba(0, 0, 0, 0.25),
-			0 1px 3px rgba(0, 0, 0, 0.15),
-			inset 0 1px 0 rgba(255, 255, 255, 0.05);
-	}
-
-	.rule-info {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		min-width: 10rem;
-		flex: 1;
-	}
-
-	.rule-tag {
-		font-size: 0.875rem;
-		font-weight: 600;
-		color: var(--text-primary);
-		text-transform: capitalize;
-	}
-
-	.rule-arrow {
-		font-size: 0.75rem;
-		color: var(--text-tertiary);
-	}
-
-	.rule-action-select {
-		flex: 1;
-		min-width: 6rem;
-		padding: 0.35rem 0.5rem;
-		background: linear-gradient(180deg, #f8f8f8 0%, #f0f0f0 100%);
-		border: 1px solid rgba(0, 0, 0, 0.1);
-		border-radius: 8px;
-		font-size: 0.8125rem;
-		color: var(--text-primary);
-		box-shadow:
-			inset 0 1px 2px rgba(0, 0, 0, 0.05),
-			0 1px 0 rgba(255, 255, 255, 0.8);
-		cursor: pointer;
-	}
-
-	:global(.dark) .rule-action-select {
-		background: linear-gradient(180deg, #222 0%, #1a1a1a 100%);
-		border-color: rgba(255, 255, 255, 0.1);
-		box-shadow:
-			inset 0 1px 2px rgba(0, 0, 0, 0.3),
-			0 1px 0 rgba(255, 255, 255, 0.05);
-	}
-
-	.rule-sliders {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.625rem 1rem;
-		flex: 2;
-	}
-
-	.rule-toggle {
-		flex-shrink: 0;
-	}
-
 	/* Tablet and below */
 	@media (max-width: 640px) {
 		.page-header {
@@ -886,12 +763,6 @@
 			margin-left: auto;
 		}
 
-		.rule-info {
-			width: 100%;
-		}
 
-		.rule-sliders {
-			width: 100%;
-		}
 	}
 </style>

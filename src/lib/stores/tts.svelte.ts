@@ -3,6 +3,7 @@ import { getTTSProvider as getTTSMetadata } from '$lib/services/providers/regist
 import { VoiceOrchestrator, type SpeechSegment } from '$lib/services/voice-orchestrator';
 import { vrmStore } from '$lib/stores/vrm.svelte';
 import { expressionController } from '$lib/services/vrm/expression-controller';
+import { triggerEmotionAnimation } from '$lib/services/tts/emotion-animation-trigger';
 
 interface QueueItem {
 	text: string;
@@ -17,6 +18,7 @@ function createTTSStore() {
 	const orchestrator = new VoiceOrchestrator();
 
 	function buildOrchestratorCallbacks(
+		provider: string,
 		extraCallbacks?: { onSentenceStart?: (sentence: string, index: number) => void }
 	) {
 		return {
@@ -29,6 +31,9 @@ function createTTSStore() {
 			onEmotionChange: (emotion: string | null) => {
 				vrmStore.setEmotion(emotion);
 				expressionController.setEmotion(emotion);
+				if (emotion) {
+					triggerEmotionAnimation(emotion, provider);
+				}
 			},
 			onAction: (action: string) => {
 				vrmStore.triggerAction(action);
@@ -56,7 +61,7 @@ function createTTSStore() {
 		if (tts.capabilities?.streaming && tts.speakStreaming) {
 			isSpeaking = true;
 			const segments: SpeechSegment[] = [{ text }];
-			await orchestrator.speakSegments(segments, options, buildOrchestratorCallbacks());
+			await orchestrator.speakSegments(segments, options, buildOrchestratorCallbacks(options.provider));
 			return;
 		}
 
@@ -90,7 +95,7 @@ function createTTSStore() {
 		}
 
 		isSpeaking = true;
-		await orchestrator.speakSegments(sentences, options, buildOrchestratorCallbacks(callbacks));
+		await orchestrator.speakSegments(sentences, options, buildOrchestratorCallbacks(options.provider, callbacks));
 	}
 
 	// ---------------------------------------------------------------------------
@@ -113,7 +118,7 @@ function createTTSStore() {
 		}
 
 		isSpeaking = true;
-		orchestrator.beginSession(options, buildOrchestratorCallbacks(callbacks));
+		orchestrator.beginSession(options, buildOrchestratorCallbacks(options.provider, callbacks));
 	}
 
 	/** Push the next segment into the pipeline. Synthesis starts immediately. */

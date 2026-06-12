@@ -18,6 +18,12 @@ export interface TTSEmotionConfig {
 	exaggeration?: number;
 	nativeTag?: string;
 	enabled: boolean;
+	/** Optional VRM animation to play when this emotion is active during TTS */
+	animationId?: string;
+	/** Probability (0.0–1.0) that the animation triggers */
+	animationProbability?: number;
+	/** Minimum milliseconds between repeated triggers of this animation */
+	animationCooldownMs?: number;
 }
 
 export interface TTSProviderEmotionProfile {

@@ -109,6 +109,15 @@ function buildDefaultEmotions(): Record<string, TTSEmotionConfig> {
 			enabled: true
 		};
 	}
+	// Apply default animation mappings from body action rules directly into emotions
+	for (const rule of DEFAULT_BODY_ACTION_RULES) {
+		const emotion = out[rule.emotionTag];
+		if (emotion && rule.enabled) {
+			emotion.animationId = rule.actionId;
+			emotion.animationProbability = rule.probability;
+			emotion.animationCooldownMs = rule.cooldownMs;
+		}
+	}
 	return out;
 }
 
