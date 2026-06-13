@@ -152,8 +152,26 @@ export const POST: RequestHandler = async ({ request }) => {
 		enqueueWrite(bytes);
 	});
 
+	// Wait for connection, then send params.
+	let connected = false;
+	try {
+		await new Promise<void>((res, rej) => {
+			const onOpen = () => { connected = true; res(); };
+			const onErr = () => rej(new Error(`Cannot connect to ${wsUrl}`));
+			ws.addEventListener('open', onOpen, { once: true });
+			ws.addEventListener('error', onErr, { once: true });
+		});
+	} catch (err) {
+		ws.close();
+		return new Response(
+			JSON.stringify({ error: `Chatterbox request failed: ${err instanceof Error ? err.message : 'Unknown error'}` }),
+			{ status: 502, headers: { 'Content-Type': 'application/json' } }
+		);
+	}
+
+	// Only attach permanent listeners AFTER successful connection.
 	ws.addEventListener('error', () => {
-		if (state === 'waiting') rejectWaiting(new Error(`Cannot connect to Chatterbox at ${wsUrl}`));
+		if (state === 'waiting') rejectWaiting(new Error(`Chatterbox connection error at ${wsUrl}`));
 		closeWriter();
 	});
 
@@ -161,19 +179,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (state === 'waiting') rejectWaiting(new Error('Chatterbox closed before sending status'));
 		writeQueue = writeQueue.then(closeWriter);
 	});
-
-	// Wait for connection, then send params.
-	try {
-		await new Promise<void>((res, rej) => {
-			ws.addEventListener('open', () => res(), { once: true });
-			ws.addEventListener('error', () => rej(new Error(`Cannot connect to ${wsUrl}`)), { once: true });
-		});
-	} catch (err) {
-		return new Response(
-			JSON.stringify({ error: `Chatterbox request failed: ${err instanceof Error ? err.message : 'Unknown error'}` }),
-			{ status: 502, headers: { 'Content-Type': 'application/json' } }
-		);
-	}
 
 	ws.send(JSON.stringify(wsParams));
 
