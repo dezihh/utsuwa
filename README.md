@@ -43,7 +43,7 @@
 - **Scene Backgrounds**: 9 built-in presets (gradients, solid colors, studio grid) plus custom image upload (PNG/JPG/WEBP) and HDRI/EXR environment maps for realistic PBR lighting
 - **Data Export/Import**: Download your data as a save file, restore anytime
 - **Theming**: Light and dark mode support with system preference detection
-- **Scheduled Reminders**: The companion can set time-based reminders (e.g., "remind me in 5 minutes to check the coffee") using inline `[reminder:5min]...[/reminder]` tags. Reminders are stored locally per session, polled in the background, and when triggered they are injected into the chat so the LLM sees them and can respond. Upcoming reminders are shown in a bell dropdown in the chat header.
+- **Scheduled Reminders**: The companion can set time-based reminders (e.g., "remind me in 5 minutes to check the coffee") using inline `[reminder:5min]...[/reminder]` tags. Reminders are stored locally per session, polled in the background, and when triggered they are injected into the LLM context as a system message so the companion can react. The trigger itself is logged in the debug panel and does not appear in the visible chat history. Upcoming reminders are shown in a bell dropdown in the chat header.
 - **Image Search via SearxNG**: The companion can search for images on the web using SearxNG. When the user asks for pictures (e.g., "show me images of cats"), the companion outputs a `[search_image:cats]` tag and images appear in a popup modal. The companion can also close the popup with `[close_images]`. Requires a SearxNG instance (configured via `SEARXNG_URL` environment variable or MCP Tools settings).
 - **Vocabulary Training System**: Dedicated vocabulary management separate from the Fact Library. Import vocabulary via CSV upload (drag & drop or paste), then practice with the companion using tag-based retrieval. The companion outputs `[vocab:MODE:FILTER:COUNT]` tags (e.g., `[vocab:category:Begrüßung:10]`, `[vocab:review:5]`, `[vocab:level:A1:20]`) and receives only the requested subset in the next prompt — never all words at once. Familiarity tracking per word. Enable/disable in Settings > Data.
 - **Desktop App** *(beta, macOS only)*: Native desktop app with transparent overlay mode — your companion floats on your desktop
@@ -69,6 +69,61 @@ Build a meaningful relationship with your AI companion through a dating sim-insp
 - **Time-Aware**: Your companion notices when you've been away and reacts accordingly
 
 See the [Companion System Architecture](https://utsuwa.ai/docs/technology/companion-system) for full details.
+
+### Companion Mode vs Dating Sim Mode
+
+Utsuwa offers two relationship modes. You choose during onboarding and can switch later under **Settings > Character > Mode**:
+
+| | **Companion Mode** | **Dating Sim Mode** |
+|---|---|---|
+| **Relationship progression** | Paused | Active |
+| **Stats** | Only **mood** and **energy** change | Affection, trust, intimacy, comfort, respect, mood, and energy all change |
+| **Relationship stage** | Locked to `companion` | Progresses through 8 stages: Stranger → Acquaintance → Friend → Close Friend → Romantic Interest → Dating → Committed → Soulmate |
+| **Events / milestones** | Disabled | Enabled after each turn |
+| **Status UI** | Shows energy + chat count | Shows love, trust, intimacy, comfort, energy, and respect |
+| **Prompt** | Simplified companion prompt | Full dating-sim prompt |
+
+**Important:** Companion Mode is *not* emotionless. The companion still has mood, energy, personality, memory, fact library, reminders, image search, animations, and voice — it simply does not advance the romantic relationship. If your persona prompt is affectionate or the companion's mood is warm, it can still feel emotional.
+
+Switching modes preserves your dating-sim stage (it is saved when entering Companion Mode and restored when returning to Dating Sim Mode). Frequent switching is discouraged because it can disrupt natural progression.
+
+### Fact Library
+
+The Fact Library is long-term, structured storage for facts you want the companion to remember reliably. Unlike free-form session summaries, entries are typed, tagged, and retrieved by semantic similarity so the companion can recall them in the right context.
+
+Open it from the **book icon** in the top-left toolbar. There you can browse, search, add, edit, import, and review entries.
+
+**What to store:** anything you want the companion to remember about you, itself, your shared experiences, or topics you discuss repeatedly. Examples:
+
+| Type | Example key / value | Why it helps |
+|---|---|---|
+| `preference` | Key: `favorite color` → Value: `red` | Companion can avoid suggesting blue things |
+| `preference` | Key: `likes` → Value: `hiking, indie games, Thai food` | Plans activities or recommends media |
+| `dislike` | Key: `dislikes` → Value: `loud crowds, cilantro` | Avoids unpleasant suggestions |
+| `fact` | Key: `job` → Value: `software engineer` | Shapes conversation context |
+| `fact` | Key: `pet` → Value: `golden retriever named Mochi` | Asks about Mochi later |
+| `goal` | Key: `learning` → Value: `Spanish, A2 level` | Companion can practice vocabulary or cheer progress |
+| `shared_experience` | Key: `camping trip 2026` → Value: `rained all night, ate instant ramen` | Creates inside jokes and continuity |
+| `rule` | Key: `communication` → Value: `prefer short answers in the morning` | Tunes companion behavior |
+
+**How to add entries:**
+1. Click **+ Add** in the Fact Library modal.
+2. Fill in **Key** (what the fact is about) and **Value** (the information).
+3. Choose a **Type** such as `preference`, `fact`, `dislike`, `goal`, `shared_experience`, or `rule`. Types are free-form strings — use whatever fits your use case.
+4. Optionally add a **Category**, **Tags**, and a **Confidence** score (0–1).
+5. Save. The entry is embedded locally and retrieved when semantically relevant.
+
+**Import in bulk:** Paste multiple lines and choose a delimiter. For example:
+```
+favorite color | red
+likes | hiking, indie games
+pet | golden retriever named Mochi
+```
+Set delimiter to `|` and type to `preference` (or `fact`) to import all at once.
+
+**Review scheduling:** Entries track `confidence`, `reviewCount`, and `lastReviewedAt`. Lower-confidence facts are reviewed more often. You can manually review entries to increase confidence.
+
+**Note:** For language vocabulary, use the dedicated **Vocabulary Training System** instead. The Fact Library is for general knowledge and persistent user facts.
 
 ### Vocabulary Training
 
