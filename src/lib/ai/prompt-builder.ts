@@ -921,7 +921,7 @@ export function buildMessages(
 	// Recent conversation history
 	for (const turn of recentHistory.slice(-10)) {
 		messages.push({
-			role: turn.role === 'user' ? 'user' : 'assistant',
+			role: turn.role === 'user' ? 'user' : turn.role === 'system' ? 'system' : 'assistant',
 			content: turn.content
 		});
 	}

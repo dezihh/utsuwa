@@ -24,7 +24,7 @@ export interface ConversationTurn {
 	id?: number;
 	characterId?: string;
 	sessionId?: number;
-	role: 'user' | 'assistant';
+	role: 'user' | 'assistant' | 'system';
 	content: string;
 	metadata?: {
 		detectedEmotion?: string;

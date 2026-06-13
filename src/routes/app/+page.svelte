@@ -316,16 +316,21 @@
 	});
 
 	async function sendReminderMessage(msg: string) {
+		debugStore.addLog({
+			category: 'memory',
+			title: 'Reminder triggered',
+			content: msg
+		});
 		if (chatStore.isLoading) {
 			const waitInterval = setInterval(() => {
 				if (!chatStore.isLoading) {
 					clearInterval(waitInterval);
-					handleSend(msg);
+					handleSend(msg, 'system');
 				}
 			}, 500);
 			setTimeout(() => clearInterval(waitInterval), 60000);
 		} else {
-			handleSend(msg);
+			handleSend(msg, 'system');
 		}
 	}
 
@@ -638,7 +643,7 @@
 	}
 
 	// Handle send message
-	async function handleSend(content: string) {
+	async function handleSend(content: string, role: 'user' | 'system' = 'user') {
 		if (!content.trim()) return;
 
 		const myGeneration = ++sendGeneration;
@@ -672,31 +677,33 @@
 			}
 		}
 
-		// Client-side fallback: parse natural-language reminder requests directly
-		const wm = getWorkingMemory();
-		const directReminder = tryExtractReminderFromUserMessage(content);
-		if (directReminder && wm.currentSessionId) {
-			try {
-				await reminderStore.addReminder(directReminder.content, directReminder.triggerAt, wm.currentSessionId);
-				console.log('[Reminder] Direct fallback saved:', directReminder.content, 'for', directReminder.triggerAt.toLocaleTimeString());
-			} catch (e) {
-				console.error('[Reminder] Direct fallback failed:', e);
+		if (role === 'user') {
+			// Client-side fallback: parse natural-language reminder requests directly
+			const wm = getWorkingMemory();
+			const directReminder = tryExtractReminderFromUserMessage(content);
+			if (directReminder && wm.currentSessionId) {
+				try {
+					await reminderStore.addReminder(directReminder.content, directReminder.triggerAt, wm.currentSessionId);
+					console.log('[Reminder] Direct fallback saved:', directReminder.content, 'for', directReminder.triggerAt.toLocaleTimeString());
+				} catch (e) {
+					console.error('[Reminder] Direct fallback failed:', e);
+				}
 			}
-		}
 
-		// Client-side fallback: "Zeige mir in 2 Minuten Bilder von Rosen"
-		// → creates a delayed image-search reminder instead of immediate search
-		const delayedImage = tryExtractDelayedImageSearch(content);
-		if (delayedImage && wm.currentSessionId) {
-			try {
-				await reminderStore.addReminder(
-					`search_image:${delayedImage.query}`,
-					delayedImage.triggerAt,
-					wm.currentSessionId
-				);
-				console.log('[Reminder] Delayed image search saved:', delayedImage.query, 'for', delayedImage.triggerAt.toLocaleTimeString());
-			} catch (e) {
-				console.error('[Reminder] Failed to save delayed image search:', e);
+			// Client-side fallback: "Zeige mir in 2 Minuten Bilder von Rosen"
+			// → creates a delayed image-search reminder instead of immediate search
+			const delayedImage = tryExtractDelayedImageSearch(content);
+			if (delayedImage && wm.currentSessionId) {
+				try {
+					await reminderStore.addReminder(
+						`search_image:${delayedImage.query}`,
+						delayedImage.triggerAt,
+						wm.currentSessionId
+					);
+					console.log('[Reminder] Delayed image search saved:', delayedImage.query, 'for', delayedImage.triggerAt.toLocaleTimeString());
+				} catch (e) {
+					console.error('[Reminder] Failed to save delayed image search:', e);
+				}
 			}
 		}
 
@@ -776,7 +783,7 @@
 			}
 		}
 
-		chatStore.addMessage('user', content);
+		chatStore.addMessage(role, content);
 		chatStore.setLoading(true);
 		chatStore.setError(null);
 		isTyping = true;

@@ -34,6 +34,10 @@
 		[...chatStore.messages].reverse().find((m) => m.role === 'assistant')?.id ?? null
 	);
 
+	// Internal system messages (e.g. reminder triggers) are kept for LLM context
+	// but should not clutter the user-visible chat history.
+	const visibleMessages = $derived(chatStore.messages.filter((m) => m.role !== 'system'));
+
 	function togglePosition() {
 		displayStore.setSidebarPosition(displayStore.sidebarPosition === 'right' ? 'left' : 'right');
 	}
@@ -68,7 +72,7 @@
 			onclick={handleClearHistory}
 			aria-label="Clear chat history"
 			title="Clear chat history"
-			disabled={chatStore.messages.length === 0}
+			disabled={visibleMessages.length === 0}
 		>
 			<Icon name="trash" size={14} />
 		</button>
@@ -76,10 +80,10 @@
 	</div>
 
 	<div class="messages" bind:this={messagesEl}>
-		{#if chatStore.messages.length === 0}
+		{#if visibleMessages.length === 0}
 			<p class="empty-hint">No messages yet.</p>
 		{:else}
-			{#each chatStore.messages as msg (msg.id)}
+			{#each visibleMessages as msg (msg.id)}
 				{@const isLastAssistant = msg.id === lastAssistantId && msg.role === 'assistant'}
 				{@const displayText = isLastAssistant && isTyping && !speakingText
 					? ''
