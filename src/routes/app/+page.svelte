@@ -126,6 +126,8 @@
 	// Sidebar TTS sync: grows sentence-by-sentence as audio plays
 	let spokenSoFar = $state('');
 	let llmAbortController: AbortController | null = null;
+	// Monotonic counter so aborted sends don't overwrite state of the active one.
+	let sendGeneration = $state(0);
 
 	// Replay tracking: all segments queued in the current TTS session and the
 	// orchestrator index of the last segment that started playing.
@@ -639,6 +641,8 @@
 	async function handleSend(content: string) {
 		if (!content.trim()) return;
 
+		const myGeneration = ++sendGeneration;
+
 		// If LLM is currently generating, interrupt it first (like duplex does)
 		if (chatStore.isLoading) {
 			ttsStore.stop();
@@ -1017,11 +1021,19 @@
 				onTTSDone();
 			}
 		} catch (err) {
-			chatStore.setError(err instanceof Error ? err.message : 'Unknown error');
+			// Ignore abort errors from this generation; a newer send may already be running.
+			if (myGeneration !== sendGeneration) return;
+			const message = err instanceof Error ? err.message : 'Unknown error';
+			if (message !== 'The operation was aborted.' && !message.includes('aborted')) {
+				chatStore.setError(message);
+			}
 			isTyping = false;
 		} finally {
-			chatStore.setLoading(false);
-			llmAbortController = null;
+			// Only clear state if no newer send has started.
+			if (myGeneration === sendGeneration) {
+				chatStore.setLoading(false);
+				llmAbortController = null;
+			}
 		}
 	}
 
