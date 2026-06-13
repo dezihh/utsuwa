@@ -238,7 +238,7 @@ export const EMOTION_TAGS: Record<string, EmotionEntry> = {
 };
 
 const ACTION_TAGS = new Set(['wave', 'nod', 'shake', 'jump', 'bow', 'think', 'clap', 'dance']);
-const ACTION_TAG_REGEX = /\[action:(\w+)\]/gi;
+const ACTION_TAG_REGEX = /\[action:([\w-]+)\]/gi;
 
 // Single-word tags (matching \[(\w+)\]) that are NOT emotion tags but must pass
 // through to the TTS engine because they produce provider-native audio.
