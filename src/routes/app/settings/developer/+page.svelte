@@ -737,6 +737,15 @@
 						<span class="debug-toggle-label">Log Fact Library</span>
 						<span class="debug-toggle-desc">Structured facts saved or updated</span>
 					</label>
+					<label class="debug-toggle">
+						<input
+							type="checkbox"
+							checked={debugStore.settings.logSpeechArtifacts}
+							onchange={(e) => debugStore.updateSetting('logSpeechArtifacts', e.currentTarget.checked)}
+						/>
+						<span class="debug-toggle-label">Log Speech Artifacts</span>
+						<span class="debug-toggle-desc">Tags and JSON blocks filtered from TTS</span>
+					</label>
 				</div>
 				<div class="debug-panel-toggle">
 					<button

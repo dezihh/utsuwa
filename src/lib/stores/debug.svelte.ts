@@ -11,13 +11,15 @@ export interface DebugSettings {
 	logSessionLifecycle: boolean;
 	/** Log fact library operations */
 	logFactLibrary: boolean;
+	/** Log TTS artifacts filtered from speech */
+	logSpeechArtifacts: boolean;
 	/** Maximum number of log entries to keep in memory */
 	maxLogEntries: number;
 }
 
 export interface LogEntry {
 	timestamp: Date;
-	category: 'prompt' | 'memory' | 'session' | 'fact' | 'evolution' | 'general';
+	category: 'prompt' | 'memory' | 'session' | 'fact' | 'evolution' | 'speech' | 'general';
 	title: string;
 	content: string;
 }
@@ -30,6 +32,7 @@ const DEFAULT_SETTINGS: DebugSettings = {
 	logMemoryRetrieval: false,
 	logSessionLifecycle: false,
 	logFactLibrary: false,
+	logSpeechArtifacts: false,
 	maxLogEntries: 100
 };
 
@@ -123,6 +126,15 @@ function createDebugStore() {
 		});
 	}
 
+	function logSpeechArtifact(artifacts: string[]) {
+		if (!settings.logSpeechArtifacts || artifacts.length === 0) return;
+		addLog({
+			category: 'speech',
+			title: `TTS Filtered Artifacts (${artifacts.length})`,
+			content: artifacts.map((a) => `- ${a}`).join('\n')
+		});
+	}
+
 	return {
 		// Settings
 		get settings() { return settings; },
@@ -141,7 +153,8 @@ function createDebugStore() {
 		logPrompt,
 		logMemory,
 		logSession,
-		logFact
+		logFact,
+		logSpeechArtifact
 	};
 }
 

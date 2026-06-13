@@ -327,26 +327,47 @@ export function stripAllTags(text: string): string {
 	return replaceEmotionTagsForDisplay(stripActionTags(stripLangTags(text)));
 }
 
+export interface SpeechArtifacts {
+	cleaned: string;
+	removed: string[];
+}
+
 /**
  * Strip everything that should never be spoken by TTS:
  * JSON state-update blocks, image-search tags, vocabulary tags, action tags.
  * Keeps [lang:xx] and [voice:xxx] because splitIntoSegments uses them for TTS control.
+ * Returns both the cleaned text and a list of removed artifacts for debugging.
  */
-export function stripForSpeech(text: string): string {
-	return (
-		text
-			// Remove fenced JSON blocks
-			.replace(/```json\s*[\s\S]*?\s*```/gi, '')
-			// Remove inline JSON state-update blocks
-			.replace(/\{\s*"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|energy_delta|new_memory|triggered_event|structured_fact_seen)"[\s\S]*?\}/gi, '')
-			// Remove application command tags
-			.replace(/\[(?:search_image|close_images|vocab|action):[^\]]*\]/gi, '')
-			// Remove reminder tags if any slip through
-			.replace(/\[remind:[^\]]*\]/gi, '')
-			// Clean up whitespace
-			.replace(/  +/g, ' ')
-			.trim()
+export function stripForSpeech(text: string): SpeechArtifacts {
+	const removed: string[] = [];
+
+	let cleaned = text;
+
+	// Remove fenced JSON blocks
+	cleaned = cleaned.replace(/```json\s*([\s\S]*?)\s*```/gi, (_match, content) => {
+		removed.push('```json' + (content ? ' ' + content.slice(0, 200) : '') + '```');
+		return '';
+	});
+
+	// Remove inline JSON state-update blocks
+	cleaned = cleaned.replace(
+		/\{\s*"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|energy_delta|new_memory|triggered_event|structured_fact_seen)"[\s\S]*?\}/gi,
+		(match) => {
+			removed.push(match.slice(0, 200));
+			return '';
+		}
 	);
+
+	// Remove application command tags
+	cleaned = cleaned.replace(/\[(?:search_image|close_images|vocab|action|remind):[^\]]*\]/gi, (match) => {
+		removed.push(match);
+		return '';
+	});
+
+	// Clean up whitespace
+	cleaned = cleaned.replace(/  +/g, ' ').trim();
+
+	return { cleaned, removed: removed.filter((r) => r.trim().length > 0) };
 }
 
 export function splitIntoSegments(

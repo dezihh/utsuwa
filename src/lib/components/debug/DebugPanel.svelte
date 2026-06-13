@@ -12,6 +12,7 @@
 		{ id: 'session', label: 'Sessions', color: '#22c55e' },
 		{ id: 'fact', label: 'Facts', color: '#f59e0b' },
 		{ id: 'evolution', label: 'Evolution', color: '#ec4899' },
+		{ id: 'speech', label: 'Speech', color: '#f97316' },
 		{ id: 'general', label: 'General', color: '#9ca3af' }
 	];
 

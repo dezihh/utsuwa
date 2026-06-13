@@ -886,7 +886,12 @@
 						(text) => {
 							fullContent += text;
 							chatStore.updateLastMessage(stripAllTags(fullContent), stripForApiContext(fullContent));
-							speechBuffer?.feed(stripForSpeech(text));
+							const { cleaned, removed } = stripForSpeech(text);
+							if (removed.length > 0) {
+								console.debug('[TTS] Filtered artifacts:', removed);
+								debugStore.logSpeechArtifact(removed);
+							}
+							speechBuffer?.feed(cleaned);
 						},
 						(error) => reject(new Error(error)),
 						() => resolve()
@@ -944,7 +949,12 @@
 							const text = JSON.parse(line.slice(2));
 							fullContent += text;
 							chatStore.updateLastMessage(stripAllTags(fullContent), stripForApiContext(fullContent));
-							speechBuffer?.feed(stripForSpeech(text));
+							const { cleaned, removed } = stripForSpeech(text);
+							if (removed.length > 0) {
+								console.debug('[TTS] Filtered artifacts:', removed);
+								debugStore.logSpeechArtifact(removed);
+							}
+							speechBuffer?.feed(cleaned);
 						} else if (line.startsWith('e:')) {
 							const { error } = JSON.parse(line.slice(2));
 							throw new Error(error);
