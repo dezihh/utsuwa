@@ -37,6 +37,12 @@
 	function togglePosition() {
 		displayStore.setSidebarPosition(displayStore.sidebarPosition === 'right' ? 'left' : 'right');
 	}
+
+	function handleClearHistory() {
+		if (confirm('Delete all messages in this chat?')) {
+			chatStore.clearMessages();
+		}
+	}
 </script>
 
 <div
@@ -57,6 +63,15 @@
 				<Icon name="chevron-right" size={16} />
 			</button>
 		{/if}
+		<button
+			class="clear-btn"
+			onclick={handleClearHistory}
+			aria-label="Clear chat history"
+			title="Clear chat history"
+			disabled={chatStore.messages.length === 0}
+		>
+			<Icon name="trash" size={14} />
+		</button>
 		<button class="close-btn" onclick={onClose} aria-label="Close chat history">✕</button>
 	</div>
 
@@ -159,7 +174,8 @@
 	}
 
 	.dock-btn,
-	.close-btn {
+	.close-btn,
+	.clear-btn {
 		width: 28px;
 		height: 28px;
 		display: flex;
@@ -175,16 +191,31 @@
 		flex-shrink: 0;
 	}
 
+	.clear-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
 	.dock-btn:hover,
 	.close-btn:hover {
 		background: rgba(0, 0, 0, 0.08);
 		color: var(--text-primary, #1a1a1a);
 	}
 
+	.clear-btn:hover:not(:disabled) {
+		background: rgba(239, 68, 68, 0.12);
+		color: #ef4444;
+	}
+
 	:global(.dark) .dock-btn:hover,
 	:global(.dark) .close-btn:hover {
 		background: rgba(255, 255, 255, 0.1);
 		color: #fafafa;
+	}
+
+	:global(.dark) .clear-btn:hover:not(:disabled) {
+		background: rgba(239, 68, 68, 0.2);
+		color: #f87171;
 	}
 
 	.messages {
