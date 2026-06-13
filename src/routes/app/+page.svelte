@@ -1176,7 +1176,7 @@
 	{/if}
 
 	<!-- Image Search Modal -->
-	<ImageSearchModal />
+	<ImageSearchModal {leftOffset} {rightOffset} />
 </div>
 
 <style>

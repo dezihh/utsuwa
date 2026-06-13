@@ -2,6 +2,13 @@
 	import { imageSearchStore } from '$lib/stores/image-search.svelte'
 	import { Icon } from '$lib/components/ui'
 
+	interface Props {
+		leftOffset?: number
+		rightOffset?: number
+	}
+
+	let { leftOffset = 0, rightOffset = 0 }: Props = $props()
+
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') imageSearchStore.closeModal()
 	}
@@ -15,14 +22,33 @@
 	}
 
 	const skeletonCount = 12
+
+	// Compute dynamic CSS variables for sidebar offsets
+	const leftVar = $derived(leftOffset > 0 ? `${leftOffset}px` : '1rem')
+	const rightVar = $derived(rightOffset > 0 ? `${rightOffset}px` : '1rem')
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if imageSearchStore.isOpen}
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-	<div class="modal-overlay" onclick={handleOverlayClick} onkeydown={() => {}} role="dialog" aria-modal="true" aria-labelledby="image-search-title" tabindex="-1">
+	<div
+		class="modal-overlay"
+		onclick={handleOverlayClick}
+		onkeydown={() => {}}
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="image-search-title"
+		tabindex="-1"
+		style="--panel-left: {leftVar}; --panel-right: {rightVar};"
+	>
 		<div class="modal-container">
+			<!-- Drag handle (touch-friendly) -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<div class="drag-handle" onclick={() => imageSearchStore.closeModal()} role="button" tabindex="0" aria-label="Close image panel">
+				<div class="drag-bar"></div>
+			</div>
+
 			<!-- Header -->
 			<div class="modal-header">
 				<div class="modal-title">
@@ -80,16 +106,27 @@
 <style>
 	.modal-overlay {
 		position: fixed;
-		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
-		backdrop-filter: blur(12px);
-		-webkit-backdrop-filter: blur(12px);
+		bottom: 0;
+		left: 0;
+		right: 0;
+		top: auto;
+		height: calc(100vh - 130px);
+		background: rgba(0, 0, 0, 0.35);
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
 		display: flex;
-		align-items: center;
+		align-items: flex-end;
 		justify-content: center;
 		z-index: 1000;
 		animation: fadeIn 0.2s ease-out;
-		padding: 1rem;
+		/* Prevent background scroll on touch devices */
+		overscroll-behavior: contain;
+	}
+
+	@media (max-width: 768px) {
+		.modal-overlay {
+			height: calc(100vh - 100px);
+		}
 	}
 
 	@keyframes fadeIn {
@@ -99,20 +136,31 @@
 
 	.modal-container {
 		position: relative;
-		width: 100%;
+		width: calc(100% - var(--panel-left) - var(--panel-right));
 		max-width: 900px;
-		max-height: 85vh;
+		max-height: calc(100vh - 150px);
 		display: flex;
 		flex-direction: column;
-		background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(250, 250, 250, 0.95) 100%);
+		background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 250, 250, 0.98) 100%);
 		border: 1px solid rgba(255, 255, 255, 0.6);
-		border-radius: 24px;
+		border-radius: 20px 20px 0 0;
 		box-shadow:
-			0 24px 64px rgba(0, 0, 0, 0.25),
-			0 8px 24px rgba(0, 0, 0, 0.15),
+			0 -8px 40px rgba(0, 0, 0, 0.2),
+			0 -2px 12px rgba(0, 0, 0, 0.1),
 			inset 0 1px 0 rgba(255, 255, 255, 0.9);
 		overflow: hidden;
-		animation: slideUp 0.25s ease-out;
+		animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+		margin-left: var(--panel-left);
+		margin-right: var(--panel-right);
+	}
+
+	@media (max-width: 768px) {
+		.modal-container {
+			width: 100%;
+			margin-left: 0;
+			margin-right: 0;
+			border-radius: 16px 16px 0 0;
+		}
 	}
 
 	:global(.dark) .modal-container {
@@ -126,13 +174,54 @@
 
 	@keyframes slideUp {
 		from {
-			transform: translateY(16px) scale(0.98);
+			transform: translateY(40px);
 			opacity: 0;
 		}
 		to {
-			transform: translateY(0) scale(1);
+			transform: translateY(0);
 			opacity: 1;
 		}
+	}
+
+	/* ── Touch-friendly scrollbar ── */
+	.modal-content::-webkit-scrollbar {
+		width: 12px;
+	}
+
+	.modal-content::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.modal-content::-webkit-scrollbar-thumb {
+		background: rgba(0, 0, 0, 0.2);
+		border-radius: 999px;
+		border: 3px solid transparent;
+		background-clip: padding-box;
+	}
+
+	.modal-content::-webkit-scrollbar-thumb:hover {
+		background: rgba(0, 0, 0, 0.35);
+	}
+
+	:global(.dark) .modal-content::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.2);
+	}
+
+	:global(.dark) .modal-content::-webkit-scrollbar-thumb:hover {
+		background: rgba(255, 255, 255, 0.35);
+	}
+
+	/* Firefox */
+	.modal-content {
+		scrollbar-width: auto;
+		scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+		/* Prevent scroll propagation to background page */
+		overscroll-behavior: contain;
+		touch-action: pan-y;
+	}
+
+	:global(.dark) .modal-content {
+		scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 	}
 
 	.modal-header {
@@ -208,10 +297,29 @@
 		background: linear-gradient(180deg, #404040 0%, #333333 100%);
 	}
 
+	.drag-handle {
+		display: flex;
+		justify-content: center;
+		padding: 0.5rem 0 0.25rem;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.drag-bar {
+		width: 40px;
+		height: 4px;
+		background: rgba(0, 0, 0, 0.2);
+		border-radius: 999px;
+	}
+
+	:global(.dark) .drag-bar {
+		background: rgba(255, 255, 255, 0.2);
+	}
+
 	.modal-content {
 		flex: 1;
 		overflow-y: auto;
-		padding: 1rem;
+		padding: 0.75rem 1rem 1rem;
 		min-height: 0;
 	}
 
