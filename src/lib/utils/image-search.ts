@@ -122,6 +122,24 @@ export function tryExtractDelayedImageSearch(text: string): { query: string; tri
 	return null
 }
 
+// Keywords that indicate the user wants to close the image modal
+const CLOSE_IMAGE_KEYWORDS = [
+	'close images', 'close the images', 'close pictures', 'close the pictures',
+	'hide images', 'hide the images', 'hide pictures',
+	'schließe bilder', 'schließe die bilder', 'bilder schließen',
+	'hide bilder', 'bilder ausblenden', 'bilder weg',
+	'close image', 'close modal', 'hide modal', 'close popup', 'hide popup',
+	'weg damit', 'mach die bilder weg', 'mach das bild weg'
+];
+
+/**
+ * Detect if the user is asking to close the image modal.
+ */
+export function isCloseImageRequest(text: string): boolean {
+	const lower = text.toLowerCase();
+	return CLOSE_IMAGE_KEYWORDS.some((k) => lower.includes(k));
+}
+
 // Generic fallback queries when the user asks for images but gives no specific subject
 const GENERIC_IMAGE_QUERIES = [
 	'beautiful scenery', 'cute animals', 'stunning landscape', 'amazing nature',

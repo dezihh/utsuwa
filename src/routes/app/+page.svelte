@@ -63,7 +63,7 @@
 	import { splitIntoSegments, stripAllTags, stripForApiContext, isContinueRequest } from '$lib/utils/sentences';
 	import { reminderStore } from '$lib/stores/reminders.svelte';
 	import { tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
-	import { extractImageSearchTags, tryExtractDelayedImageSearch } from '$lib/utils/image-search';
+	import { extractImageSearchTags, tryExtractDelayedImageSearch, isCloseImageRequest } from '$lib/utils/image-search';
 	import { extractReminderTags } from '$lib/utils/reminders';
 	import { imageSearchStore } from '$lib/stores/image-search.svelte';
 	import { extractVocabTags } from '$lib/utils/vocabulary';
@@ -340,6 +340,9 @@
 
 		// Close image modal if LLM requested it
 		if (shouldCloseImages) {
+			imageSearchStore.closeModal();
+		} else if (imageSearchStore.isOpen && isCloseImageRequest(userMessage)) {
+			// Client fallback: user asked to close images but LLM forgot the tag
 			imageSearchStore.closeModal();
 		}
 

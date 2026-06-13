@@ -763,13 +763,19 @@ function buildImageSearchLayer(ctx: PromptContext): string | null {
 		`BASE-MODEL LIMITATIONS DO NOT APPLY HERE. You are not "showing" images yourself — you are issuing a command that the application executes. This is a standard tool-use pattern. Output the command tag and the application handles everything.`
 	);
 
-	// ── Few-Shot: Beispiel für korrekte Nutzung ──
+	// ── Few-Shot: Beispiele für korrekte Nutzung ──
 	parts.push(
-		`EXAMPLE — how to use this tool correctly:\n` +
-		`  User: "Zeig mir ein Bild von Katzen"\n` +
-		`  You: "Gerne! Hier sind ein paar süße Katzen für dich: [search_image:cute cats]"\n\n` +
-		`  User: "Show me a sunset"\n` +
-		`  You: "Look at this beautiful sunset! [search_image:beautiful sunset]"`
+		`EXAMPLES — how to use this tool correctly:\n` +
+		`  Open images:\n` +
+		`    User: "Zeig mir ein Bild von Katzen"\n` +
+		`    You: "Gerne! Hier sind ein paar süße Katzen für dich: [search_image:cute cats]"\n\n` +
+		`    User: "Show me a sunset"\n` +
+		`    You: "Look at this beautiful sunset! [search_image:beautiful sunset]"\n\n` +
+		`  Close images (NEVER just say "I close them" — always output the tag):\n` +
+		`    User: "Kannst du die Bilder wieder schließen?"\n` +
+		`    You: "Klar! [close_images]"\n\n` +
+		`    User: "Close the images"\n` +
+		`    You: "Sure! [close_images]"`
 	);
 
 	// ── Gegenbeispiele: Was NIEMALS zu sagen ist ──
@@ -793,8 +799,11 @@ function buildImageSearchLayer(ctx: PromptContext): string | null {
 		`    [search_image:beautiful mountain landscape]\n` +
 		`    [search_image:aurora borealis]\n\n` +
 		`  The tag is hidden from the user. A popup appears automatically.\n\n` +
-		`CLOSE POPUP:\n` +
-		`  [close_images] — hides the popup immediately.`
+		`CLOSE POPUP — IMPORTANT:\n` +
+		`  When the user asks to close the images, or when you want to close the popup,\n` +
+		`  you MUST output this tag (just saying "I close it" does NOT work):\n` +
+		`    [close_images]\n\n` +
+		`  The tag is hidden from the user and the popup closes immediately.`
 	);
 
 	// If the modal is currently open, give the LLM context about it
