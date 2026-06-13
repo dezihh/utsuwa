@@ -106,11 +106,11 @@
 <style>
 	.modal-overlay {
 		position: fixed;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		top: auto;
-		height: calc(100vh - 130px);
+		/* Start above the bottom chat bar (approx. 130px desktop, 100px mobile) */
+		bottom: 130px;
+		left: var(--panel-left);
+		right: var(--panel-right);
+		top: 0;
 		background: rgba(0, 0, 0, 0.35);
 		backdrop-filter: blur(8px);
 		-webkit-backdrop-filter: blur(8px);
@@ -125,7 +125,9 @@
 
 	@media (max-width: 768px) {
 		.modal-overlay {
-			height: calc(100vh - 100px);
+			bottom: 100px;
+			left: 0.5rem;
+			right: 0.5rem;
 		}
 	}
 
@@ -136,9 +138,9 @@
 
 	.modal-container {
 		position: relative;
-		width: calc(100% - var(--panel-left) - var(--panel-right));
+		width: 100%;
 		max-width: 900px;
-		max-height: calc(100vh - 150px);
+		max-height: calc(100% - 1rem);
 		display: flex;
 		flex-direction: column;
 		background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 250, 250, 0.98) 100%);
@@ -150,15 +152,10 @@
 			inset 0 1px 0 rgba(255, 255, 255, 0.9);
 		overflow: hidden;
 		animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-		margin-left: var(--panel-left);
-		margin-right: var(--panel-right);
 	}
 
-	@media (max-width: 768px) {
+	@media (max-width: 640px) {
 		.modal-container {
-			width: 100%;
-			margin-left: 0;
-			margin-right: 0;
 			border-radius: 16px 16px 0 0;
 		}
 	}
