@@ -637,7 +637,14 @@
 
 	// Handle send message
 	async function handleSend(content: string) {
-		if (!content.trim() || chatStore.isLoading) return;
+		if (!content.trim()) return;
+
+		// If LLM is currently generating, interrupt it first (like duplex does)
+		if (chatStore.isLoading) {
+			ttsStore.stop();
+			llmAbortController?.abort();
+			chatStore.setLoading(false);
+		}
 
 		if (!modulesStore.isModuleEnabled('consciousness')) {
 			chatStore.setError('Chat is disabled. Enable it in Settings > Character > AI Services.');
@@ -1146,7 +1153,7 @@
 		<!-- Bottom Chat Bar -->
 		<BottomChatBar
 			onSend={handleSend}
-			disabled={chatStore.isLoading}
+			disabled={false}
 			isDuplexActive={duplexStore.isDuplexActive}
 			duplexPhase={duplexStore.duplexPhase}
 			duplexAudioLevel={duplexStore.duplexAudioLevel}
