@@ -327,6 +327,28 @@ export function stripAllTags(text: string): string {
 	return replaceEmotionTagsForDisplay(stripActionTags(stripLangTags(text)));
 }
 
+/**
+ * Strip everything that should never be spoken by TTS:
+ * JSON state-update blocks, image-search tags, vocabulary tags, action tags.
+ * Keeps [lang:xx] and [voice:xxx] because splitIntoSegments uses them for TTS control.
+ */
+export function stripForSpeech(text: string): string {
+	return (
+		text
+			// Remove fenced JSON blocks
+			.replace(/```json\s*[\s\S]*?\s*```/gi, '')
+			// Remove inline JSON state-update blocks
+			.replace(/\{\s*"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|energy_delta|new_memory|triggered_event|structured_fact_seen)"[\s\S]*?\}/gi, '')
+			// Remove application command tags
+			.replace(/\[(?:search_image|close_images|vocab|action):[^\]]*\]/gi, '')
+			// Remove reminder tags if any slip through
+			.replace(/\[remind:[^\]]*\]/gi, '')
+			// Clean up whitespace
+			.replace(/  +/g, ' ')
+			.trim()
+	);
+}
+
 export function splitIntoSegments(
 	text: string,
 	defaultLanguage?: string,

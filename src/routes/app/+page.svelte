@@ -60,7 +60,7 @@
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
 	import { allEvents } from '$lib/data/events';
 	import { debugStore } from '$lib/stores/debug.svelte';
-	import { splitIntoSegments, stripAllTags, stripForApiContext, isContinueRequest } from '$lib/utils/sentences';
+	import { splitIntoSegments, stripAllTags, stripForApiContext, stripForSpeech, isContinueRequest } from '$lib/utils/sentences';
 	import { reminderStore } from '$lib/stores/reminders.svelte';
 	import { tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
 	import { extractImageSearchTags, tryExtractDelayedImageSearch, isCloseImageRequest } from '$lib/utils/image-search';
@@ -886,7 +886,7 @@
 						(text) => {
 							fullContent += text;
 							chatStore.updateLastMessage(stripAllTags(fullContent), stripForApiContext(fullContent));
-							speechBuffer?.feed(text);
+							speechBuffer?.feed(stripForSpeech(text));
 						},
 						(error) => reject(new Error(error)),
 						() => resolve()
@@ -944,7 +944,7 @@
 							const text = JSON.parse(line.slice(2));
 							fullContent += text;
 							chatStore.updateLastMessage(stripAllTags(fullContent), stripForApiContext(fullContent));
-							speechBuffer?.feed(text);
+							speechBuffer?.feed(stripForSpeech(text));
 						} else if (line.startsWith('e:')) {
 							const { error } = JSON.parse(line.slice(2));
 							throw new Error(error);
