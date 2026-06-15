@@ -90,7 +90,13 @@
 
 		<div class="debug-entries">
 			{#if filteredLogs.length === 0}
-				<div class="debug-empty">No log entries yet.</div>
+				<div class="debug-empty">
+					<p>No log entries yet.</p>
+					<p class="debug-empty-hint">
+						Logs are generated from now on. Make sure logging categories are enabled under
+						<strong>Settings &gt; Developer &gt; Debug Logging</strong>.
+					</p>
+				</div>
 			{:else}
 				{#each filteredLogs as entry, i (entry.timestamp.getTime() + i)}
 					<div class="debug-entry" class:expanded={expandedEntries.has(i)}>
@@ -235,6 +241,17 @@
 		text-align: center;
 		color: rgba(255, 255, 255, 0.3);
 		font-style: italic;
+	}
+
+	.debug-empty-hint {
+		margin-top: 0.5rem;
+		font-size: 0.7rem;
+		font-style: normal;
+		color: rgba(255, 255, 255, 0.45);
+	}
+
+	.debug-empty-hint strong {
+		color: rgba(255, 255, 255, 0.65);
 	}
 
 	.debug-entry {

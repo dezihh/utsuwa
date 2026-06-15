@@ -27,12 +27,12 @@ export interface LogEntry {
 const STORAGE_KEY = 'utsuwa-debug-settings';
 
 const DEFAULT_SETTINGS: DebugSettings = {
-	logSystemPrompts: false,
+	logSystemPrompts: true,
 	showDebugPanel: false,
-	logMemoryRetrieval: false,
-	logSessionLifecycle: false,
-	logFactLibrary: false,
-	logSpeechArtifacts: false,
+	logMemoryRetrieval: true,
+	logSessionLifecycle: true,
+	logFactLibrary: true,
+	logSpeechArtifacts: true,
 	maxLogEntries: 100
 };
 
