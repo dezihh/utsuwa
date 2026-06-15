@@ -77,10 +77,73 @@ export async function getFacts(
 	return filtered.map(deserializeFact);
 }
 
+function normalizeFactContent(content: string): string {
+	return content
+		.toLowerCase()
+		.replace(/[^\p{L}\p{N}\s]/gu, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+function mergeFactContent(existing: string, incoming: string): string {
+	// Keep the longer, more informative version if one is a superset of the other.
+	const normExisting = normalizeFactContent(existing);
+	const normIncoming = normalizeFactContent(incoming);
+	if (normExisting === normIncoming) return existing;
+	if (normExisting.includes(normIncoming)) return existing;
+	if (normIncoming.includes(normExisting)) return incoming;
+	return incoming;
+}
+
+async function findDuplicateFact(
+	content: string,
+	characterId: string,
+	category?: string
+): Promise<Fact | undefined> {
+	const normalized = normalizeFactContent(content);
+	const candidates = await db.facts
+		.where('characterId')
+		.equals(characterId)
+		.filter((f) => !category || f.category === category)
+		.toArray();
+
+	for (const candidate of candidates) {
+		if (normalizeFactContent(candidate.content) === normalized) {
+			return deserializeFact(candidate);
+		}
+	}
+
+	return undefined;
+}
+
 export async function saveFact(
 	fact: NewFact & { characterId?: string }
 ): Promise<number> {
 	const now = new Date();
+	const characterId = fact.characterId ?? DEFAULT_CHARACTER_ID;
+
+	// Try to merge with an existing fact before creating a new one.
+	const duplicate = await findDuplicateFact(fact.content, characterId, fact.category);
+	if (duplicate && duplicate.id !== undefined) {
+		const newConfidence = Math.min(
+			1,
+			Math.max(duplicate.confidence, fact.confidence ?? duplicate.confidence) + 0.05
+		);
+		const updates: Partial<DBFact> = {
+			content: mergeFactContent(duplicate.content, fact.content),
+			confidence: newConfidence,
+			lastAccessed: now,
+			referenceCount: duplicate.referenceCount + 1
+		};
+		// Refresh embedding when content changed and embeddings are available.
+		if (isEmbeddingReady()) {
+			const mergedContent = updates.content ?? duplicate.content;
+			const result = await embedText(mergedContent);
+			if (result) updates.embedding = result;
+		}
+		await db.facts.update(duplicate.id, updates);
+		return duplicate.id;
+	}
 
 	// Generate embedding if model is ready
 	let embedding: number[] | undefined;
@@ -92,7 +155,7 @@ export async function saveFact(
 	}
 
 	const dbFact: Omit<DBFact, 'id'> = {
-		characterId: fact.characterId ?? DEFAULT_CHARACTER_ID,
+		characterId,
 		content: fact.content,
 		category: fact.category,
 		importance: fact.importance ?? 50,

@@ -70,6 +70,31 @@ Build a meaningful relationship with your AI companion through a dating sim-insp
 
 See the [Companion System Architecture](https://utsuwa.ai/docs/technology/companion-system) for full details.
 
+### How Memory Works
+
+Utsuwa stores several kinds of memory locally in IndexedDB. They differ in lifetime, structure, and how they get into the LLM prompt:
+
+| Memory type | What it stores | How it gets there | How it reaches the LLM |
+|---|---|---|---|
+| **Working Memory** | Turns of the current chat session | Automatically as you chat | Last 6–10 turns are injected directly into the prompt |
+| **Semantic Facts** | Free-form facts like „User likes red cars“ | Heuristics or LLM `new_memory` tags | Top 5 semantically relevant facts per message |
+| **Fact Library** | Structured `type/key/value` entries | Manual entry, bulk import, or LLM `structured_fact_seen` tags | Up to 15 keyword-matched entries per message |
+| **Session Summaries** | Condensed recap of ended sessions | Lazy compaction when a new session starts | Up to 3 semantically similar summaries per message |
+| **Character State** | Mood, relationship stage, stats | Updated every turn | Always in the system prompt |
+
+**Storage vs. prompt context:**
+
+- Your *storage* can grow large — there is no hard cap on how many facts or sessions you can save.
+- Your *prompt context* is deliberately limited. Even with thousands of stored facts, only the most relevant handful are sent to the LLM each turn. This prevents the context window from overflowing.
+- Semantic search runs locally with Transformers.js embeddings, so finding relevant memories does not cost API tokens.
+
+**Fact deduplication:**
+
+- The free-form **Semantic Facts** table automatically merges duplicate facts. If the same information is extracted again, the existing entry is refreshed (confidence and reference count go up) instead of creating a duplicate.
+- The **Fact Library** deduplicates by `type` + `key`. Updating an existing key overwrites the value and increases confidence.
+
+You can inspect all of this in the **Memory Inspector** (database icon in the top-left toolbar).
+
 ### Companion Mode vs Dating Sim Mode
 
 Utsuwa offers two relationship modes. You choose during onboarding and can switch later under **Settings > Character > Mode**:
@@ -135,6 +160,11 @@ There are two storage destinations, opened from different places in the top-left
 |---|---|---|
 | **Semantic Memory (Facts)** | The LLM returns a `new_memory` tag, or the app heuristics detect a fact in your message. | **Memory Graph** (🧠 brain icon). Free-form facts appear as nodes connected by semantic similarity. |
 | **Fact Library** | The LLM returns a `structured_fact_seen` JSON block with `type`, `key`, and `value`. | **Fact Library** (📖 book icon). Structured entries with confidence, tags, and review scheduling. |
+
+**Deduplication:**
+
+- Free-form **Semantic Facts** are automatically deduplicated. If the same fact is extracted again, the existing entry is refreshed (its confidence and reference count increase) instead of creating a duplicate.
+- **Fact Library** entries are deduplicated by `type` + `key`. Re-saving the same key updates the existing entry.
 
 **Important caveats:**
 
