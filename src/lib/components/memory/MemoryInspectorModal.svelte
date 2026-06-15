@@ -96,64 +96,90 @@
 		}
 	}
 
-	async function runParserTest(save: boolean) {
-		if (!testUserMessage.trim() || !testLlmResponse.trim()) return;
-		isTesting = true;
+	function runParserTest(save: boolean) {
+		if (!testUserMessage.trim() || !testLlmResponse.trim()) {
+			testSaveResult = 'Please fill in both fields.';
+			return;
+		}
 		testSaveResult = null;
+
+		// 1. Parse and heuristic facts are shown immediately.
+		let parsed: ReturnType<typeof parseResponse>;
 		try {
-			const parsed = parseResponse(testLlmResponse);
-			testParseResult = parsed;
-			testPotentialFacts = extractPotentialFacts(parsed.dialogue, testUserMessage);
-
-			if (!parsed.stateUpdates?.newMemory) {
-				const extracted = await extractFactsFromLLM(testUserMessage, testLlmResponse);
-				testExtractorFacts = extracted.map((f) => f.content);
-			} else {
-				testExtractorFacts = [];
-			}
-
-			if (save) {
-				let saved = 0;
-				if (parsed.stateUpdates?.newMemory) {
-					await memoryApi.createFact({
-						content: parsed.stateUpdates.newMemory,
-						category: 'user',
-						importance: 70,
-						characterId: currentCharacterId
-					});
-					saved++;
-				}
-				if (parsed.stateUpdates?.structuredFactSeen) {
-					const f = parsed.stateUpdates.structuredFactSeen;
-					await memoryStorage.saveFactLibraryEntry({
-						characterId: currentCharacterId,
-						type: f.type,
-						key: f.key,
-						value: f.value,
-						category: f.category,
-						tags: f.tags,
-						confidence: 0.75
-					});
-					saved++;
-				}
-				// Also save potential facts as semantic facts for quick testing.
-				for (const factContent of testPotentialFacts) {
-					await memoryApi.createFact({
-						content: factContent,
-						category: 'user',
-						importance: 60,
-						characterId: currentCharacterId
-					});
-					saved++;
-				}
-				await loadAll();
-				testSaveResult = `${saved} fact(s) saved`;
-			}
+			parsed = parseResponse(testLlmResponse);
 		} catch (e) {
-			console.error('[MemoryInspector] Parser test failed:', e);
-			testParseResult = { dialogue: '', stateUpdates: null, parseError: String(e) };
-		} finally {
+			parsed = { dialogue: '', stateUpdates: null, parseError: String(e) };
+		}
+		testParseResult = parsed;
+		testPotentialFacts = extractPotentialFacts(parsed.dialogue, testUserMessage);
+
+		// 2. Save directly if requested.
+		if (save) {
+			saveParsedFacts(parsed, testPotentialFacts);
+		}
+
+		// 3. Run extractor preview asynchronously so the UI never blocks.
+		if (!parsed.stateUpdates?.newMemory) {
+			isTesting = true;
+			extractFactsFromLLM(testUserMessage, testLlmResponse)
+				.then((extracted) => {
+					testExtractorFacts = extracted.map((f) => f.content);
+				})
+				.catch((e) => {
+					console.error('[MemoryInspector] Extractor preview failed:', e);
+					testExtractorFacts = [];
+				})
+				.finally(() => {
+					isTesting = false;
+				});
+		} else {
+			testExtractorFacts = [];
 			isTesting = false;
+		}
+	}
+
+	async function saveParsedFacts(
+		parsed: ReturnType<typeof parseResponse>,
+		potentialFacts: string[]
+	) {
+		try {
+			let saved = 0;
+			if (parsed.stateUpdates?.newMemory) {
+				await memoryApi.createFact({
+					content: parsed.stateUpdates.newMemory,
+					category: 'user',
+					importance: 70,
+					characterId: currentCharacterId
+				});
+				saved++;
+			}
+			if (parsed.stateUpdates?.structuredFactSeen) {
+				const f = parsed.stateUpdates.structuredFactSeen;
+				await memoryStorage.saveFactLibraryEntry({
+					characterId: currentCharacterId,
+					type: f.type,
+					key: f.key,
+					value: f.value,
+					category: f.category,
+					tags: f.tags,
+					confidence: 0.75
+				});
+				saved++;
+			}
+			for (const factContent of potentialFacts) {
+				await memoryApi.createFact({
+					content: factContent,
+					category: 'user',
+					importance: 60,
+					characterId: currentCharacterId
+				});
+				saved++;
+			}
+			await loadAll();
+			testSaveResult = `${saved} fact(s) saved`;
+		} catch (e) {
+			console.error('[MemoryInspector] Save facts failed:', e);
+			testSaveResult = `Save failed: ${e}`;
 		}
 	}
 
@@ -414,15 +440,23 @@
 						</div>
 
 						<div class="test-actions">
-							<button class="test-btn" onclick={() => runParserTest(false)} disabled={isTesting}>
+							<button
+								class="test-btn"
+								onclick={() => runParserTest(false)}
+								disabled={isTesting || !testUserMessage.trim() || !testLlmResponse.trim()}
+							>
 								{#if isTesting}
 									<div class="spinner-small"></div>
-									Testing...
+									Extractor running...
 								{:else}
 									Parse & Test
 								{/if}
 							</button>
-							<button class="test-btn save" onclick={() => runParserTest(true)} disabled={isTesting}>
+							<button
+								class="test-btn save"
+								onclick={() => runParserTest(true)}
+								disabled={isTesting || !testUserMessage.trim() || !testLlmResponse.trim()}
+							>
 								Parse & Save
 							</button>
 						</div>
