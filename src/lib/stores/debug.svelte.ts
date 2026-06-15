@@ -18,6 +18,7 @@ export interface DebugSettings {
 }
 
 export interface LogEntry {
+	id: number;
 	timestamp: Date;
 	category: 'prompt' | 'memory' | 'session' | 'fact' | 'evolution' | 'speech' | 'general';
 	title: string;
@@ -40,6 +41,7 @@ function createDebugStore() {
 	let settings = $state<DebugSettings>({ ...DEFAULT_SETTINGS });
 	let logEntries = $state<LogEntry[]>([]);
 	let panelVisible = $state(false);
+	let nextLogId = 0;
 
 	// Load from localStorage
 	if (browser) {
@@ -72,9 +74,9 @@ function createDebugStore() {
 		panelVisible = !panelVisible;
 	}
 
-	function addLog(entry: Omit<LogEntry, 'timestamp'>) {
+	function addLog(entry: Omit<LogEntry, 'id' | 'timestamp'>) {
 		if (!browser) return;
-		const fullEntry: LogEntry = { ...entry, timestamp: new Date() };
+		const fullEntry: LogEntry = { ...entry, id: nextLogId++, timestamp: new Date() };
 		logEntries = [fullEntry, ...logEntries].slice(0, settings.maxLogEntries);
 		// Also log to console for convenience
 		console.log(`[${entry.category.toUpperCase()}] ${entry.title}`, entry.content);

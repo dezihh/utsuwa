@@ -40,12 +40,12 @@
 
 	let expandedEntries = $state<Set<number>>(new Set());
 
-	function toggleExpand(index: number) {
+	function toggleExpand(id: number) {
 		const next = new Set(expandedEntries);
-		if (next.has(index)) {
-			next.delete(index);
+		if (next.has(id)) {
+			next.delete(id);
 		} else {
-			next.add(index);
+			next.add(id);
 		}
 		expandedEntries = next;
 	}
@@ -98,16 +98,16 @@
 					</p>
 				</div>
 			{:else}
-				{#each filteredLogs as entry, i (entry.timestamp.getTime() + i)}
+				{#each filteredLogs as entry, i (entry.id)}
 					<div class="debug-entry" class:expanded={expandedEntries.has(i)}>
-						<button class="debug-entry-header" onclick={() => toggleExpand(i)}>
+						<button class="debug-entry-header" onclick={() => toggleExpand(entry.id)}>
 							<span class="debug-dot" style="background: {getCategoryColor(entry.category)}"></span>
 							<span class="debug-time">{formatTime(entry.timestamp)}</span>
 							<span class="debug-category">[{entry.category}]</span>
 							<span class="debug-entry-title">{entry.title}</span>
-							<Icon name={expandedEntries.has(i) ? 'chevron-down' : 'chevron-right'} size={12} />
+							<Icon name={expandedEntries.has(entry.id) ? 'chevron-down' : 'chevron-right'} size={12} />
 						</button>
-						{#if expandedEntries.has(i)}
+						{#if expandedEntries.has(entry.id)}
 							<pre class="debug-content">{entry.content}</pre>
 						{/if}
 					</div>
