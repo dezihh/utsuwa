@@ -33,6 +33,7 @@
 	let testPotentialFacts = $state<string[] | null>(null);
 	let testSaveResult = $state<string | null>(null);
 	let isTesting = $state(false);
+	let lastRunWasSave = $state(false);
 
 	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
 	const characterState = $derived(characterStore.state);
@@ -103,6 +104,7 @@
 		}
 		testSaveResult = null;
 		isTesting = true;
+		lastRunWasSave = save;
 
 		try {
 			// 1. Parse and heuristic facts are shown immediately.
@@ -446,9 +448,9 @@
 								onclick={() => runParserTest(false)}
 								disabled={isTesting || !testUserMessage.trim() || !testLlmResponse.trim()}
 							>
-								{#if isTesting}
+								{#if isTesting && !lastRunWasSave}
 									<div class="spinner-small"></div>
-									Extractor running...
+									Parsing...
 								{:else}
 									Parse & Test
 								{/if}
@@ -458,7 +460,12 @@
 								onclick={() => runParserTest(true)}
 								disabled={isTesting || !testUserMessage.trim() || !testLlmResponse.trim()}
 							>
-								Parse & Save
+								{#if isTesting && lastRunWasSave}
+									<div class="spinner-small"></div>
+									Saving...
+								{:else}
+									Parse & Save
+								{/if}
 							</button>
 						</div>
 
@@ -519,7 +526,7 @@
 							</div>
 						{/if}
 
-						{#if testExtractorFacts !== null && testExtractorFacts.length > 0}
+						{#if !lastRunWasSave && testExtractorFacts !== null && testExtractorFacts.length > 0}
 							<div class="test-result">
 								<h4>Extractor Preview ({testExtractorFacts.length})</h4>
 								<ul>
@@ -528,7 +535,7 @@
 									{/each}
 								</ul>
 							</div>
-						{:else if testExtractorFacts !== null}
+						{:else if !lastRunWasSave && testExtractorFacts !== null}
 							<div class="test-result">Extractor skipped: parser already found a new_memory tag.</div>
 						{/if}
 				</section>
