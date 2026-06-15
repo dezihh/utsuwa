@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Icon } from '$lib/components/ui';
-	import { memoryApi, getWorkingMemory, retroactivelyTagSession } from '$lib/engine/memory';
+	import { memoryApi, getWorkingMemory, retroactivelyTagSession, SHARED_CHARACTER_ID } from '$lib/engine/memory';
 	import * as memoryStorage from '$lib/services/storage/memory';
 	import { parseResponse, extractPotentialFacts } from '$lib/ai/response-parser';
 	import { extractFactsFromLLM } from '$lib/services/memory/extract-facts';
@@ -56,12 +56,15 @@
 	async function loadAll() {
 		isLoading = true;
 		try {
-			const [f, l, s] = await Promise.all([
+			const [charFacts, sharedFacts, l, s] = await Promise.all([
 				memoryApi.getFacts(100, currentCharacterId),
+				memoryApi.getFacts(100, SHARED_CHARACTER_ID),
 				memoryStorage.getFactLibraryEntries({ characterId: currentCharacterId, limit: 100 }),
 				memoryApi.getSessions(20, currentCharacterId)
 			]);
-			facts = f;
+			facts = [...charFacts, ...sharedFacts].sort(
+				(a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+			);
 			libraryEntries = l;
 			sessions = s;
 			turns = getWorkingMemory().turns.slice(-20);
@@ -108,11 +111,14 @@
 	}
 
 	async function handleDeleteAllFacts() {
-		if (!confirm('Delete all facts for this character? This cannot be undone.')) return;
+		if (!confirm('Delete all facts for this character and shared user facts? This cannot be undone.')) return;
 		try {
-			const count = await memoryApi.deleteAllFacts(currentCharacterId);
+			const [charCount, sharedCount] = await Promise.all([
+				memoryApi.deleteAllFacts(currentCharacterId),
+				memoryApi.deleteAllFacts(SHARED_CHARACTER_ID)
+			]);
 			await loadAll();
-			console.log(`[MemoryInspector] Deleted ${count} facts`);
+			console.log(`[MemoryInspector] Deleted ${charCount + sharedCount} facts`);
 		} catch (e) {
 			console.error('[MemoryInspector] Failed to delete all facts:', e);
 		}
