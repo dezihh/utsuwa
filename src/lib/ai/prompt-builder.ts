@@ -170,15 +170,12 @@ After your response, you may optionally output state changes as JSON:
 {
   "mood_change": { "emotion": "emotion_name", "intensity_delta": number },
   "energy_delta": number,
+  "new_memory": null | "fact to remember about them",
   "structured_fact_seen": { "type": "vocab", "key": "word", "value": "meaning", "category": "topic" }
 }
 \`\`\`
 
-If the user learns a new vocabulary word, concept, or fact, include "structured_fact_seen" with:
-- type: the kind of fact (e.g. "vocab", "concept", "exam_fact")
-- key: the term or concept
-- value: the meaning or explanation
-- category: optional topic (e.g. "business", "travel", "science")
+${buildMemoryTagInstructions()}
 
 NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affection, trust, intimacy, comfort, or respect changes - these relationship stats are disabled.
 </instructions>`);
@@ -391,6 +388,24 @@ If the user struggles with any of these or shows understanding, include "structu
 </fact_library>`;
 }
 
+// Shared memory-tagging instructions for both app modes
+function buildMemoryTagInstructions(): string {
+	return `MEMORY GUIDELINES:
+You can persist facts about the user by including "new_memory" in the JSON block.
+Only save facts that deepen the understanding of the user's personality, emotional needs, values, boundaries, recurring satisfaction patterns, or lasting preferences.
+Do NOT save:
+- temporary states ("I am tired today")
+- superficial one-time mentions ("I ate an apple")
+- trivia that will not matter in future conversations
+- anything the user has not actually communicated or strongly implied
+
+Use "structured_fact_seen" ONLY when the user learns a new vocabulary word, concept, or structured fact. Use:
+- type: the kind of fact (e.g. "vocab", "concept", "exam_fact")
+- key: the term or concept
+- value: the meaning or explanation
+- category: optional topic (e.g. "business", "travel", "science")`;
+}
+
 // Instruction layer - how to respond
 function buildInstructionLayer(ctx: PromptContext): string {
 	const stage = ctx.state.relationshipStage;
@@ -426,11 +441,7 @@ After your dialogue response, you may optionally output state changes as JSON:
 }
 \`\`\`
 
-If the user learns a new vocabulary word, concept, or fact, include "structured_fact_seen" with:
-- type: the kind of fact (e.g. "vocab", "concept", "exam_fact")
-- key: the term or concept
-- value: the meaning or explanation
-- category: optional topic (e.g. "business", "travel", "science")
+${buildMemoryTagInstructions()}
 
 Keep deltas small (-10 to +10 for most interactions). Only include the JSON if you want to suggest state changes.
 </instructions>`;
