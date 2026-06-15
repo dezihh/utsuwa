@@ -346,6 +346,16 @@
 		const baselineUpdates = calculateBaselineUpdates(userMessage, state);
 
 		const parsed = parseResponse(companionResponse);
+		debugStore.addLog({
+			category: 'memory',
+			title: 'Raw LLM Response',
+			content: companionResponse.slice(0, 2000) + (companionResponse.length > 2000 ? '\n... (truncated)' : '')
+		});
+		debugStore.addLog({
+			category: 'memory',
+			title: 'Memory Parse Result',
+			content: `JSON detected: ${!!parsed.stateUpdates}\nnew_memory: ${parsed.stateUpdates?.newMemory ?? 'none'}\nstructured_fact: ${parsed.stateUpdates?.structuredFactSeen ? `${parsed.stateUpdates.structuredFactSeen.type}/${parsed.stateUpdates.structuredFactSeen.key}=${parsed.stateUpdates.structuredFactSeen.value}` : 'none'}\nmood_change: ${parsed.stateUpdates?.moodChange ? `${parsed.stateUpdates.moodChange.emotion} (${parsed.stateUpdates.moodChange.intensityDelta})` : 'none'}\nparseError: ${parsed.parseError ?? 'none'}`
+		});
 		const { queries: imageQueries, shouldClose: shouldCloseImages, cleanedText: imageCleaned } = extractImageSearchTags(parsed.dialogue);
 		let dialogue = imageCleaned;
 		const llmUpdates = parsed.stateUpdates;
@@ -435,11 +445,16 @@
 		if (finalUpdates.newMemory) {
 			try {
 				const isUserFact = finalUpdates.newMemory.toLowerCase().startsWith('user');
-				await memoryApi.createFact({
+				const created = await memoryApi.createFact({
 					content: finalUpdates.newMemory,
 					category: determineFactCategory(finalUpdates.newMemory),
 					importance: calculateFactImportance(finalUpdates.newMemory),
 					characterId: isUserFact ? SHARED_CHARACTER_ID : currentCharacterId
+				});
+				debugStore.addLog({
+					category: 'memory',
+					title: 'Memory Saved (new_memory)',
+					content: `Character: ${isUserFact ? SHARED_CHARACTER_ID : currentCharacterId}\nContent: ${created.content}`
 				});
 			} catch (e) {
 				console.debug('[Memory] Failed to save LLM observation:', e);
@@ -521,15 +536,25 @@
 
 		// Extract facts
 		const potentialFacts = extractPotentialFacts(dialogue, userMessage);
+		debugStore.addLog({
+			category: 'memory',
+			title: 'Heuristic Facts Extracted',
+			content: `Found ${potentialFacts.length}\n${potentialFacts.slice(0, 5).join('\n')}`
+		});
 		for (const factContent of potentialFacts.slice(0, 2)) {
 			try {
 				const userAnalysis = analyzeMessage(userMessage);
 				const isUserFact = factContent.toLowerCase().startsWith('user');
-				await memoryApi.createFact({
+				const created = await memoryApi.createFact({
 					content: factContent,
 					category: determineFactCategory(factContent),
 					importance: calculateFactImportance(factContent, userAnalysis.sentiment),
 					characterId: isUserFact ? SHARED_CHARACTER_ID : currentCharacterId
+				});
+				debugStore.addLog({
+					category: 'memory',
+					title: 'Memory Saved (heuristic)',
+					content: `Character: ${isUserFact ? SHARED_CHARACTER_ID : currentCharacterId}\nContent: ${created.content}`
 				});
 			} catch (e) {
 				console.debug('Failed to save fact:', e);
