@@ -125,7 +125,7 @@
 		isAdding = true;
 		addKey = '';
 		addValue = '';
-		addType = 'vocab';
+		addType = 'fact';
 		addCategory = '';
 		addTags = '';
 		addConfidence = 0.5;
@@ -356,7 +356,7 @@
 					<div class="spinner"></div>
 					<p>Loading entries...</p>
 				</div>
-			{:else if filteredEntries().length === 0}
+			{:else if filteredEntries().length === 0 && !isAdding}
 				<div class="empty-state">
 					<Icon name="book" size={48} />
 					<p>No entries found</p>
@@ -371,16 +371,16 @@
 								<div class="edit-form">
 									<div class="edit-field">
 										<span class="field-label">Key</span>
-										<input type="text" bind:value={addKey} placeholder="e.g. Serendipity" />
+										<input type="text" bind:value={addKey} placeholder="e.g. favorite color" />
 									</div>
 									<div class="edit-field">
 										<span class="field-label">Value</span>
-										<textarea bind:value={addValue} rows={3} placeholder="Definition or explanation..."></textarea>
+										<textarea bind:value={addValue} rows={3} placeholder="e.g. red cars"></textarea>
 									</div>
 									<div class="edit-row">
 										<div class="edit-field">
 											<span class="field-label">Type</span>
-											<input type="text" bind:value={addType} placeholder="vocab, exam_fact, concept..." />
+											<input type="text" bind:value={addType} placeholder="fact, preference, goal..." />
 										</div>
 										<div class="edit-field">
 											<span class="field-label">Category</span>

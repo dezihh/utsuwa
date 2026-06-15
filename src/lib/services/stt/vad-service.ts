@@ -76,19 +76,19 @@ class VadService {
 
 	// Config (user-supplied)
 	private speechThreshold = 0.02;
-	private silenceDurationMs = 1500;
+	private silenceDurationMs = 2500;
 	private minSpeechDurationMs = 500;
 	private preBufferMs = 300;
 
 	/** Map 1-10 sensitivity level to internal multiplier. 10 = most sensitive.
 	 *
-	 * Default level 5 is intentionally more sensitive than before so normal
-	 * conversational speech is detected reliably on typical mics and iPad.
+	 * Uses an exponential curve so the mid-range (levels 4-6) is noticeably
+	 * more sensitive than before, while the extremes still cover very noisy
+	 * and very quiet environments.
 	 */
 	private levelToMultiplier(level: number): number {
-		// Level 1 → 2.5 (very insensitive). Level 5 → 0.8 (default, reliable).
-		// Level 10 → 0.25 (very sensitive, detects quiet speech).
-		return 2.5 - (Math.max(1, Math.min(10, level)) - 1) * (2.25 / 9);
+		const clamped = Math.max(1, Math.min(10, level));
+		return 2.5 * Math.exp(-0.35 * (clamped - 1));
 	}
 
 	/** Set sensitivity as a 1-10 level. 1 = ignore most noise, 10 = detect very quiet speech. */
@@ -113,7 +113,13 @@ class VadService {
 		if (config?.preBufferMs !== undefined) this.preBufferMs = config.preBufferMs;
 
 		try {
-			this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+			this.stream = await navigator.mediaDevices.getUserMedia({
+				audio: {
+					echoCancellation: true,
+					noiseSuppression: true,
+					autoGainControl: false
+				}
+			});
 		} catch (err) {
 			const messages: Record<string, string> = {
 				NotAllowedError: 'Microphone access denied. Check system permissions.',
@@ -244,10 +250,10 @@ class VadService {
 					this.calibrating = false;
 					const sorted = [...this.calibrationSamples].sort((a, b) => a - b);
 					const p90 = sorted[Math.floor(sorted.length * 0.9)] ?? 0;
-					const MAX_CALIBRATED_BASE = 0.06;
+					const MAX_CALIBRATED_BASE = 0.05;
 					this.calibratedBase = Math.min(
 						MAX_CALIBRATED_BASE,
-						Math.max(this.speechThreshold, p90 * 3)
+						Math.max(this.speechThreshold, p90 * 2.5)
 					);
 					this.effectiveThreshold = this.calibratedBase * this.levelToMultiplier(this.sensitivityLevel);
 					console.debug(`[VAD] Calibrated: noise floor p90=${p90.toFixed(4)}, base=${this.calibratedBase.toFixed(4)}, effective=${this.effectiveThreshold.toFixed(4)} (cap=${MAX_CALIBRATED_BASE})`);

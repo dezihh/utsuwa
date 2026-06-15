@@ -28,7 +28,7 @@
 
 		<div class="action-card">
 			<div class="action-header">
-				<Icon name="book" size={20} />
+				<Icon name="globe" size={20} />
 				<h3>Vocabulary Settings</h3>
 			</div>
 
@@ -49,7 +49,7 @@
 
 			<Button onclick={() => (showVocabModal = true)}>
 				{#snippet children()}
-					<Icon name="book" size={16} />
+					<Icon name="globe" size={16} />
 					Open Vocabulary Manager
 				{/snippet}
 			</Button>

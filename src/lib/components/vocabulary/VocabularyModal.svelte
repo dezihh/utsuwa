@@ -181,7 +181,7 @@
 	<div class="modal-container">
 		<div class="modal-header">
 			<h2 id="vocab-modal-title" class="modal-title">
-				<Icon name="book" size={20} />
+				<Icon name="globe" size={20} />
 				Vocabulary Manager
 			</h2>
 			<button class="close-btn" onclick={onClose} aria-label="Close">

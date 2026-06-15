@@ -80,6 +80,10 @@
 	/** True while TTS audio is playing (so we know when to interrupt). */
 	let ttsActive = false;
 
+	/** Text of the TTS sentence currently being spoken. Used to discard echo
+	 *  (the microphone hearing the assistant's own voice) during duplex mode. */
+	let currentTtsText = '';
+
 	/** Auto-dismiss the noise toast after 2s */
 	let noiseToastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -116,6 +120,22 @@
 			clearTimeout(watchdogTimer);
 			watchdogTimer = null;
 		}
+	}
+
+	/** Simple case-insensitive overlap check to detect the microphone picking up
+	 *  the assistant's own TTS. Returns true if a is mostly contained in b or vice versa. */
+	function isSimilarText(a: string, b: string): boolean {
+		if (!a || !b) return false;
+		const normalizedA = a.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').trim();
+		const normalizedB = b.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').trim();
+		if (!normalizedA || !normalizedB) return false;
+		if (normalizedA === normalizedB) return true;
+		if (normalizedA.length < 10 || normalizedB.length < 10) {
+			return normalizedA === normalizedB;
+		}
+		const shorter = normalizedA.length < normalizedB.length ? normalizedA : normalizedB;
+		const longer = normalizedA.length < normalizedB.length ? normalizedB : normalizedA;
+		return longer.includes(shorter) || shorter.includes(longer);
 	}
 
 	async function transcribeSegment(blob: Blob, mimeType: string) {
@@ -195,11 +215,22 @@
 			// Confirmed real speech — interrupt TTS or ongoing LLM generation now.
 			// (Not earlier, so background noise that produces no transcription
 			// never stops the assistant.)
+			const wasTtsActive = ttsActive;
 			if (ttsActive) {
 				onInterrupt?.();
 				ttsActive = false;
 			} else if (isProcessing?.()) {
 				onInterrupt?.();
+			}
+
+			// Echo suppression: if this segment was captured while the assistant was
+			// speaking and the transcription matches what was just said, it's the
+			// microphone hearing the TTS — discard it instead of looping it back.
+			if (wasTtsActive && currentTtsText && isSimilarText(text, currentTtsText)) {
+				console.debug('[Duplex] Discarded suspected TTS echo:', text);
+				triggerNoiseToast();
+				setPhase('listening');
+				return;
 			}
 
 			setPhase('thinking');
@@ -266,7 +297,7 @@
 					const cfg = settingsStore.getProviderConfig('whisper-local');
 					return typeof cfg.vadThreshold === 'number' ? cfg.vadThreshold : 0.02;
 				})(),
-				silenceDurationMs: 1000,
+				silenceDurationMs: 2500,
 				minSpeechDurationMs: 500,
 				preBufferMs: 300
 			}
@@ -306,11 +337,18 @@
 		setPhase('speaking');
 	}
 
+	/** Called by +page.svelte whenever a new TTS sentence starts playing. */
+	export function setTtsText(text: string) {
+		if (!isDuplexActive) return;
+		currentTtsText = text;
+	}
+
 	/** Called by +page.svelte when TTS finishes (or when there is no TTS). */
 	export function onTTSDone() {
 		if (!isDuplexActive) return;
 		clearWatchdog();
 		ttsActive = false;
+		currentTtsText = '';
 		// VAD is already running — just switch phase back to listening.
 		setPhase('listening');
 	}
@@ -325,6 +363,7 @@
 		startDuplex,
 		stopDuplex,
 		onTTSStarted,
+		setTtsText,
 		onTTSDone,
 		adjustSensitivity
 	};

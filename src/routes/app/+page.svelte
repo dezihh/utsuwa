@@ -762,6 +762,7 @@
 							isTyping = false;
 							latestResponse = sentence;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
+							duplexStore.setTtsText(sentence);
 						}
 					});
 					for (const seg of unplayed) ttsStore.pushSpeechSegment(seg);
@@ -870,6 +871,7 @@
 							isTyping = false;
 							latestResponse = sentence;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
+							duplexStore.setTtsText(sentence);
 						}
 					});
 				}
@@ -998,6 +1000,7 @@
 						isTyping = false;
 						latestResponse = sentence;
 						spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
+						duplexStore.setTtsText(sentence);
 					}
 				});
 				for (const seg of segments) {

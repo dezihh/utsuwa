@@ -32,7 +32,7 @@
 	{/if}
 	{#if onOpenVocabulary}
 		<button class="icon-btn" onclick={onOpenVocabulary} aria-label="Open vocabulary manager">
-			<Icon name="book" size={20} />
+			<Icon name="globe" size={20} />
 		</button>
 	{/if}
 </div>
