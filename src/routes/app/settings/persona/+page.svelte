@@ -617,6 +617,10 @@
 		modulesStore.setModuleSetting('consciousness', 'activeModel', modelId);
 	}
 
+	function handleContextSizeChange(value: number) {
+		modulesStore.setModuleSetting('consciousness', 'contextSize', value);
+	}
+
 	function handleTTSProviderChange(providerId: string) {
 		modulesStore.setModuleSetting('speech', 'activeProvider', providerId);
 		const provider = getTTSProvider(providerId);
@@ -1208,6 +1212,24 @@
 										/>
 									</div>
 								{/if}
+
+								<!-- Context Window -->
+								<div class="api-key-row context-size-row">
+									<label class="context-size-label" for="ps-llm-context-size">
+										Context Window
+										<span class="context-size-value">{(consciousnessSettings.contextSize as number) || 32768}</span>
+									</label>
+									<input
+										id="ps-llm-context-size"
+										type="number"
+										class="api-key-input"
+										min="1024"
+										step="1024"
+										value={(consciousnessSettings.contextSize as number) || 32768}
+										onchange={(e) => handleContextSizeChange(Number(e.currentTarget.value))}
+									/>
+									<p class="provider-note">Maximum context size of the selected model. Used to scale memory injection.</p>
+								</div>
 							{/if}
 						</div>
 
@@ -3899,6 +3921,27 @@
 
 	.provider-note.error {
 		color: var(--color-error);
+	}
+
+	.context-size-row {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.35rem;
+		margin-top: 0.5rem;
+	}
+
+	.context-size-label {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--text-secondary);
+	}
+
+	.context-size-value {
+		font-size: 0.8rem;
+		color: var(--text-tertiary);
 	}
 
 	.api-key-input {
