@@ -306,7 +306,7 @@
 						<h3>Semantic Memory Facts ({facts.length})</h3>
 						{#if facts.length > 0}
 							<button class="delete-all-btn" onclick={handleDeleteAllFacts}>
-								<Icon name="trash-2" size={14} />
+								<Icon name="trash" size={14} />
 								Delete all
 							</button>
 						{/if}
@@ -323,7 +323,7 @@
 										<div class="fact-actions">
 											<span class="fact-meta">importance {fact.importance} · confidence {(fact.confidence * 100).toFixed(0)}%</span>
 											<button class="delete-btn" onclick={() => handleDeleteFact(fact.id)} title="Delete fact">
-												<Icon name="trash-2" size={13} />
+												<Icon name="trash" size={13} />
 											</button>
 										</div>
 									</div>
