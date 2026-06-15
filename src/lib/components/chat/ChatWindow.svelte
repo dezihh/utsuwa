@@ -22,6 +22,7 @@
 
 	// V2 companion system imports
 	import { buildSystemPrompt, type PromptContext } from '$lib/ai/prompt-builder';
+	import { getMemoryBudget } from '$lib/types/memory';
 	import { parseResponse, validateStateUpdates, extractPotentialFacts } from '$lib/ai/response-parser';
 	import { calculateBaselineUpdates, analyzeMessage } from '$lib/engine/heuristics';
 	import { mergeUpdates, checkAndApplyStageTransition } from '$lib/engine/state-updates';
@@ -149,7 +150,7 @@
 		// 5c. Fallback: if the main LLM did not emit a new_memory tag,
 		// ask a slim extractor to persist any notable facts (fire-and-forget).
 		memoryApi
-			.maybeExtractFacts(userMessage, dialogue, currentCharacterId, !!finalUpdates.newMemory)
+			.maybeExtractFacts(userMessage, companionResponse, currentCharacterId, !!finalUpdates.newMemory)
 			.then((count) => {
 				if (count > 0) {
 					console.debug('[Memory] Extractor saved', count, 'new fact(s)');
@@ -249,6 +250,10 @@
 			}
 		}
 
+		const consciousnessSettings = modulesStore.getModuleSettings('consciousness');
+		const contextSize = Number(consciousnessSettings.contextSize) || 32768;
+		const memoryBudget = getMemoryBudget(contextSize);
+
 		const context: PromptContext = {
 			persona,
 			state,
@@ -262,7 +267,8 @@
 			emotionMappings,
 			pendingReminders,
 			factLibraryEnabled: true,
-			vocabularyEnabled: settingsStore.isVocabularyEnabled()
+			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
+			memoryBudget
 		};
 
 		return buildSystemPrompt(context);

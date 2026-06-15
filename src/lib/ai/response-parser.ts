@@ -69,7 +69,9 @@ export function parseResponse(rawResponse: string): ParsedResponse {
 		}
 	} else {
 		// Try to find inline JSON (some models don't use code blocks)
-		const inlineJsonMatch = rawResponse.match(/\{[\s\S]*"(?:mood_change|affection_delta|trust_delta)"[\s\S]*\}/);
+		const inlineJsonMatch = rawResponse.match(
+			/\{[\s\S]*"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|new_memory|structured_fact_seen|triggered_event)"[\s\S]*\}/
+		);
 		if (inlineJsonMatch) {
 			dialogue = rawResponse.replace(inlineJsonMatch[0], '').trim();
 			try {
@@ -77,6 +79,32 @@ export function parseResponse(rawResponse: string): ParsedResponse {
 				stateUpdates = convertLLMOutput(parsed);
 			} catch (e) {
 				// Ignore parse errors for inline JSON - might be false positive
+			}
+		} else {
+			// Third fallback: bare JSON object anywhere in the response
+			// (some models output JSON without code fences or known keys)
+			const bareJsonMatch = rawResponse.match(/(\{[\s\S]*\})\s*$/);
+			if (bareJsonMatch) {
+				try {
+					const parsed: LLMStateOutput = JSON.parse(bareJsonMatch[1]);
+					const knownKeys = [
+						'mood_change',
+						'affection_delta',
+						'trust_delta',
+						'intimacy_delta',
+						'comfort_delta',
+						'respect_delta',
+						'new_memory',
+						'structured_fact_seen',
+						'triggered_event'
+					];
+					if (knownKeys.some((k) => k in parsed)) {
+						dialogue = rawResponse.replace(bareJsonMatch[0], '').trim();
+						stateUpdates = convertLLMOutput(parsed);
+					}
+				} catch {
+					// Not valid JSON — ignore
+				}
 			}
 		}
 	}
@@ -161,6 +189,7 @@ function cleanDialogue(text: string): string {
 
 	// Remove any leftover JSON-like content
 	cleaned = cleaned.replace(/\{[^}]*"(?:mood|delta|emotion)[^}]*\}/gi, '');
+	cleaned = cleaned.replace(/\{[^{}]*"(?:new_memory|structured_fact_seen|triggered_event|mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta)[^{}]*\}/gi, '');
 
 	// Remove action asterisks (we want dialogue only)
 	cleaned = cleaned.replace(/\*[^*]+\*/g, '');
@@ -291,6 +320,22 @@ export function extractPotentialFacts(dialogue: string, userMessage: string): st
 		let match;
 		while ((match = pattern.exec(dialogue)) !== null) {
 			facts.push(match[1].trim());
+		}
+	}
+
+	// Detect category-list format: "Category: value" or "- Category: value"
+	const categoryPatterns = [
+		/^[-•*]?\s*(?:vorlieben?|preferences?|likes?|hobbys?|hobbies|interessen?|interests?|beruf|job|arbeit|work)\s*:\s*(.+)$/gim,
+		/^[-•*]?\s*(?:name|alter|age|wohnort|location|ziel|goal|geburtstag|birthday)\s*:\s*(.+)$/gim
+	];
+
+	for (const pattern of categoryPatterns) {
+		let match;
+		while ((match = pattern.exec(dialogue)) !== null) {
+			const value = match[1].trim();
+			if (value.length > 2 && value.length < 200) {
+				facts.push(`User: ${value}`);
+			}
 		}
 	}
 
