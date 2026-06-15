@@ -305,6 +305,18 @@ export const memoryApi = {
 		};
 	},
 
+	// Delete a single fact by ID
+	async deleteFact(factId: number): Promise<void> {
+		await memoryStorage.deleteFact(factId);
+	},
+
+	// Delete all facts for a character (or globally if no characterId)
+	async deleteAllFacts(characterId?: string): Promise<number> {
+		const facts = await memoryStorage.getFacts({ characterId, limit: 100000 });
+		await Promise.all(facts.map((f) => memoryStorage.deleteFact(f.id!)));
+		return facts.length;
+	},
+
 	// Create a new session
 	async createSession(characterId?: string): Promise<SessionSummary> {
 		const now = new Date();

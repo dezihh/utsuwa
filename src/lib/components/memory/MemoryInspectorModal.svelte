@@ -97,6 +97,27 @@
 		}
 	}
 
+	async function handleDeleteFact(factId: number | undefined) {
+		if (!factId) return;
+		try {
+			await memoryApi.deleteFact(factId);
+			await loadAll();
+		} catch (e) {
+			console.error('[MemoryInspector] Failed to delete fact:', e);
+		}
+	}
+
+	async function handleDeleteAllFacts() {
+		if (!confirm('Delete all facts for this character? This cannot be undone.')) return;
+		try {
+			const count = await memoryApi.deleteAllFacts(currentCharacterId);
+			await loadAll();
+			console.log(`[MemoryInspector] Deleted ${count} facts`);
+		} catch (e) {
+			console.error('[MemoryInspector] Failed to delete all facts:', e);
+		}
+	}
+
 	async function runParserTest(save: boolean) {
 		if (!testUserMessage.trim() || !testLlmResponse.trim()) {
 			testSaveResult = 'Please fill in both fields.';
@@ -275,7 +296,15 @@
 				</section>
 			{:else if activeTab === 'facts'}
 				<section class="section">
-					<h3>Semantic Memory Facts ({facts.length})</h3>
+					<div class="section-header">
+						<h3>Semantic Memory Facts ({facts.length})</h3>
+						{#if facts.length > 0}
+							<button class="delete-all-btn" onclick={handleDeleteAllFacts}>
+								<Icon name="trash-2" size={14} />
+								Delete all
+							</button>
+						{/if}
+					</div>
 					<p class="hint">Facts extracted automatically from conversation or heuristics.</p>
 					{#if facts.length === 0}
 						<p class="empty">No facts stored yet. The LLM must emit a memory tag for automatic extraction.</p>
@@ -285,7 +314,12 @@
 								<div class="fact-card">
 									<div class="fact-header">
 										<span class="fact-category">{fact.category}</span>
-										<span class="fact-meta">importance {fact.importance} · confidence {(fact.confidence * 100).toFixed(0)}%</span>
+										<div class="fact-actions">
+											<span class="fact-meta">importance {fact.importance} · confidence {(fact.confidence * 100).toFixed(0)}%</span>
+											<button class="delete-btn" onclick={() => handleDeleteFact(fact.id)} title="Delete fact">
+												<Icon name="trash-2" size={13} />
+											</button>
+										</div>
 									</div>
 									<p class="fact-content">{fact.content}</p>
 									<div class="fact-footer">
@@ -809,6 +843,17 @@
 		background: rgba(255, 255, 255, 0.04);
 	}
 
+	.section-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.5rem;
+	}
+
+	.section-header h3 {
+		margin: 0;
+	}
+
 	.fact-header,
 	.library-header,
 	.session-header {
@@ -817,6 +862,48 @@
 		align-items: center;
 		font-size: 0.75rem;
 		margin-bottom: 0.4rem;
+	}
+
+	.fact-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.delete-btn {
+		background: rgba(239, 68, 68, 0.1);
+		border: none;
+		border-radius: 6px;
+		padding: 0.25rem;
+		color: #ef4444;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: background 0.15s;
+	}
+
+	.delete-btn:hover {
+		background: rgba(239, 68, 68, 0.2);
+	}
+
+	.delete-all-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.35rem 0.7rem;
+		border: none;
+		border-radius: 8px;
+		background: rgba(239, 68, 68, 0.1);
+		color: #ef4444;
+		font-size: 0.75rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.delete-all-btn:hover {
+		background: rgba(239, 68, 68, 0.2);
 	}
 
 	.fact-category,
