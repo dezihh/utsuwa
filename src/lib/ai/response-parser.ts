@@ -109,6 +109,35 @@ export function parseResponse(rawResponse: string): ParsedResponse {
 		}
 	}
 
+
+	// Fourth fallback: isolated memory tags that the model emitted without
+	// wrapping them in a full JSON object (e.g. inline "new_memory": "...").
+	if (!stateUpdates) {
+		const isolatedMemoryMatch = rawResponse.match(
+			/"?new_memory"?\s*:\s*"([\s\S]*?)(?<!\\)"/i
+		);
+		if (isolatedMemoryMatch) {
+			dialogue = rawResponse.replace(isolatedMemoryMatch[0], '').trim();
+			stateUpdates = { newMemory: isolatedMemoryMatch[1].trim() };
+		}
+	}
+
+	if (!stateUpdates) {
+		const isolatedFactMatch = rawResponse.match(
+			/"?structured_fact_seen"?\s*:\s*(\{[\s\S]*?\})/i
+		);
+		if (isolatedFactMatch) {
+			try {
+				const parsed: LLMStateOutput = JSON.parse(
+					`{"structured_fact_seen": ${isolatedFactMatch[1]}}`
+				);
+				dialogue = rawResponse.replace(isolatedFactMatch[0], '').trim();
+				stateUpdates = convertLLMOutput(parsed);
+			} catch {
+				// Not valid JSON — ignore
+			}
+		}
+	}
 	// Clean up dialogue
 	dialogue = cleanDialogue(dialogue);
 

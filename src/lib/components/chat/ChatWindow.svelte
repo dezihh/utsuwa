@@ -96,6 +96,11 @@
 		const parsed = parseResponse(companionResponse);
 		debugStore.addLog({
 			category: 'memory',
+			title: 'Raw LLM Response',
+			content: companionResponse.slice(0, 2000) + (companionResponse.length > 2000 ? '\n... (truncated)' : '')
+		});
+		debugStore.addLog({
+			category: 'memory',
 			title: 'Memory Parse Result',
 			content: `JSON detected: ${!!parsed.stateUpdates}\nnew_memory: ${parsed.stateUpdates?.newMemory ?? 'none'}\nstructured_fact: ${parsed.stateUpdates?.structuredFactSeen ? `${parsed.stateUpdates.structuredFactSeen.type}/${parsed.stateUpdates.structuredFactSeen.key}=${parsed.stateUpdates.structuredFactSeen.value}` : 'none'}\nmood_change: ${parsed.stateUpdates?.moodChange ? `${parsed.stateUpdates.moodChange.emotion} (${parsed.stateUpdates.moodChange.intensityDelta})` : 'none'}\nparseError: ${parsed.parseError ?? 'none'}`
 		});

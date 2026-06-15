@@ -399,6 +399,8 @@ Do NOT save:
 - trivia that will not matter in future conversations
 - anything the user has not actually communicated or strongly implied
 
+Output the JSON block AFTER your dialogue response, separated by a blank line. Do not mix JSON keys such as "new_memory" into the spoken dialogue, and do not mention memory, JSON, or storage in your response.
+
 Use "structured_fact_seen" ONLY when the user learns a new vocabulary word, concept, or structured fact. Use:
 - type: the kind of fact (e.g. "vocab", "concept", "exam_fact")
 - key: the term or concept
