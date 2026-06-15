@@ -403,8 +403,9 @@
 				<section class="section test-section">
 					<h3>Memory Parser Tester</h3>
 						<p class="hint">
-							Paste a user message and a raw LLM response to see what the parser and
-							extractor recognize — without waiting for a real conversation.
+							Simulate one chat turn. The parser analyzes the <strong>LLM response</strong>
+							for JSON memory tags, while the extractor uses both fields to find facts.
+							Use a template or paste a real LLM response copied from the chat.
 						</p>
 
 						<div class="test-templates">
@@ -420,7 +421,7 @@
 						</div>
 
 						<div class="test-field">
-							<label for="test-user-message">User message</label>
+							<label for="test-user-message">1. User message (what the user said)</label>
 							<textarea
 								id="test-user-message"
 								bind:value={testUserMessage}
@@ -430,12 +431,12 @@
 						</div>
 
 						<div class="test-field">
-							<label for="test-llm-response">LLM response</label>
+							<label for="test-llm-response">2. LLM response (raw text to parse)</label>
 							<textarea
 								id="test-llm-response"
 								bind:value={testLlmResponse}
 								rows={8}
-								placeholder="Paste the raw LLM response here, including any JSON blocks..."
+								placeholder="Paste the raw LLM response here, including any JSON blocks or category lists..."
 							></textarea>
 						</div>
 
