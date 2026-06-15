@@ -42,6 +42,7 @@
 		getEmbeddingBackfillStatus,
 		SHARED_CHARACTER_ID
 	} from '$lib/engine/memory';
+	import { getMemoryBudget } from '$lib/types/memory';
 	import { initEmbeddingModel, subscribeToEmbeddingState } from '$lib/services/embeddings';
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
 
@@ -217,6 +218,10 @@
 				)
 			: undefined;
 
+		const consciousnessSettings = modulesStore.getModuleSettings('consciousness');
+		const contextSize = Number(consciousnessSettings.contextSize) || 32768;
+		const memoryBudget = getMemoryBudget(contextSize);
+
 		const context: PromptContext = {
 			persona,
 			state,
@@ -229,7 +234,8 @@
 			availableActions: vrmStore.llmActions,
 			emotionMappings,
 			factLibraryEnabled: true,
-			vocabularyEnabled: settingsStore.isVocabularyEnabled()
+			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
+			memoryBudget
 		};
 
 		return buildSystemPrompt(context);

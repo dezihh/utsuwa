@@ -14,7 +14,7 @@ import type {
 	FactLibraryEntry,
 	FactLibrarySearchOptions
 } from '$lib/types/memory';
-import { embedText, isEmbeddingReady } from '$lib/services/embeddings';
+import { embedText, isEmbeddingReady, cosineSimilarity } from '$lib/services/embeddings';
 
 const DEFAULT_CHARACTER_ID = 'default';
 
@@ -357,11 +357,26 @@ export async function getFactLibraryEntries(
 		);
 	}
 
-	// Sort by confidence ascending (lowest first = needs review), then by reviewCount
-	entries.sort((a, b) => {
-		if (a.confidence !== b.confidence) return a.confidence - b.confidence;
-		return a.reviewCount - b.reviewCount;
-	});
+	// If a query embedding is provided, rank entries by cosine similarity first.
+	// Fallback to keyword filtering happens above; if no embedding is available,
+	// sort by confidence ascending (lowest first = needs review) for review mode.
+	if (options.embedding && options.embedding.length > 0) {
+		const scored = entries
+			.map((entry) => ({
+				entry,
+				similarity: entry.embedding?.length
+					? cosineSimilarity(options.embedding!, entry.embedding)
+					: -1
+			}))
+			.filter((item) => item.similarity >= 0)
+			.sort((a, b) => b.similarity - a.similarity);
+		entries = scored.map((item) => item.entry);
+	} else {
+		entries.sort((a, b) => {
+			if (a.confidence !== b.confidence) return a.confidence - b.confidence;
+			return a.reviewCount - b.reviewCount;
+		});
+	}
 
 	if (options.limit) {
 		entries = entries.slice(0, options.limit);

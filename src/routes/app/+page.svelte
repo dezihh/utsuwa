@@ -56,6 +56,7 @@
 		startNewSession,
 		SHARED_CHARACTER_ID
 	} from '$lib/engine/memory';
+	import { getMemoryBudget } from '$lib/types/memory';
 	import * as memoryStorage from '$lib/services/storage/memory';
 	import { initEmbeddingModel, subscribeToEmbeddingState, type EmbeddingState } from '$lib/services/embeddings';
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
@@ -609,6 +610,10 @@
 				)
 			: undefined;
 
+		const consciousnessSettings = modulesStore.getModuleSettings('consciousness');
+		const contextSize = Number(consciousnessSettings.contextSize) || 32768;
+		const memoryBudget = getMemoryBudget(contextSize);
+
 		const context: PromptContext = {
 			persona,
 			state,
@@ -628,7 +633,8 @@
 			imageModalOpen: imageSearchStore.isOpen,
 			imageModalQuery: imageSearchStore.isOpen ? imageSearchStore.currentQuery : undefined,
 			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
-			factLibraryEnabled: true
+			factLibraryEnabled: true,
+			memoryBudget
 		};
 
 		const systemPrompt = buildSystemPrompt(context);

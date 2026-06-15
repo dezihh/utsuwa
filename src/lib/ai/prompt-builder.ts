@@ -1,5 +1,5 @@
 import type { CharacterState } from '$lib/types/character';
-import type { ConversationTurn, Fact, SessionSummary, RelevantContext } from '$lib/types/memory';
+import type { ConversationTurn, Fact, SessionSummary, RelevantContext, MemoryBudget } from '$lib/types/memory';
 import type { PersonaCard } from '$lib/stores/persona.svelte';
 import type { McpTool } from '$lib/types/mcp';
 import { STAGE_BEHAVIORS, STAGE_INSTRUCTIONS } from '$lib/engine/stages';
@@ -43,6 +43,8 @@ export interface PromptContext {
 	imageModalQuery?: string;
 	/** When true, injects vocabulary tag instructions */
 	vocabularyEnabled?: boolean;
+	/** Memory injection budget derived from the configured model context size */
+	memoryBudget?: MemoryBudget;
 }
 
 // Build the complete system prompt
@@ -144,7 +146,8 @@ Energy: ${energyDesc} (${ctx.state.energy}/100)
 		memorySections.push(`Recent conversation:\n${recentChat}`);
 	}
 	if (mem.relevantFacts.length > 0) {
-		const factsText = mem.relevantFacts.slice(0, 5).map((f) => `- ${f.content}`).join('\n');
+		const factLimit = ctx.memoryBudget?.relevantFacts ?? 5;
+		const factsText = mem.relevantFacts.slice(0, factLimit).map((f) => `- ${f.content}`).join('\n');
 		memorySections.push(`Things you know about them:\n${factsText}`);
 	}
 
@@ -339,7 +342,8 @@ function buildMemoryLayer(ctx: PromptContext): string {
 
 	// Relevant facts
 	if (mem.relevantFacts.length > 0) {
-		const factsText = mem.relevantFacts.slice(0, 5).map((f) => `- ${f.content}`).join('\n');
+		const factLimit = ctx.memoryBudget?.relevantFacts ?? 5;
+		const factsText = mem.relevantFacts.slice(0, factLimit).map((f) => `- ${f.content}`).join('\n');
 		sections.push(`Things you know about them:\n${factsText}`);
 	}
 
@@ -380,7 +384,7 @@ function buildFactLibraryLayer(ctx: PromptContext): string | null {
 	});
 
 	return `<fact_library>
-Relevant facts and vocabulary for this conversation:
+Semantically relevant facts and vocabulary for this conversation:
 ${lines.join('\n')}
 
 If the user struggles with any of these or shows understanding, include "structured_fact_seen" in your JSON update.

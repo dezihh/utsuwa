@@ -146,6 +146,17 @@
 			}
 		}
 
+		// 5c. Fallback: if the main LLM did not emit a new_memory tag,
+		// ask a slim extractor to persist any notable facts (fire-and-forget).
+		memoryApi
+			.maybeExtractFacts(userMessage, dialogue, currentCharacterId, !!finalUpdates.newMemory)
+			.then((count) => {
+				if (count > 0) {
+					console.debug('[Memory] Extractor saved', count, 'new fact(s)');
+				}
+			})
+			.catch((e) => console.debug('[Memory] Extractor failed:', e));
+
 		// 6. Check for stage transitions (only in Dating Sim Mode)
 		if (characterStore.appMode === 'dating_sim') {
 			const completedEventIds = characterStore.state.completedEvents || [];

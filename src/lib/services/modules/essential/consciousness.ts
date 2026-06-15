@@ -48,6 +48,13 @@ export const consciousnessModule: ModuleDefinition = {
 				label: 'Max Tokens',
 				description: 'Maximum tokens in response',
 				defaultValue: 2048
+			},
+			{
+				key: 'contextSize',
+				type: 'number',
+				label: 'Context Window (tokens)',
+				description: 'Maximum context size of the selected model. Used to scale memory injection. Check your model\'s documentation.',
+				defaultValue: 32768
 			}
 		]
 	},

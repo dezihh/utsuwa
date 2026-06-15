@@ -5,19 +5,36 @@ import type {
 	RelevantContext,
 	WorkingMemory,
 	MemorySearchOptions,
-	NewFact
+	NewFact,
+	MemoryBudget
 } from '$lib/types/memory';
-import { MAX_WORKING_MEMORY_TURNS, MAX_RELEVANT_FACTS, MAX_RECENT_SESSIONS, DEFAULT_FACT_IMPORTANCE, DEFAULT_FACT_CONFIDENCE } from '$lib/types/memory';
+import {
+	MAX_WORKING_MEMORY_TURNS,
+	MAX_RELEVANT_FACTS,
+	MAX_RECENT_SESSIONS,
+	DEFAULT_FACT_IMPORTANCE,
+	DEFAULT_FACT_CONFIDENCE,
+	getMemoryBudget
+} from '$lib/types/memory';
 import * as memoryStorage from '$lib/services/storage/memory';
 import { embedText, findSimilarFacts, isEmbeddingReady, cosineSimilarity } from '$lib/services/embeddings';
+import { extractFactsFromLLM } from '$lib/services/memory/extract-facts';
+import { retroactivelyTagSession } from '$lib/services/memory/retroactive-tag';
 import { generateSessionSummary } from '$lib/services/memory/summarize-session';
 import { analyzePersonalityEvolution } from '$lib/services/memory/analyze-personality-evolution';
+import { modulesStore } from '$lib/stores/modules.svelte';
 
 // Session inactivity threshold (30 minutes)
 const SESSION_INACTIVITY_MS = 30 * 60 * 1000;
 
 // Shared character ID for user facts visible to all characters
 export const SHARED_CHARACTER_ID = 'shared';
+
+function getCurrentMemoryBudget(): MemoryBudget {
+	const consciousnessSettings = modulesStore.getModuleSettings('consciousness');
+	const contextSize = Number(consciousnessSettings.contextSize) || 32768;
+	return getMemoryBudget(contextSize);
+}
 
 // Working memory store (single instance for the session)
 let workingMemory: WorkingMemory = {
@@ -80,6 +97,8 @@ export function clearWorkingMemory(): void {
 export async function hydrateWorkingMemory(characterId: string = 'default'): Promise<void> {
 	if (workingMemory.turns.length > 0) return;
 
+	const budget = getCurrentMemoryBudget();
+
 	// Find the most recent open session (not ended) for this character
 	const openSessions = await memoryStorage.getSessions({ characterId, ended: false, limit: 1 });
 	const currentSession = openSessions[0];
@@ -89,7 +108,7 @@ export async function hydrateWorkingMemory(characterId: string = 'default'): Pro
 		const recentTurns = await memoryStorage.getConversationTurns({
 			sessionId: currentSession.id,
 			characterId,
-			limit: 20
+			limit: budget.workingMemoryTurns
 		});
 		workingMemory.turns = recentTurns;
 		workingMemory.messageCount = recentTurns.length;
@@ -319,6 +338,68 @@ export const memoryApi = {
 			...turn,
 			createdAt: now
 		};
+	},
+
+	/**
+	 * Fallback fact extraction when the main LLM did not emit a new_memory tag.
+	 * Uses a slim, dedicated LLM call and stores only facts that are not already
+	 * known (deduplicated by embedding similarity).
+	 */
+	async maybeExtractFacts(
+		userMessage: string,
+		assistantResponse: string,
+		characterId: string = 'default',
+		hasNewMemory: boolean = false
+	): Promise<number> {
+		if (hasNewMemory) return 0;
+		if (!userMessage.trim() || !assistantResponse.trim()) return 0;
+
+		try {
+			const extracted = await extractFactsFromLLM(userMessage, assistantResponse);
+			if (extracted.length === 0) return 0;
+
+			// Get existing facts for deduplication
+			const existingFacts = [
+				...(await memoryStorage.getFacts({ characterId, limit: 1000 })),
+				...(await memoryStorage.getFacts({ characterId: SHARED_CHARACTER_ID, limit: 1000 }))
+			];
+
+			let saved = 0;
+			for (const fact of extracted) {
+				const category = fact.category || determineFactCategory(fact.content);
+				const importance = fact.importance ?? calculateFactImportance(fact.content);
+
+				// Deduplicate by embedding similarity
+				if (isEmbeddingReady()) {
+					const embedding = await embedText(fact.content);
+					if (embedding) {
+						const existingWithEmbeddings = existingFacts.filter(
+							(f) => f.embedding && f.embedding.length > 0
+						);
+						const similar = existingWithEmbeddings.some(
+							(f) => cosineSimilarity(embedding, f.embedding!) > 0.9
+						);
+						if (similar) continue;
+					}
+				}
+
+				const targetCharacterId = category === 'user' ? SHARED_CHARACTER_ID : characterId;
+				await memoryStorage.saveFact({
+					content: fact.content,
+					category,
+					importance,
+					confidence: fact.confidence ?? 0.7,
+					source: 'llm-extractor',
+					characterId: targetCharacterId
+				});
+				saved++;
+			}
+
+			return saved;
+		} catch (e) {
+			console.warn('[Memory] maybeExtractFacts failed:', e);
+			return 0;
+		}
 	}
 };
 
@@ -327,17 +408,20 @@ export async function retrieveRelevantContext(
 	userMessage: string,
 	characterId: string = 'default'
 ): Promise<RelevantContext> {
+	const budget = getCurrentMemoryBudget();
+
 	// Get recent turns from working memory
-	const recentTurns = getRecentTurns(10);
+	const recentTurns = getRecentTurns(budget.workingMemoryTurns);
 
 	// Search for relevant facts based on user message
 	let relevantFacts: Fact[] = [];
 	let triggeredMemories: Fact[] = [];
+	let queryEmbedding: number[] | null = null;
 
 	try {
 		// Try semantic search first if embedding model is ready
 		if (isEmbeddingReady()) {
-			const queryEmbedding = await embedText(userMessage);
+			queryEmbedding = await embedText(userMessage);
 			if (queryEmbedding) {
 				// Get character-specific + shared facts for semantic search
 				const characterFacts = await memoryStorage.getFacts({ characterId, limit: 1000 });
@@ -351,7 +435,7 @@ export async function retrieveRelevantContext(
 				const semanticResults = findSimilarFacts(
 					queryEmbedding,
 					factsWithEmbeddings,
-					MAX_RELEVANT_FACTS,
+					budget.relevantFacts,
 					{
 						similarityWeight: 0.7,
 						importanceWeight: 0.3,
@@ -366,7 +450,7 @@ export async function retrieveRelevantContext(
 					const triggerQuery = triggerWords.join(' ');
 					const triggerEmbedding = await embedText(triggerQuery);
 					if (triggerEmbedding) {
-						const triggerResults = findSimilarFacts(triggerEmbedding, factsWithEmbeddings, 5, {
+						const triggerResults = findSimilarFacts(triggerEmbedding, factsWithEmbeddings, budget.relevantFacts, {
 							similarityWeight: 0.6,
 							importanceWeight: 0.4,
 							minSimilarity: 0.5
@@ -392,12 +476,12 @@ export async function retrieveRelevantContext(
 			const keywords = userMessage.split(/\s+/).filter((w) => w.length > 2);
 			const keywordFacts = await memoryStorage.getFacts({
 				characterId,
-				limit: MAX_RELEVANT_FACTS,
+				limit: budget.relevantFacts,
 				keywords: keywords.length > 0 ? keywords : undefined
 			});
 			const sharedKeywordFacts = await memoryStorage.getFacts({
 				characterId: SHARED_CHARACTER_ID,
-				limit: MAX_RELEVANT_FACTS,
+				limit: budget.relevantFacts,
 				keywords: keywords.length > 0 ? keywords : undefined
 			});
 
@@ -408,7 +492,7 @@ export async function retrieveRelevantContext(
 					allFacts.push(fact);
 				}
 			}
-			relevantFacts = allFacts.slice(0, MAX_RELEVANT_FACTS);
+			relevantFacts = allFacts.slice(0, budget.relevantFacts);
 
 			// Check for triggered memories (specific keywords)
 			const triggerWords = extractTriggerWords(userMessage);
@@ -416,13 +500,13 @@ export async function retrieveRelevantContext(
 				const triggered = await memoryStorage.getFacts({
 					characterId,
 					minImportance: 70,
-					limit: 5,
+					limit: budget.relevantFacts,
 					keywords: triggerWords
 				});
 				const sharedTriggered = await memoryStorage.getFacts({
 					characterId: SHARED_CHARACTER_ID,
 					minImportance: 70,
-					limit: 5,
+					limit: budget.relevantFacts,
 					keywords: triggerWords
 				});
 				triggeredMemories = [...triggered, ...sharedTriggered].filter(
@@ -434,7 +518,7 @@ export async function retrieveRelevantContext(
 		console.error('[Memory] Failed to fetch relevant facts:', e);
 	}
 
-	// Get relevant sessions via semantic search (max 3)
+	// Get relevant sessions via semantic search
 	let recentSessions: SessionSummary[] = [];
 	try {
 		const allSessions = await memoryStorage.getSessions({
@@ -444,21 +528,21 @@ export async function retrieveRelevantContext(
 		});
 
 		if (isEmbeddingReady()) {
-			const queryEmbedding = await embedText(userMessage);
-			if (queryEmbedding) {
+			const sessionQueryEmbedding = queryEmbedding ?? (await embedText(userMessage));
+			if (sessionQueryEmbedding) {
 				const sessionsWithEmbeddings = allSessions.filter(
 					(s) => s.embedding && s.embedding.length > 0
 				);
 				const results: Array<{ session: SessionSummary; similarity: number }> = [];
 				for (const session of sessionsWithEmbeddings) {
 					if (!session.embedding) continue;
-					const similarity = cosineSimilarity(queryEmbedding, session.embedding);
+					const similarity = cosineSimilarity(sessionQueryEmbedding, session.embedding);
 					if (similarity >= 0.35) {
 						results.push({ session, similarity });
 					}
 				}
 				results.sort((a, b) => b.similarity - a.similarity);
-				recentSessions = results.slice(0, 3).map((r) => r.session);
+				recentSessions = results.slice(0, budget.recentSessions).map((r) => r.session);
 			}
 		}
 
@@ -470,14 +554,15 @@ export async function retrieveRelevantContext(
 		console.error('Failed to fetch recent sessions:', e);
 	}
 
-	// Retrieve relevant fact library entries (max 15, low confidence first)
+	// Retrieve relevant fact library entries
 	let factLibraryEntries: import('$lib/types/memory').FactLibraryEntry[] = [];
 	try {
 		const keywords = userMessage.split(/\s+/).filter((w) => w.length > 3);
 		const entries = await memoryStorage.getFactLibraryEntries({
 			characterId,
-			limit: 15,
-			keywords: keywords.length > 0 ? keywords : undefined
+			limit: budget.factLibraryEntries,
+			keywords: keywords.length > 0 ? keywords : undefined,
+			embedding: queryEmbedding || undefined
 		});
 		factLibraryEntries = entries;
 	} catch (e) {
@@ -715,3 +800,6 @@ export function calculateFactImportance(content: string, sentiment: number = 0):
 
 	return Math.min(100, importance);
 }
+
+// Re-export retroactive tagging so UI components can trigger it easily.
+export { retroactivelyTagSession };

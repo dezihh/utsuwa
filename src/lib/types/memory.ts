@@ -80,6 +80,8 @@ export interface FactLibrarySearchOptions {
 	limit?: number;
 	minConfidence?: number;
 	keywords?: string[];
+	/** Optional query embedding for semantic ranking. When provided and embeddings are available, entries are ranked by cosine similarity and then limited. */
+	embedding?: number[];
 }
 
 // Context retrieved from memory for prompt building
@@ -145,9 +147,31 @@ export interface Reminder {
 	sessionId: number;
 }
 
-// Constants
+// Constants (kept for backwards compatibility as defaults)
 export const MAX_WORKING_MEMORY_TURNS = 20;
 export const MAX_RELEVANT_FACTS = 10;
 export const MAX_RECENT_SESSIONS = 3;
 export const DEFAULT_FACT_IMPORTANCE = 50;
 export const DEFAULT_FACT_CONFIDENCE = 0.8;
+
+export interface MemoryBudget {
+	workingMemoryTurns: number;
+	relevantFacts: number;
+	recentSessions: number;
+	factLibraryEntries: number;
+}
+
+/**
+ * Scale memory injection based on the configured model context window.
+ * Larger context windows allow more turns, facts, and library entries
+ * to be injected into each prompt.
+ */
+export function getMemoryBudget(contextSize: number): MemoryBudget {
+	if (contextSize <= 4096) {
+		return { workingMemoryTurns: 6, relevantFacts: 3, recentSessions: 1, factLibraryEntries: 8 };
+	}
+	if (contextSize <= 8192) {
+		return { workingMemoryTurns: 10, relevantFacts: 5, recentSessions: 2, factLibraryEntries: 12 };
+	}
+	return { workingMemoryTurns: 20, relevantFacts: 10, recentSessions: 3, factLibraryEntries: 15 };
+}

@@ -76,16 +76,18 @@ Utsuwa stores several kinds of memory locally in IndexedDB. They differ in lifet
 
 | Memory type | What it stores | How it gets there | How it reaches the LLM |
 |---|---|---|---|
-| **Working Memory** | Turns of the current chat session | Automatically as you chat | Last 6–10 turns are injected directly into the prompt |
-| **Semantic Facts** | Free-form facts like „User likes red cars“ | Heuristics or LLM `new_memory` tags | Top 5 semantically relevant facts per message |
-| **Fact Library** | Structured `type/key/value` entries | Manual entry, bulk import, or LLM `structured_fact_seen` tags | Up to 15 keyword-matched entries per message |
+| **Working Memory** | Turns of the current chat session | Automatically as you chat | Injected directly into the prompt (budget scales with model context size) |
+| **Semantic Facts** | Free-form facts like „User likes red cars“ | Heuristics or LLM `new_memory` tags | Top semantically relevant facts per message (budget scales with model context size) |
+| **Fact Library** | Structured `type/key/value` entries | Manual entry, bulk import, or LLM `structured_fact_seen` tags | Up to 15 semantically relevant entries per message |
 | **Session Summaries** | Condensed recap of ended sessions | Lazy compaction when a new session starts | Up to 3 semantically similar summaries per message |
 | **Character State** | Mood, relationship stage, stats | Updated every turn | Always in the system prompt |
+| **Auto Fact Extraction** | Fallback facts when the main LLM misses memory tags | Slim, separate LLM pass after each response | Stored as Semantic Facts and retrieved like other facts |
 
 **Storage vs. prompt context:**
 
 - Your *storage* can grow large — there is no hard cap on how many facts or sessions you can save.
 - Your *prompt context* is deliberately limited. Even with thousands of stored facts, only the most relevant handful are sent to the LLM each turn. This prevents the context window from overflowing.
+- The **context size** setting in the LLM configuration (Settings > Modules > Consciousness) controls how many memories, facts, and turns are injected into each prompt. Larger models with bigger context windows get more working memory, facts, session summaries, and fact library entries.
 - Semantic search runs locally with Transformers.js embeddings, so finding relevant memories does not cost API tokens.
 
 **Fact deduplication:**
@@ -166,12 +168,26 @@ There are two storage destinations, opened from different places in the top-left
 - Free-form **Semantic Facts** are automatically deduplicated. If the same fact is extracted again, the existing entry is refreshed (its confidence and reference count increase) instead of creating a duplicate.
 - **Fact Library** entries are deduplicated by `type` + `key`. Re-saving the same key updates the existing entry.
 
+**Small model fallback:**
+
+If the active LLM does not emit a `new_memory` tag, Utsuwa automatically runs a slim, separate LLM pass after each response. This extractor looks at the last user/assistant exchange and persists any clear, persistent facts as Semantic Facts. It is designed to be cheap enough for small or local models and falls back gracefully if it fails.
+
+**Retroactive Memory Extraction:**
+
+You can manually trigger a scan of the current session at any time. This is useful when:
+
+- You switched from a small model (that ignored memory tags) to a larger one.
+- You had a long conversation and want to recover facts the main LLM missed.
+- You want a one-shot summary of everything memorable so far.
+
+Open the **Memory Inspector** (database icon in the top-left toolbar) and click **Extract memories**. The LLM analyzes the session transcript, extracts persistent facts, and saves new ones while skipping duplicates.
+
 **Important caveats:**
 
-- Extraction only works if the active LLM actually outputs the required memory tags. Small or local models often do not do this reliably.
-- If no memory tag is emitted, nothing is saved automatically. The information still exists in the chat history for the current session.
+- Extraction works best when the LLM follows the required memory tags. Small or local models may ignore them.
+- The automatic fallback extractor and the retroactive tagger each cost one extra LLM call when triggered.
 - You can always add important facts manually in the **Fact Library** if the LLM misses them.
-- Use the **Memory Inspector** (database icon in the top-left toolbar) for a unified view of all learned facts, session summaries, and the current character state.
+- Use the **Memory Inspector** for a unified view of all learned facts, session summaries, and the current character state.
 
 ### Vocabulary Training
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Icon } from '$lib/components/ui';
-	import { memoryApi, getWorkingMemory } from '$lib/engine/memory';
+	import { memoryApi, getWorkingMemory, retroactivelyTagSession } from '$lib/engine/memory';
 	import * as memoryStorage from '$lib/services/storage/memory';
 	import { characterStore } from '$lib/stores/character.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
@@ -20,6 +20,8 @@
 	let libraryEntries = $state<FactLibraryEntry[]>([]);
 	let sessions = $state<SessionSummary[]>([]);
 	let turns = $state<ConversationTurn[]>([]);
+	let isTagging = $state(false);
+	let tagResult = $state<{ saved: number; skipped: number } | null>(null);
 
 	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
 	const characterState = $derived(characterStore.state);
@@ -52,6 +54,22 @@
 		if (e.key === 'Escape') onClose();
 	}
 
+	async function handleRetroactiveTag() {
+		if (turns.length === 0 || isTagging) return;
+		isTagging = true;
+		tagResult = null;
+		try {
+			tagResult = await retroactivelyTagSession(turns, currentCharacterId);
+			if (tagResult.saved > 0) {
+				await loadAll();
+			}
+		} catch (e) {
+			console.error('[MemoryInspector] Retroactive tagging failed:', e);
+		} finally {
+			isTagging = false;
+		}
+	}
+
 	$effect(() => {
 		loadAll();
 	});
@@ -66,10 +84,38 @@
 				<Icon name="database" size={20} />
 				<h2>Memory Inspector</h2>
 			</div>
-			<button class="close-btn" onclick={onClose} aria-label="Close">
-				<Icon name="x" size={20} />
-			</button>
+			<div class="header-actions">
+				<button
+					class="tag-btn"
+					onclick={handleRetroactiveTag}
+					disabled={turns.length === 0 || isTagging}
+					aria-label="Extract memories from current session"
+				>
+					{#if isTagging}
+						<div class="spinner-small"></div>
+						Tagging...
+					{:else}
+						<Icon name="sparkles" size={16} />
+						Extract memories
+					{/if}
+				</button>
+				<button class="close-btn" onclick={onClose} aria-label="Close">
+					<Icon name="x" size={20} />
+				</button>
+			</div>
 		</header>
+
+		{#if tagResult}
+			<div class="tag-result">
+				{#if tagResult.saved > 0}
+					{tagResult.saved} new memory{tagResult.saved === 1 ? '' : 'ies'} saved
+					{#if tagResult.skipped > 0}, {tagResult.skipped} duplicate{tagResult.skipped === 1 ? '' : 's'} skipped{/if}
+				{:else}
+					No new memories found
+					{#if tagResult.skipped > 0}({tagResult.skipped} duplicate{tagResult.skipped === 1 ? '' : 's'} skipped){/if}
+				{/if}
+			</div>
+		{/if}
 
 		<div class="tabs">
 			<button class="tab" class:active={activeTab === 'session'} onclick={() => (activeTab = 'session')}>Session</button>
@@ -301,6 +347,57 @@
 
 	.close-btn:hover {
 		opacity: 1;
+	}
+
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.tag-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.4rem 0.75rem;
+		border: none;
+		border-radius: 10px;
+		background: linear-gradient(135deg, #01B2FF, #7B61FF);
+		color: white;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: opacity 0.15s, transform 0.1s;
+	}
+
+	.tag-btn:hover:not(:disabled) {
+		opacity: 0.9;
+		transform: translateY(-1px);
+	}
+
+	.tag-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.spinner-small {
+		width: 14px;
+		height: 14px;
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-top-color: white;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	.tag-result {
+		padding: 0.5rem 1rem;
+		margin: 0 1rem;
+		border-radius: 10px;
+		background: rgba(1, 178, 255, 0.12);
+		color: #01B2FF;
+		font-size: 0.8rem;
+		font-weight: 500;
+		text-align: center;
 	}
 
 	.tabs {
