@@ -125,6 +125,24 @@ Set delimiter to `|` and type to `preference` (or `fact`) to import all at once.
 
 **Note:** For language vocabulary, use the dedicated **Vocabulary Training System** instead. The Fact Library is for general knowledge and persistent user facts.
 
+### Automatically Learned Facts
+
+During conversation the companion can extract and store facts it thinks are important. For example, when you mention that you like red cars, the LLM may emit a memory tag and the app saves it for future reference.
+
+There are two storage destinations, opened from different places in the top-left toolbar:
+
+| Destination | How it is created | Where to view it |
+|---|---|---|
+| **Semantic Memory (Facts)** | The LLM returns a `new_memory` tag, or the app heuristics detect a fact in your message. | **Memory Graph** (🧠 brain icon). Free-form facts appear as nodes connected by semantic similarity. |
+| **Fact Library** | The LLM returns a `structured_fact_seen` JSON block with `type`, `key`, and `value`. | **Fact Library** (📖 book icon). Structured entries with confidence, tags, and review scheduling. |
+
+**Important caveats:**
+
+- Extraction only works if the active LLM actually outputs the required memory tags. Small or local models often do not do this reliably.
+- If no memory tag is emitted, nothing is saved automatically. The information still exists in the chat history for the current session.
+- You can always add important facts manually in the **Fact Library** if the LLM misses them.
+- Use the **Memory Inspector** (database icon in the top-left toolbar) for a unified view of all learned facts, session summaries, and the current character state.
+
 ### Vocabulary Training
 
 A dedicated system for language learning, separate from the general Fact Library:

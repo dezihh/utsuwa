@@ -1,0 +1,548 @@
+<script lang="ts">
+	import { Icon } from '$lib/components/ui';
+	import { memoryApi, getWorkingMemory } from '$lib/engine/memory';
+	import * as memoryStorage from '$lib/services/storage/memory';
+	import { characterStore } from '$lib/stores/character.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
+	import type { Fact, SessionSummary, ConversationTurn, FactLibraryEntry } from '$lib/types/memory';
+
+	interface Props {
+		onClose: () => void;
+	}
+
+	let { onClose }: Props = $props();
+
+	type Tab = 'session' | 'facts' | 'library' | 'sessions' | 'state';
+	let activeTab = $state<Tab>('session');
+	let isLoading = $state(true);
+
+	let facts = $state<Fact[]>([]);
+	let libraryEntries = $state<FactLibraryEntry[]>([]);
+	let sessions = $state<SessionSummary[]>([]);
+	let turns = $state<ConversationTurn[]>([]);
+
+	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
+	const characterState = $derived(characterStore.state);
+
+	async function loadAll() {
+		isLoading = true;
+		try {
+			const [f, l, s] = await Promise.all([
+				memoryApi.getFacts(100, currentCharacterId),
+				memoryStorage.getFactLibraryEntries({ characterId: currentCharacterId, limit: 100 }),
+				memoryApi.getSessions(20, currentCharacterId)
+			]);
+			facts = f;
+			libraryEntries = l;
+			sessions = s;
+			turns = getWorkingMemory().turns.slice(-20);
+		} catch (e) {
+			console.error('[MemoryInspector] Failed to load:', e);
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	function formatDate(date: Date | undefined): string {
+		if (!date) return '—';
+		return new Date(date).toLocaleString('de-DE');
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') onClose();
+	}
+
+	$effect(() => {
+		loadAll();
+	});
+</script>
+
+<svelte:window onkeydown={handleKeydown} />
+
+<div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Memory Inspector">
+	<div class="modal-container">
+		<header class="modal-header">
+			<div class="header-info">
+				<Icon name="database" size={20} />
+				<h2>Memory Inspector</h2>
+			</div>
+			<button class="close-btn" onclick={onClose} aria-label="Close">
+				<Icon name="x" size={20} />
+			</button>
+		</header>
+
+		<div class="tabs">
+			<button class="tab" class:active={activeTab === 'session'} onclick={() => (activeTab = 'session')}>Session</button>
+			<button class="tab" class:active={activeTab === 'facts'} onclick={() => (activeTab = 'facts')}>Facts ({facts.length})</button>
+			<button class="tab" class:active={activeTab === 'library'} onclick={() => (activeTab = 'library')}>Library ({libraryEntries.length})</button>
+			<button class="tab" class:active={activeTab === 'sessions'} onclick={() => (activeTab = 'sessions')}>Sessions ({sessions.length})</button>
+			<button class="tab" class:active={activeTab === 'state'} onclick={() => (activeTab = 'state')}>State</button>
+		</div>
+
+		<div class="modal-content">
+			{#if isLoading}
+				<div class="loading-state">
+					<div class="spinner"></div>
+					<p>Loading memory...</p>
+				</div>
+			{:else if activeTab === 'session'}
+				<section class="section">
+					<h3>Current Session Turns ({turns.length})</h3>
+					{#if turns.length === 0}
+						<p class="empty">No turns in working memory yet.</p>
+					{:else}
+						<div class="turns-list">
+							{#each turns as turn (turn.id ?? `${turn.role}-${turn.createdAt}`)}
+								<div class="turn" class:user={turn.role === 'user'} class:assistant={turn.role === 'assistant'} class:system={turn.role === 'system'}>
+									<span class="turn-role">{turn.role}</span>
+									<span class="turn-time">{formatDate(turn.createdAt)}</span>
+									<p class="turn-content">{turn.content}</p>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</section>
+			{:else if activeTab === 'facts'}
+				<section class="section">
+					<h3>Semantic Memory Facts ({facts.length})</h3>
+					<p class="hint">Facts extracted automatically from conversation or heuristics.</p>
+					{#if facts.length === 0}
+						<p class="empty">No facts stored yet. The LLM must emit a memory tag for automatic extraction.</p>
+					{:else}
+						<div class="facts-list">
+							{#each facts as fact (fact.id)}
+								<div class="fact-card">
+									<div class="fact-header">
+										<span class="fact-category">{fact.category}</span>
+										<span class="fact-meta">importance {fact.importance} · confidence {(fact.confidence * 100).toFixed(0)}%</span>
+									</div>
+									<p class="fact-content">{fact.content}</p>
+									<div class="fact-footer">
+										<span>refs: {fact.referenceCount}</span>
+										<span>{formatDate(fact.createdAt)}</span>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</section>
+			{:else if activeTab === 'library'}
+				<section class="section">
+					<h3>Fact Library Entries ({libraryEntries.length})</h3>
+					<p class="hint">Structured facts with type/key/value, usually emitted by the LLM as <code>structured_fact_seen</code>.</p>
+					{#if libraryEntries.length === 0}
+						<p class="empty">No fact library entries yet.</p>
+					{:else}
+						<div class="library-list">
+							{#each libraryEntries as entry (entry.id)}
+								<div class="library-card">
+									<div class="library-header">
+										<span class="library-type">{entry.type}</span>
+										<span class="library-meta">confidence {(entry.confidence * 100).toFixed(0)}% · reviews {entry.reviewCount}</span>
+									</div>
+									<div class="library-key">{entry.key}</div>
+									<div class="library-value">{entry.value}</div>
+									{#if entry.category || entry.tags?.length}
+										<div class="library-footer">
+											{#if entry.category}<span>cat: {entry.category}</span>{/if}
+											{#if entry.tags?.length}<span>tags: {entry.tags.join(', ')}</span>{/if}
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</section>
+			{:else if activeTab === 'sessions'}
+				<section class="section">
+					<h3>Past Session Summaries ({sessions.length})</h3>
+					{#if sessions.length === 0}
+						<p class="empty">No previous sessions summarized yet.</p>
+					{:else}
+						<div class="sessions-list">
+							{#each sessions as session (session.id)}
+								<div class="session-card">
+									<div class="session-header">
+										<span>{formatDate(session.startedAt)}</span>
+										<span>{session.messageCount} messages</span>
+									</div>
+									{#if session.summary}
+										<p class="session-summary">{session.summary}</p>
+									{/if}
+									{#if session.emotionalArc}
+										<p class="session-arc">{session.emotionalArc}</p>
+									{/if}
+									{#if session.keyTopics?.length}
+										<div class="session-topics">
+											{#each session.keyTopics as topic}
+												<span class="topic-tag">{topic}</span>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</section>
+			{:else if activeTab === 'state'}
+				<section class="section">
+					<h3>Current Character State</h3>
+					<div class="state-grid">
+						<div class="state-card">
+							<span class="state-label">Name</span>
+							<span class="state-value">{characterState.name}</span>
+						</div>
+						<div class="state-card">
+							<span class="state-label">Mode</span>
+							<span class="state-value">{characterState.appMode}</span>
+						</div>
+						<div class="state-card">
+							<span class="state-label">Stage</span>
+							<span class="state-value">{characterState.relationshipStage}</span>
+						</div>
+						<div class="state-card">
+							<span class="state-label">Mood</span>
+							<span class="state-value">{characterState.mood.primary} ({characterState.mood.intensity})</span>
+						</div>
+						<div class="state-card">
+							<span class="state-label">Energy</span>
+							<span class="state-value">{characterState.energy}/100</span>
+						</div>
+						<div class="state-card">
+							<span class="state-label">Affection</span>
+							<span class="state-value">{characterState.affection}</span>
+						</div>
+						<div class="state-card">
+							<span class="state-label">Trust</span>
+							<span class="state-value">{characterState.trust}</span>
+						</div>
+						<div class="state-card">
+							<span class="state-label">Intimacy</span>
+							<span class="state-value">{characterState.intimacy}</span>
+						</div>
+						<div class="state-card">
+							<span class="state-label">Comfort</span>
+							<span class="state-value">{characterState.comfort}</span>
+						</div>
+						<div class="state-card">
+							<span class="state-label">Respect</span>
+							<span class="state-value">{characterState.respect}</span>
+						</div>
+					</div>
+				</section>
+			{/if}
+		</div>
+	</div>
+</div>
+
+<style>
+	.modal-overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.6);
+		backdrop-filter: blur(8px);
+		z-index: 1000;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1rem;
+	}
+
+	.modal-container {
+		width: 800px;
+		max-width: 95vw;
+		max-height: 85vh;
+		display: flex;
+		flex-direction: column;
+		background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,245,245,0.98) 100%);
+		border-radius: 20px;
+		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+		overflow: hidden;
+	}
+
+	:global(.dark) .modal-container {
+		background: linear-gradient(180deg, rgba(30,30,30,0.98) 0%, rgba(22,22,22,0.98) 100%);
+	}
+
+	.modal-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 1rem 1.25rem;
+		border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+		flex-shrink: 0;
+	}
+
+	:global(.dark) .modal-header {
+		border-bottom-color: rgba(255, 255, 255, 0.08);
+	}
+
+	.header-info {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+
+	.header-info h2 {
+		margin: 0;
+		font-size: 1.1rem;
+		font-weight: 600;
+	}
+
+	.close-btn {
+		background: transparent;
+		border: none;
+		font-size: 1.25rem;
+		cursor: pointer;
+		color: inherit;
+		opacity: 0.6;
+		transition: opacity 0.15s;
+	}
+
+	.close-btn:hover {
+		opacity: 1;
+	}
+
+	.tabs {
+		display: flex;
+		gap: 0.25rem;
+		padding: 0.75rem 1rem 0;
+		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+		flex-shrink: 0;
+		overflow-x: auto;
+	}
+
+	:global(.dark) .tabs {
+		border-bottom-color: rgba(255, 255, 255, 0.06);
+	}
+
+	.tab {
+		background: transparent;
+		border: none;
+		padding: 0.5rem 0.75rem;
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--text-secondary, #666);
+		cursor: pointer;
+		border-bottom: 2px solid transparent;
+		white-space: nowrap;
+		transition: all 0.15s;
+	}
+
+	.tab:hover {
+		color: var(--text-primary, #111);
+	}
+
+	.tab.active {
+		color: #01B2FF;
+		border-bottom-color: #01B2FF;
+	}
+
+	.modal-content {
+		flex: 1;
+		overflow-y: auto;
+		padding: 1rem;
+	}
+
+	.section h3 {
+		margin: 0 0 0.5rem;
+		font-size: 1rem;
+	}
+
+	.hint {
+		margin: 0 0 1rem;
+		font-size: 0.8rem;
+		color: var(--text-secondary, #666);
+	}
+
+	.empty {
+		padding: 2rem;
+		text-align: center;
+		color: var(--text-secondary, #888);
+		font-style: italic;
+	}
+
+	.loading-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 3rem;
+		gap: 0.75rem;
+	}
+
+	.spinner {
+		width: 28px;
+		height: 28px;
+		border: 3px solid rgba(1, 178, 255, 0.2);
+		border-top-color: #01B2FF;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+
+	.turns-list,
+	.facts-list,
+	.library-list,
+	.sessions-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+
+	.turn {
+		padding: 0.75rem;
+		border-radius: 12px;
+		background: rgba(0, 0, 0, 0.03);
+	}
+
+	:global(.dark) .turn {
+		background: rgba(255, 255, 255, 0.04);
+	}
+
+	.turn.user {
+		border-left: 3px solid #01B2FF;
+	}
+
+	.turn.assistant {
+		border-left: 3px solid #a855f7;
+	}
+
+	.turn.system {
+		border-left: 3px solid #f59e0b;
+	}
+
+	.turn-role {
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		font-weight: 700;
+		opacity: 0.7;
+	}
+
+	.turn-time {
+		float: right;
+		font-size: 0.7rem;
+		opacity: 0.5;
+	}
+
+	.turn-content {
+		margin: 0.4rem 0 0;
+		font-size: 0.85rem;
+		line-height: 1.4;
+		white-space: pre-wrap;
+	}
+
+	.fact-card,
+	.library-card,
+	.session-card {
+		padding: 0.75rem;
+		border-radius: 12px;
+		background: rgba(0, 0, 0, 0.03);
+	}
+
+	:global(.dark) .fact-card,
+	:global(.dark) .library-card,
+	:global(.dark) .session-card {
+		background: rgba(255, 255, 255, 0.04);
+	}
+
+	.fact-header,
+	.library-header,
+	.session-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		font-size: 0.75rem;
+		margin-bottom: 0.4rem;
+	}
+
+	.fact-category,
+	.library-type {
+		font-weight: 600;
+		text-transform: uppercase;
+		color: #01B2FF;
+	}
+
+	.fact-meta,
+	.library-meta {
+		opacity: 0.6;
+	}
+
+	.fact-content,
+	.library-value,
+	.session-summary {
+		margin: 0;
+		font-size: 0.85rem;
+		line-height: 1.4;
+	}
+
+	.library-key {
+		font-weight: 600;
+		font-size: 0.9rem;
+		margin-bottom: 0.2rem;
+	}
+
+	.fact-footer,
+	.library-footer {
+		display: flex;
+		gap: 1rem;
+		font-size: 0.7rem;
+		opacity: 0.5;
+		margin-top: 0.4rem;
+	}
+
+	.session-arc {
+		font-size: 0.8rem;
+		font-style: italic;
+		opacity: 0.7;
+		margin: 0.4rem 0 0;
+	}
+
+	.session-topics {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		margin-top: 0.5rem;
+	}
+
+	.topic-tag {
+		font-size: 0.7rem;
+		padding: 0.15rem 0.4rem;
+		border-radius: 10px;
+		background: rgba(1, 178, 255, 0.15);
+		color: #01B2FF;
+	}
+
+	.state-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+		gap: 0.75rem;
+	}
+
+	.state-card {
+		display: flex;
+		flex-direction: column;
+		padding: 0.75rem;
+		border-radius: 12px;
+		background: rgba(0, 0, 0, 0.03);
+	}
+
+	:global(.dark) .state-card {
+		background: rgba(255, 255, 255, 0.04);
+	}
+
+	.state-label {
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		opacity: 0.6;
+		margin-bottom: 0.2rem;
+	}
+
+	.state-value {
+		font-size: 1rem;
+		font-weight: 600;
+	}
+</style>

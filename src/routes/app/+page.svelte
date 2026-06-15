@@ -11,6 +11,7 @@
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import MemoryGraphModal from '$lib/components/memory/MemoryGraphModal.svelte';
 	import FactLibraryModal from '$lib/components/memory/FactLibraryModal.svelte';
+	import MemoryInspectorModal from '$lib/components/memory/MemoryInspectorModal.svelte';
 	import VocabularyModal from '$lib/components/vocabulary/VocabularyModal.svelte';
 	import EvolutionConfirmModal from '$lib/components/ui/EvolutionConfirmModal.svelte';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
@@ -109,6 +110,9 @@
 
 	// Vocabulary modal state
 	let showVocabulary = $state(false);
+
+	// Memory inspector modal state
+	let showMemoryInspector = $state(false);
 
 	// Evolution confirmation modal state
 	let pendingEvolutionSuggestions = $state<Array<{ adaptation: string; reason: string }> | null>(null);
@@ -1099,7 +1103,7 @@
 </script>
 
 <div class="app-container">
-	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} onOpenFactLibrary={() => showFactLibrary = true} onOpenVocabulary={() => showVocabulary = true} {leftOffset} />
+	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} onOpenFactLibrary={() => showFactLibrary = true} onOpenVocabulary={() => showVocabulary = true} onOpenMemoryInspector={() => showMemoryInspector = true} {leftOffset} />
 	<TopRightButtons
 		onInfoClick={() => showInfoModal = true}
 		{showSidebarBtn}
@@ -1118,6 +1122,9 @@
 	{/if}
 	{#if showVocabulary}
 		<VocabularyModal onClose={() => showVocabulary = false} />
+	{/if}
+	{#if showMemoryInspector}
+		<MemoryInspectorModal onClose={() => showMemoryInspector = false} />
 	{/if}
 	{#if pendingEvolutionSuggestions}
 		<EvolutionConfirmModal

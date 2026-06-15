@@ -6,10 +6,11 @@
 		onOpenMemoryGraph?: () => void;
 		onOpenFactLibrary?: () => void;
 		onOpenVocabulary?: () => void;
+		onOpenMemoryInspector?: () => void;
 		leftOffset?: number;
 	}
 
-	let { onOpenMemoryGraph, onOpenFactLibrary, onOpenVocabulary, leftOffset = 0 }: Props = $props();
+	let { onOpenMemoryGraph, onOpenFactLibrary, onOpenVocabulary, onOpenMemoryInspector, leftOffset = 0 }: Props = $props();
 
 	function takeScreenshot() {
 		screenshotStore.take();
@@ -33,6 +34,11 @@
 	{#if onOpenVocabulary}
 		<button class="icon-btn" onclick={onOpenVocabulary} aria-label="Open vocabulary manager">
 			<Icon name="globe" size={20} />
+		</button>
+	{/if}
+	{#if onOpenMemoryInspector}
+		<button class="icon-btn" onclick={onOpenMemoryInspector} aria-label="Open memory inspector">
+			<Icon name="database" size={20} />
 		</button>
 	{/if}
 </div>
