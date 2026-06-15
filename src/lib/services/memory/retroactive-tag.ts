@@ -5,6 +5,7 @@ import { settingsStore } from '$lib/stores/settings.svelte';
 import { modulesStore } from '$lib/stores/modules.svelte';
 import { embedText, isEmbeddingReady, cosineSimilarity } from '$lib/services/embeddings';
 import * as memoryStorage from '$lib/services/storage/memory';
+import { determineFactCategory, calculateFactImportance } from '$lib/utils/memory-helpers';
 import type { ConversationTurn, NewFact } from '$lib/types/memory';
 
 const RETROACTIVE_TAG_PROMPT = `You are a memory extraction assistant. Analyze this conversation transcript and extract all persistent, meaningful facts about the user.
@@ -26,29 +27,6 @@ Rules:
 - Output ONLY the JSON object. No markdown, no explanations, no code blocks.`;
 
 const SHARED_CHARACTER_ID = 'shared';
-
-function determineFactCategory(content: string): 'user' | 'relationship' | 'shared_experience' {
-	const lowerContent = content.toLowerCase();
-	if (lowerContent.includes('user') || lowerContent.includes('i like') || lowerContent.includes('i love')) {
-		return 'user';
-	}
-	if (lowerContent.includes('we') || lowerContent.includes('together') || lowerContent.includes('shared')) {
-		return 'shared_experience';
-	}
-	return 'relationship';
-}
-
-function calculateFactImportance(content: string, sentiment: number = 0): number {
-	let importance = 50;
-	if (content.length > 50) importance += 10;
-	if (content.length > 100) importance += 5;
-	const importantKeywords = ['name', 'job', 'work', 'family', 'child', 'parent', 'hobby', 'goal', 'dream', 'favorite'];
-	for (const keyword of importantKeywords) {
-		if (content.toLowerCase().includes(keyword)) importance += 10;
-	}
-	importance += Math.abs(sentiment) * 15;
-	return Math.max(0, Math.min(100, importance));
-}
 
 export interface RetroactiveTagResult {
 	saved: number;

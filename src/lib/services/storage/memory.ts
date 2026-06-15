@@ -368,9 +368,17 @@ export async function getFactLibraryEntries(
 					? cosineSimilarity(options.embedding!, entry.embedding)
 					: -1
 			}))
-			.filter((item) => item.similarity >= 0)
+			.filter((item) => item.similarity >= 0.2)
 			.sort((a, b) => b.similarity - a.similarity);
-		entries = scored.map((item) => item.entry);
+
+		if (scored.length > 0) {
+			entries = scored.map((item) => item.entry);
+		} else {
+			entries.sort((a, b) => {
+				if (a.confidence !== b.confidence) return a.confidence - b.confidence;
+				return a.reviewCount - b.reviewCount;
+			});
+		}
 	} else {
 		entries.sort((a, b) => {
 			if (a.confidence !== b.confidence) return a.confidence - b.confidence;

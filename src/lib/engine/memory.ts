@@ -20,6 +20,7 @@ import * as memoryStorage from '$lib/services/storage/memory';
 import { embedText, findSimilarFacts, isEmbeddingReady, cosineSimilarity } from '$lib/services/embeddings';
 import { extractFactsFromLLM } from '$lib/services/memory/extract-facts';
 import { retroactivelyTagSession } from '$lib/services/memory/retroactive-tag';
+import { determineFactCategory, calculateFactImportance } from '$lib/utils/memory-helpers';
 import { generateSessionSummary } from '$lib/services/memory/summarize-session';
 import { analyzePersonalityEvolution } from '$lib/services/memory/analyze-personality-evolution';
 import { modulesStore } from '$lib/stores/modules.svelte';
@@ -353,6 +354,9 @@ export const memoryApi = {
 	): Promise<number> {
 		if (hasNewMemory) return 0;
 		if (!userMessage.trim() || !assistantResponse.trim()) return 0;
+		// Skip small talk / acknowledgements / emojis that are unlikely to contain facts.
+		const wordCount = userMessage.trim().split(/\s+/).length;
+		if (wordCount < 5) return 0;
 
 		try {
 			const extracted = await extractFactsFromLLM(userMessage, assistantResponse);
@@ -692,31 +696,8 @@ export function extractFactsFromConversation(
 	return facts;
 }
 
-// Determine fact category
-export function determineFactCategory(content: string): 'user' | 'relationship' | 'shared_experience' {
-	const lowerContent = content.toLowerCase();
-
-	// Check for user-related content
-	if (
-		lowerContent.includes('user') ||
-		lowerContent.includes('their') ||
-		lowerContent.includes('they') ||
-		lowerContent.match(/\b(name|job|work|live|family|hobby|favorite)\b/)
-	) {
-		return 'user';
-	}
-
-	// Check for shared experience
-	if (
-		lowerContent.match(/\b(we|together|our|shared|both)\b/) ||
-		lowerContent.match(/\b(talked about|discussed|laughed|cried)\b/)
-	) {
-		return 'shared_experience';
-	}
-
-	// Default to relationship
-	return 'relationship';
-}
+// Re-export helpers so existing imports keep working.
+export { determineFactCategory, calculateFactImportance } from '$lib/utils/memory-helpers';
 
 // Backfill embeddings for facts that don't have them
 export async function backfillEmbeddings(
@@ -765,40 +746,6 @@ export async function getEmbeddingBackfillStatus(): Promise<{
 		withEmbeddings,
 		withoutEmbeddings: allFacts.length - withEmbeddings
 	};
-}
-
-// Calculate importance score for a fact
-export function calculateFactImportance(content: string, sentiment: number = 0): number {
-	let importance = 50; // Base
-
-	// Length bonus (longer = more detailed = more important)
-	if (content.length > 50) importance += 10;
-	if (content.length > 100) importance += 5;
-
-	// Emotional content bonus
-	const emotionalWords = ['love', 'hate', 'fear', 'dream', 'hope', 'wish', 'important', 'special'];
-	for (const word of emotionalWords) {
-		if (content.toLowerCase().includes(word)) {
-			importance += 10;
-			break;
-		}
-	}
-
-	// Personal info bonus
-	const personalWords = ['name', 'birthday', 'family', 'job', 'home', 'secret'];
-	for (const word of personalWords) {
-		if (content.toLowerCase().includes(word)) {
-			importance += 15;
-			break;
-		}
-	}
-
-	// Sentiment bonus
-	if (Math.abs(sentiment) > 0.5) {
-		importance += 10;
-	}
-
-	return Math.min(100, importance);
 }
 
 // Re-export retroactive tagging so UI components can trigger it easily.
