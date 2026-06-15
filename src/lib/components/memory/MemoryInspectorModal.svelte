@@ -529,7 +529,7 @@
 								</ul>
 							</div>
 						{:else if testExtractorFacts !== null}
-							<div class="test-result">Extractor would return no additional facts.</div>
+							<div class="test-result">Extractor skipped: parser already found a new_memory tag.</div>
 						{/if}
 				</section>
 			{/if}
