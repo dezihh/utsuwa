@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Icon } from '$lib/components/ui';
 	import { sttStore } from '$lib/stores/stt.svelte';
+	import { debugStore } from '$lib/stores/debug.svelte';
 	import { unlockAudioContext } from '$lib/services/tts/index';
 	import AudioVisualizer from './AudioVisualizer.svelte';
 	import type { DuplexPhase } from '$lib/stores/duplex.svelte';
@@ -126,7 +127,7 @@
 	</div>
 {/if}
 
-<div class="bottom-chat-bar">
+<div class="bottom-chat-bar" class:panel-open={debugStore.panelVisible}>
 	<form class="chat-form" onsubmit={handleSubmit}>
 		<div
 			class="input-wrapper"
@@ -259,6 +260,10 @@
 		max-width: 600px;
 		padding: 0 1rem;
 		z-index: 40;
+	}
+
+	.bottom-chat-bar.panel-open {
+		bottom: calc(var(--debug-panel-height, 0px) + 1rem);
 	}
 
 	.stt-error {

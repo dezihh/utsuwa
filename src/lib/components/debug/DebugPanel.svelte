@@ -121,8 +121,8 @@
 	.debug-panel {
 		position: relative;
 		width: 100%;
-		height: 40vh;
-		min-height: 200px;
+		height: var(--debug-panel-height, 0px);
+		min-height: 180px;
 		display: flex;
 		flex-direction: column;
 		background: rgba(20, 20, 30, 0.97);

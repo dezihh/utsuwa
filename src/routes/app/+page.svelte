@@ -1108,7 +1108,7 @@
 	}
 </script>
 
-<div class="app-container">
+<div class="app-container" style:--debug-panel-height={debugStore.panelVisible ? '30vh' : '0px'}>
 	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} onOpenFactLibrary={() => showFactLibrary = true} onOpenVocabulary={() => showVocabulary = true} onOpenMemoryInspector={() => showMemoryInspector = true} {leftOffset} />
 	<TopRightButtons
 		onInfoClick={() => showInfoModal = true}
