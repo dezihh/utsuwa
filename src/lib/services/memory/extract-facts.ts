@@ -3,6 +3,7 @@ import { streamChatDirect } from '$lib/services/chat/client-chat';
 import { getLLMProvider } from '$lib/services/providers/registry';
 import { settingsStore } from '$lib/stores/settings.svelte';
 import { modulesStore } from '$lib/stores/modules.svelte';
+import { debugStore } from '$lib/stores/debug.svelte';
 import type { NewFact } from '$lib/types/memory';
 
 const EXTRACT_SYSTEM_PROMPT = `Extract factual information about the user from the exchange below.
@@ -116,6 +117,11 @@ export async function extractFactsFromLLM(
 				setTimeout(() => reject(new Error('Fact extraction timed out')), 8000)
 			)
 		]);
+		debugStore.addLog({
+			category: 'memory',
+			title: 'Memory Extractor LLM Result',
+			content: `Facts returned: ${result.facts.length}\n${result.facts.map((f) => `- ${f.content}`).join('\n') || '(none)'}`
+		});
 		return result.facts;
 	} catch (e) {
 		console.warn('[ExtractFacts] LLM fact extraction failed:', e);

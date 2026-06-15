@@ -2,6 +2,8 @@
 	import { Icon } from '$lib/components/ui';
 	import { memoryApi, getWorkingMemory, retroactivelyTagSession } from '$lib/engine/memory';
 	import * as memoryStorage from '$lib/services/storage/memory';
+	import { parseResponse, extractPotentialFacts } from '$lib/ai/response-parser';
+	import { extractFactsFromLLM } from '$lib/services/memory/extract-facts';
 	import { characterStore } from '$lib/stores/character.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import type { Fact, SessionSummary, ConversationTurn, FactLibraryEntry } from '$lib/types/memory';
@@ -12,7 +14,7 @@
 
 	let { onClose }: Props = $props();
 
-	type Tab = 'session' | 'facts' | 'library' | 'sessions' | 'state';
+	type Tab = 'session' | 'facts' | 'library' | 'sessions' | 'state' | 'test';
 	let activeTab = $state<Tab>('session');
 	let isLoading = $state(true);
 
@@ -23,8 +25,32 @@
 	let isTagging = $state(false);
 	let tagResult = $state<{ saved: number; skipped: number } | null>(null);
 
+	// Parser test state
+	let testUserMessage = $state('');
+	let testLlmResponse = $state('');
+	let testParseResult = $state<ReturnType<typeof parseResponse> | null>(null);
+	let testExtractorFacts = $state<string[] | null>(null);
+	let testPotentialFacts = $state<string[] | null>(null);
+	let testSaveResult = $state<string | null>(null);
+	let isTesting = $state(false);
+
 	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
 	const characterState = $derived(characterStore.state);
+
+	const TEMPLATES = {
+		noCodeblock: {
+			userMessage: 'Ich bin Softwareentwickler und arbeite an einem AI-Projekt.',
+			llmResponse: 'Wie schön, dass du mir das erzählst!\n{"new_memory": "User arbeitet als Softwareentwickler an einem AI-Projekt", "mood_change": {"emotion": "happy", "intensity_delta": 10}}'
+		},
+		categoryList: {
+			userMessage: 'Ich habe heute viel über mich erzählt.',
+			llmResponse: 'Ich habe heute viel über dich gelernt:\nVorlieben: Ramen, Programmieren\nBeruf: Softwareentwickler\nZiel: Besseres Deutsch lernen'
+		},
+		correctCodeblock: {
+			userMessage: 'Ich bin Softwareentwickler und mag Ramen.',
+			llmResponse: 'Das klingt toll!\n```json\n{"new_memory": "User mag Ramen und ist Softwareentwickler"}\n```'
+		}
+	};
 
 	async function loadAll() {
 		isLoading = true;
@@ -68,6 +94,76 @@
 		} finally {
 			isTagging = false;
 		}
+	}
+
+	async function runParserTest(save: boolean) {
+		if (!testUserMessage.trim() || !testLlmResponse.trim()) return;
+		isTesting = true;
+		testSaveResult = null;
+		try {
+			const parsed = parseResponse(testLlmResponse);
+			testParseResult = parsed;
+			testPotentialFacts = extractPotentialFacts(parsed.dialogue, testUserMessage);
+
+			if (!parsed.stateUpdates?.newMemory) {
+				const extracted = await extractFactsFromLLM(testUserMessage, testLlmResponse);
+				testExtractorFacts = extracted.map((f) => f.content);
+			} else {
+				testExtractorFacts = [];
+			}
+
+			if (save) {
+				let saved = 0;
+				if (parsed.stateUpdates?.newMemory) {
+					await memoryApi.createFact({
+						content: parsed.stateUpdates.newMemory,
+						category: 'user',
+						importance: 70,
+						characterId: currentCharacterId
+					});
+					saved++;
+				}
+				if (parsed.stateUpdates?.structuredFactSeen) {
+					const f = parsed.stateUpdates.structuredFactSeen;
+					await memoryStorage.saveFactLibraryEntry({
+						characterId: currentCharacterId,
+						type: f.type,
+						key: f.key,
+						value: f.value,
+						category: f.category,
+						tags: f.tags,
+						confidence: 0.75
+					});
+					saved++;
+				}
+				// Also save potential facts as semantic facts for quick testing.
+				for (const factContent of testPotentialFacts) {
+					await memoryApi.createFact({
+						content: factContent,
+						category: 'user',
+						importance: 60,
+						characterId: currentCharacterId
+					});
+					saved++;
+				}
+				await loadAll();
+				testSaveResult = `${saved} fact(s) saved`;
+			}
+		} catch (e) {
+			console.error('[MemoryInspector] Parser test failed:', e);
+			testParseResult = { dialogue: '', stateUpdates: null, parseError: String(e) };
+		} finally {
+			isTesting = false;
+		}
+	}
+
+	function applyTemplate(template: { userMessage: string; llmResponse: string }) {
+		testUserMessage = template.userMessage;
+		testLlmResponse = template.llmResponse;
+		testParseResult = null;
+		testExtractorFacts = null;
+		testPotentialFacts = null;
+		testSaveResult = null;
 	}
 
 	$effect(() => {
@@ -123,6 +219,7 @@
 			<button class="tab" class:active={activeTab === 'library'} onclick={() => (activeTab = 'library')}>Library ({libraryEntries.length})</button>
 			<button class="tab" class:active={activeTab === 'sessions'} onclick={() => (activeTab = 'sessions')}>Sessions ({sessions.length})</button>
 			<button class="tab" class:active={activeTab === 'state'} onclick={() => (activeTab = 'state')}>State</button>
+			<button class="tab" class:active={activeTab === 'test'} onclick={() => (activeTab = 'test')}>Test</button>
 		</div>
 
 		<div class="modal-content">
@@ -275,6 +372,130 @@
 							<span class="state-value">{characterState.respect}</span>
 						</div>
 					</div>
+				</section>
+			{:else if activeTab === 'test'}
+				<section class="section test-section">
+					<h3>Memory Parser Tester</h3>
+						<p class="hint">
+							Paste a user message and a raw LLM response to see what the parser and
+							extractor recognize — without waiting for a real conversation.
+						</p>
+
+						<div class="test-templates">
+							<button class="template-btn" onclick={() => applyTemplate(TEMPLATES.noCodeblock)}>
+								No codeblock
+							</button>
+							<button class="template-btn" onclick={() => applyTemplate(TEMPLATES.categoryList)}>
+								Category list
+							</button>
+							<button class="template-btn" onclick={() => applyTemplate(TEMPLATES.correctCodeblock)}>
+								Correct codeblock
+							</button>
+						</div>
+
+						<div class="test-field">
+							<label for="test-user-message">User message</label>
+							<textarea
+								id="test-user-message"
+								bind:value={testUserMessage}
+								rows={3}
+								placeholder="Ich bin Softwareentwickler und mag Ramen"
+							></textarea>
+						</div>
+
+						<div class="test-field">
+							<label for="test-llm-response">LLM response</label>
+							<textarea
+								id="test-llm-response"
+								bind:value={testLlmResponse}
+								rows={8}
+								placeholder="Paste the raw LLM response here, including any JSON blocks..."
+							></textarea>
+						</div>
+
+						<div class="test-actions">
+							<button class="test-btn" onclick={() => runParserTest(false)} disabled={isTesting}>
+								{#if isTesting}
+									<div class="spinner-small"></div>
+									Testing...
+								{:else}
+									Parse & Test
+								{/if}
+							</button>
+							<button class="test-btn save" onclick={() => runParserTest(true)} disabled={isTesting}>
+								Parse & Save
+							</button>
+						</div>
+
+						{#if testSaveResult}
+							<div class="test-result success">{testSaveResult}</div>
+						{/if}
+
+						{#if testParseResult}
+							<div class="test-result">
+								<h4>Parse Result</h4>
+								<div class="parse-row">
+									<span class="parse-label">JSON detected:</span>
+									<span class="parse-value">{!!testParseResult.stateUpdates ? '✅' : '❌'}</span>
+								</div>
+								<div class="parse-row">
+									<span class="parse-label">new_memory:</span>
+									<span class="parse-value">{testParseResult.stateUpdates?.newMemory ?? '—'}</span>
+								</div>
+								<div class="parse-row">
+									<span class="parse-label">structured_fact_seen:</span>
+									<span class="parse-value">
+										{#if testParseResult.stateUpdates?.structuredFactSeen}
+											{testParseResult.stateUpdates.structuredFactSeen.type}/{testParseResult.stateUpdates.structuredFactSeen.key}={testParseResult.stateUpdates.structuredFactSeen.value}
+										{:else}
+											—
+										{/if}
+									</span>
+								</div>
+								<div class="parse-row">
+									<span class="parse-label">mood_change:</span>
+									<span class="parse-value">
+										{#if testParseResult.stateUpdates?.moodChange}
+											{testParseResult.stateUpdates.moodChange.emotion} ({testParseResult.stateUpdates.moodChange.intensityDelta})
+										{:else}
+											—
+										{/if}
+									</span>
+								</div>
+								<div class="parse-row">
+									<span class="parse-label">parseError:</span>
+									<span class="parse-value">{testParseResult.parseError ?? '—'}</span>
+								</div>
+								<div class="parse-row vertical">
+									<span class="parse-label">Cleaned dialogue:</span>
+									<p class="parse-dialogue">{testParseResult.dialogue || '—'}</p>
+								</div>
+							</div>
+						{/if}
+
+						{#if testPotentialFacts !== null && testPotentialFacts.length > 0}
+							<div class="test-result">
+								<h4>Heuristic Facts ({testPotentialFacts.length})</h4>
+								<ul>
+									{#each testPotentialFacts as fact}
+										<li>{fact}</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
+
+						{#if testExtractorFacts !== null && testExtractorFacts.length > 0}
+							<div class="test-result">
+								<h4>Extractor Preview ({testExtractorFacts.length})</h4>
+								<ul>
+									{#each testExtractorFacts as fact}
+										<li>{fact}</li>
+									{/each}
+								</ul>
+							</div>
+						{:else if testExtractorFacts !== null}
+							<div class="test-result">Extractor would return no additional facts.</div>
+						{/if}
 				</section>
 			{/if}
 		</div>
@@ -641,5 +862,146 @@
 	.state-value {
 		font-size: 1rem;
 		font-weight: 600;
+	}
+
+	.test-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.test-templates {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.template-btn {
+		padding: 0.35rem 0.6rem;
+		border: 1px solid rgba(1, 178, 255, 0.4);
+		border-radius: 8px;
+		background: rgba(1, 178, 255, 0.08);
+		color: #01B2FF;
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.template-btn:hover {
+		background: rgba(1, 178, 255, 0.15);
+	}
+
+	.test-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.test-field label {
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: var(--text-secondary);
+	}
+
+	.test-field textarea {
+		padding: 0.6rem;
+		border-radius: 10px;
+		border: 1px solid rgba(0, 0, 0, 0.1);
+		background: rgba(255, 255, 255, 0.8);
+		font-size: 0.85rem;
+		resize: vertical;
+		min-height: 60px;
+	}
+
+	:global(.dark) .test-field textarea {
+		background: rgba(30, 30, 30, 0.6);
+		border-color: rgba(255, 255, 255, 0.1);
+		color: inherit;
+	}
+
+	.test-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.test-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		flex: 1;
+		padding: 0.5rem 1rem;
+		border: none;
+		border-radius: 10px;
+		background: linear-gradient(135deg, #01B2FF, #7B61FF);
+		color: white;
+		font-size: 0.85rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: opacity 0.15s;
+	}
+
+	.test-btn:hover:not(:disabled) {
+		opacity: 0.9;
+	}
+
+	.test-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.test-btn.save {
+		background: linear-gradient(135deg, #22c55e, #16a34a);
+	}
+
+	.test-result {
+		padding: 0.75rem;
+		border-radius: 12px;
+		background: rgba(0, 0, 0, 0.03);
+		font-size: 0.85rem;
+	}
+
+	:global(.dark) .test-result {
+		background: rgba(255, 255, 255, 0.04);
+	}
+
+	.test-result.success {
+		background: rgba(34, 197, 94, 0.12);
+		color: #22c55e;
+		font-weight: 600;
+	}
+
+	.test-result h4 {
+		margin: 0 0 0.5rem;
+		font-size: 0.9rem;
+	}
+
+	.parse-row {
+		display: flex;
+		gap: 0.5rem;
+		padding: 0.2rem 0;
+		border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+	}
+
+	.parse-row.vertical {
+		flex-direction: column;
+	}
+
+	.parse-label {
+		font-weight: 600;
+		min-width: 140px;
+		color: var(--text-secondary);
+	}
+
+	.parse-value {
+		word-break: break-word;
+	}
+
+	.parse-dialogue {
+		margin: 0.25rem 0 0;
+		padding: 0.5rem;
+		border-radius: 8px;
+		background: rgba(0, 0, 0, 0.04);
+		white-space: pre-wrap;
 	}
 </style>

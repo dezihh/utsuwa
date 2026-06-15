@@ -5,6 +5,7 @@
 	import { chatStore } from '$lib/stores/chat.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { modulesStore } from '$lib/stores/modules.svelte';
+	import { debugStore } from '$lib/stores/debug.svelte';
 	import { ttsStore } from '$lib/stores/tts.svelte';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 	import { personaStore } from '$lib/stores/persona.svelte';
@@ -93,6 +94,11 @@
 
 		// 2. Parse companion response for LLM-suggested updates
 		const parsed = parseResponse(companionResponse);
+		debugStore.addLog({
+			category: 'memory',
+			title: 'Memory Parse Result',
+			content: `JSON detected: ${!!parsed.stateUpdates}\nnew_memory: ${parsed.stateUpdates?.newMemory ?? 'none'}\nstructured_fact: ${parsed.stateUpdates?.structuredFactSeen ? `${parsed.stateUpdates.structuredFactSeen.type}/${parsed.stateUpdates.structuredFactSeen.key}=${parsed.stateUpdates.structuredFactSeen.value}` : 'none'}\nmood_change: ${parsed.stateUpdates?.moodChange ? `${parsed.stateUpdates.moodChange.emotion} (${parsed.stateUpdates.moodChange.intensityDelta})` : 'none'}\nparseError: ${parsed.parseError ?? 'none'}`
+		});
 		const { reminders, cleanedText } = extractReminderTags(parsed.dialogue);
 		const dialogue = cleanedText;
 		const llmUpdates = parsed.stateUpdates;
@@ -142,6 +148,11 @@
 					importance: calculateFactImportance(finalUpdates.newMemory),
 					characterId: isUserFact ? SHARED_CHARACTER_ID : currentCharacterId
 				});
+				debugStore.addLog({
+					category: 'memory',
+					title: 'Memory Saved (new_memory)',
+					content: `Character: ${currentCharacterId}\nContent: ${finalUpdates.newMemory}`
+				});
 			} catch (e) {
 				console.debug('[Memory] Failed to save LLM observation:', e);
 			}
@@ -152,9 +163,11 @@
 		memoryApi
 			.maybeExtractFacts(userMessage, companionResponse, currentCharacterId, !!finalUpdates.newMemory)
 			.then((count) => {
-				if (count > 0) {
-					console.debug('[Memory] Extractor saved', count, 'new fact(s)');
-				}
+				debugStore.addLog({
+					category: 'memory',
+					title: 'Memory Extractor Result',
+					content: `Facts saved: ${count}\nhasNewMemory was: ${!!finalUpdates.newMemory}`
+				});
 			})
 			.catch((e) => console.debug('[Memory] Extractor failed:', e));
 
