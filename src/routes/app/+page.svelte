@@ -1217,10 +1217,10 @@
 				onClose={handleEventClose}
 			/>
 		{/if}
-
-		<!-- Debug Panel -->
-		<DebugPanel />
 	</main>
+
+	<!-- Debug Panel (docked below main content when visible) -->
+	<DebugPanel />
 
 	<!-- Onboarding Modal (first-run) -->
 	{#if showOnboarding}

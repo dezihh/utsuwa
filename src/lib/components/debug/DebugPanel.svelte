@@ -119,23 +119,19 @@
 
 <style>
 	.debug-panel {
-		position: fixed;
-		bottom: 80px;
-		right: 1rem;
-		width: 600px;
-		max-width: calc(100vw - 2rem);
-		max-height: 50vh;
+		position: relative;
+		width: 100%;
+		height: 40vh;
+		min-height: 200px;
 		display: flex;
 		flex-direction: column;
-		background: rgba(20, 20, 30, 0.95);
+		background: rgba(20, 20, 30, 0.97);
 		backdrop-filter: blur(12px);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 16px;
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-		z-index: 100;
+		border-top: 1px solid rgba(255, 255, 255, 0.12);
 		font-family: 'JetBrains Mono', 'Fira Code', monospace;
-		font-size: 0.75rem;
+		font-size: 0.8rem;
 		color: #e0e0e0;
+		z-index: 50;
 	}
 
 	.debug-header {
@@ -306,14 +302,14 @@
 
 	.debug-content {
 		margin: 0;
-		padding: 0.5rem 0.8rem 0.6rem 2.2rem;
-		background: rgba(0, 0, 0, 0.2);
-		color: rgba(255, 255, 255, 0.7);
-		font-size: 0.7rem;
+		padding: 0.6rem 1rem 0.8rem 2.4rem;
+		background: rgba(0, 0, 0, 0.25);
+		color: rgba(255, 255, 255, 0.75);
+		font-size: 0.75rem;
 		line-height: 1.5;
 		white-space: pre-wrap;
 		word-break: break-word;
-		max-height: 300px;
+		max-height: 50vh;
 		overflow-y: auto;
 	}
 </style>
