@@ -191,15 +191,25 @@
 
 		// 8. Extract and save potential facts
 		const potentialFacts = extractPotentialFacts(dialogue, userMessage);
+		debugStore.addLog({
+			category: 'memory',
+			title: 'Heuristic Facts Extracted',
+			content: `Found ${potentialFacts.length}\n${potentialFacts.slice(0, 5).join('\n')}`
+		});
 		for (const factContent of potentialFacts.slice(0, 2)) {
 			try {
 				const userAnalysis = analyzeMessage(userMessage);
 				const isUserFact = factContent.toLowerCase().startsWith('user');
-				await memoryApi.createFact({
+				const created = await memoryApi.createFact({
 					content: factContent,
 					category: determineFactCategory(factContent),
 					importance: calculateFactImportance(factContent, userAnalysis.sentiment),
 					characterId: isUserFact ? SHARED_CHARACTER_ID : currentCharacterId
+				});
+				debugStore.addLog({
+					category: 'memory',
+					title: 'Memory Saved (heuristic)',
+					content: `Character: ${isUserFact ? SHARED_CHARACTER_ID : currentCharacterId}\nContent: ${created.content}`
 				});
 			} catch (e) {
 				console.debug('Failed to save fact:', e);
