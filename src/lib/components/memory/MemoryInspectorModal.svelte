@@ -96,44 +96,44 @@
 		}
 	}
 
-	function runParserTest(save: boolean) {
+	async function runParserTest(save: boolean) {
 		if (!testUserMessage.trim() || !testLlmResponse.trim()) {
 			testSaveResult = 'Please fill in both fields.';
 			return;
 		}
 		testSaveResult = null;
+		isTesting = true;
 
-		// 1. Parse and heuristic facts are shown immediately.
-		let parsed: ReturnType<typeof parseResponse>;
 		try {
-			parsed = parseResponse(testLlmResponse);
-		} catch (e) {
-			parsed = { dialogue: '', stateUpdates: null, parseError: String(e) };
-		}
-		testParseResult = parsed;
-		testPotentialFacts = extractPotentialFacts(parsed.dialogue, testUserMessage);
+			// 1. Parse and heuristic facts are shown immediately.
+			let parsed: ReturnType<typeof parseResponse>;
+			try {
+				parsed = parseResponse(testLlmResponse);
+			} catch (e) {
+				parsed = { dialogue: '', stateUpdates: null, parseError: String(e) };
+			}
+			testParseResult = parsed;
+			testPotentialFacts = extractPotentialFacts(parsed.dialogue, testUserMessage);
 
-		// 2. Save directly if requested.
-		if (save) {
-			saveParsedFacts(parsed, testPotentialFacts);
-		}
+			// 2. Save directly if requested.
+			if (save) {
+				await saveParsedFacts(parsed, testPotentialFacts);
+			}
 
-		// 3. Run extractor preview asynchronously so the UI never blocks.
-		if (!parsed.stateUpdates?.newMemory) {
-			isTesting = true;
-			extractFactsFromLLM(testUserMessage, testLlmResponse)
-				.then((extracted) => {
-					testExtractorFacts = extracted.map((f) => f.content);
-				})
-				.catch((e) => {
-					console.error('[MemoryInspector] Extractor preview failed:', e);
-					testExtractorFacts = [];
-				})
-				.finally(() => {
-					isTesting = false;
-				});
-		} else {
-			testExtractorFacts = [];
+			// 3. Run extractor preview asynchronously so the UI never blocks.
+			if (!parsed.stateUpdates?.newMemory) {
+				extractFactsFromLLM(testUserMessage, testLlmResponse)
+					.then((extracted) => {
+						testExtractorFacts = extracted.map((f) => f.content);
+					})
+					.catch((e) => {
+						console.error('[MemoryInspector] Extractor preview failed:', e);
+						testExtractorFacts = [];
+					});
+			} else {
+				testExtractorFacts = [];
+			}
+		} finally {
 			isTesting = false;
 		}
 	}
