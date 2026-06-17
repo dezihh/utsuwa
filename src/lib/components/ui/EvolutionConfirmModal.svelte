@@ -11,9 +11,42 @@
 		companionName: string;
 		onConfirm: (adaptations: string[]) => void;
 		onReject: () => void;
+		language?: string;
 	}
 
-	let { suggestions, companionName, onConfirm, onReject }: Props = $props();
+	let { suggestions, companionName, onConfirm, onReject, language }: Props = $props();
+
+	function t(key: string, lang?: string): string {
+		const translations: Record<string, Record<string, string>> = {
+			evolved: {
+				de: 'hat sich entwickelt',
+				en: 'has evolved',
+				fr: 'a évolué',
+				es: 'ha evolucionado'
+			},
+			description: {
+				de: 'Basierend auf euren letzten Gesprächen schlägt {name} folgende Anpassungen vor. Wähle die gewünschten aus:',
+				en: 'Based on recent conversations, {name} suggests the following personality adaptations. Select the ones you want to apply:',
+				fr: 'Sur la base des conversations récentes, {name} propose les adaptations suivantes. Sélectionne celles que tu veux appliquer :',
+				es: 'Basándose en las conversaciones recientes, {name} sugiere las siguientes adaptaciones. Selecciona las que quieres aplicar:'
+			},
+			keepCurrent: {
+				de: 'Behalten',
+				en: 'Keep Current',
+				fr: 'Garder',
+				es: 'Mantener'
+			},
+			apply: {
+				de: 'Übernehmen',
+				en: 'Apply',
+				fr: 'Appliquer',
+				es: 'Aplicar'
+			}
+		};
+		const l = lang?.split('-')[0] ?? 'en';
+		const text = translations[key]?.[l] ?? translations[key]?.['en'] ?? key;
+		return text.replace('{name}', companionName);
+	}
 
 	let selected = $state<Set<number>>(new Set());
 
@@ -53,10 +86,9 @@
 			<Icon name="sparkles" size={32} />
 		</div>
 
-		<h3 class="modal-title">{companionName} has evolved</h3>
+		<h3 class="modal-title">{companionName} {t('evolved', language)}</h3>
 		<p class="modal-desc">
-			Based on recent conversations, {companionName} suggests the following personality adaptations.
-			Select the ones you want to apply:
+			{t('description', language)}
 		</p>
 
 		<div class="suggestions-list">
@@ -85,11 +117,11 @@
 		<div class="modal-actions">
 			<button class="btn-reject" onclick={onReject}>
 				<Icon name="x" size={14} />
-				Keep Current
+				{t('keepCurrent', language)}
 			</button>
 			<button class="btn-confirm" onclick={handleConfirm} disabled={selected.size === 0}>
 				<Icon name="check" size={14} />
-				Apply ({selected.size})
+				{t('apply', language)} ({selected.size})
 			</button>
 		</div>
 	</div>

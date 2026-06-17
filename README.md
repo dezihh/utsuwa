@@ -37,7 +37,7 @@
 - **Memory Graph**: Interactive visualization showing how memories connect semantically
 - **5-Layer Memory Architecture**: Structured memory system with Base Soul (immutable core), Evolved Persona (learned adaptations), User Model (semantic facts), Episodic Memory (session summaries), and Fact Library (structured knowledge like concepts and exam facts). Vocabulary training is handled by a separate dedicated system.
 - **Fact Library**: Type-agnostic structured storage for concepts, exam facts, and general knowledge — automatically managed by the app with confidence-based review scheduling. Browse, search, edit, and review entries via the in-app UI (book icon in top-left). For vocabulary training, use the dedicated Vocabulary System instead.
-- **Personality Evolution**: The companion learns communication patterns from conversations and develops an evolving personality profile over time. LLM-powered analysis of session summaries with user confirmation before applying adaptations
+- **Personality Evolution**: Your companion develops a unique personality over time. After every 10 sessions (configurable), an LLM analyzes your conversation history and suggests subtle communication adaptations — like becoming more playful, more direct, or adjusting to your preferred conversation pace. You review and approve each adaptation before it takes effect. Learned traits persist across sessions and shape every future response.
 - **Lazy Session Compaction**: Sessions are automatically summarized via LLM when a new session starts (robust against browser tab closure)
 - **Debug Environment**: Real-time logging panel with filterable categories (Prompts, Memory, Sessions, Facts) and live system prompt inspection. Toggle categories in Settings > Developer
 - **Scene Backgrounds**: 9 built-in presets (gradients, solid colors, studio grid) plus custom image upload (PNG/JPG/WEBP) and HDRI/EXR environment maps for realistic PBR lighting
@@ -113,6 +113,31 @@ Utsuwa offers two relationship modes. You choose during onboarding and can switc
 **Important:** Companion Mode is *not* emotionless. The companion still has mood, energy, personality, memory, fact library, reminders, image search, animations, and voice — it simply does not advance the romantic relationship. If your persona prompt is affectionate or the companion's mood is warm, it can still feel emotional.
 
 Switching modes preserves your dating-sim stage (it is saved when entering Companion Mode and restored when returning to Dating Sim Mode). Frequent switching is discouraged because it can disrupt natural progression.
+
+### Personality Evolution
+
+Personality Evolution is the mechanism through which Utsuwa develops its own character over time — not through manual configuration, but through actual conversation experience. It is the difference between a statically configured bot and a companion that adapts to you.
+
+**How it works:**
+
+1. **Trigger** — After a configurable number of completed sessions (default: 10), the system triggers an evolution analysis. You can change this threshold under **Settings > Character > Personality > Evolution Threshold**.
+2. **Analysis** — An LLM reads the summaries of the recent sessions and looks for communication patterns: Does the user prefer short answers? Do they respond well to humor? Do they like directness?
+3. **Suggestions** — The LLM generates up to 2 concrete adaptation suggestions, each with a reason drawn from the sessions.
+4. **User confirmation** — A modal appears titled "[CompanionName] has evolved", showing the suggestions. You can select which ones to apply or reject them all.
+5. **Application** — Accepted adaptations are stored in `communicationAdaptations[]` (max 5 active entries) and injected into every future system prompt under **Learned communication patterns**:
+   ```
+   Learned communication patterns:
+   - Antworte kürzer wenn der Nutzer kurze Nachrichten schreibt
+   - Verwende mehr technische Begriffe wenn es um Programmierung geht
+   ```
+6. **Reset** — The session counter resets after each evolution and starts counting again.
+
+**Key details:**
+
+- **Active in both modes** — Personality Evolution works in Companion Mode and Dating Sim Mode equally. It is not a dating-sim-exclusive feature.
+- **Language-aware** — The generated adaptations are written in the language configured for your TTS provider (e.g., German if you use a German TTS voice).
+- **Configurable threshold** — A lower value (2–3) is useful for testing; 10 is the recommended default for normal usage.
+- **Rejection is safe** — If you click "Keep Current", no adaptations are saved and the counter continues. The system will suggest again after the next threshold is reached.
 
 ### Fact Library
 
@@ -608,7 +633,7 @@ pnpm tauri build  # Build desktop app installer
 - [x] **Model persistence fix** — non-local provider models (e.g. openai-compatible) are reloaded from cache on settings page revisit
 - [x] **5-Layer Memory Architecture** — Dexie Schema v4 with Base Soul (immutable `soulPrompt`), Evolved Persona (`communicationAdaptations`), User Model (`characterId`-tagged facts), Episodic Memory (lazy session compaction with semantic search), and Fact Library (type-agnostic structured storage with confidence tracking)
 - [x] **Structured Fact Extraction** — LLM can emit `structured_fact_seen` to save vocabulary, concepts, or exam facts to the Fact Library; app-managed with auto-confidence updates
-- [x] **Personality Evolution** — `sessionCountSinceEvolution` tracking with heuristics-based adaptation suggestions applied automatically after threshold (default: 10 sessions)
+- [x] **Personality Evolution** — LLM-powered analysis of session summaries suggests communication adaptations; user confirms per-suggestion before applying; configurable threshold (2–100 sessions); adaptations written in the user's configured language; supports Companion and Dating Sim mode equally
 - [x] **Lazy Session Compaction** — Previous open sessions are summarized automatically when a new session starts (handles browser tab closure gracefully); turns are persisted with `sessionId`
 - [x] **Episodic Semantic Recall** — Past sessions are retrieved by semantic similarity (cosine on embeddings) rather than just recency; up to 3 thematically matching sessions are injected into the prompt
 - [x] **Debug Environment** — Settings > Developer toggles for Prompt / Memory / Session / Fact logging; real-time Debug Panel overlay with category filters, search, and expandable log entries
@@ -623,8 +648,7 @@ pnpm tauri build  # Build desktop app installer
 
 - [x] **LLM-based Session Summaries** — Replace heuristic summaries with real LLM-generated session summaries (2–4 sentences, key topics, emotional arc) for higher-quality episodic recall
 - [x] **Fact Library UI** — Settings page to browse, filter, edit, and delete Fact Library entries (vocabulary, concepts, exam facts) with confidence-based sorting
-- [x] **LLM-based Personality Evolution** — Replace heuristic evolution analysis with a dedicated LLM call that analyzes session summaries and suggests concrete, reasoned personality adaptations
-- [x] **User-Confirmed Evolution** — Modal dialog showing proposed adaptations before they are applied, with per-suggestion accept/reject controls
+
 - [ ] **File, Image, and Video Uploads** - Add support for attaching files, images, and videos for multimodal LLM workflows and providers that can use richer context or web-aware tools
 - [ ] **Live2D Support** - Alternative to VRM for 2D animated avatars
 - [ ] **Windows and Linux Desktop Apps** - Expand desktop builds beyond the current macOS beta
@@ -686,11 +710,15 @@ Session compaction now uses the configured LLM provider to generate rich, contex
 ### Fact Library UI
 A dedicated modal (accessible via the book icon in the top-left corner) allows browsing, searching, filtering, editing, and reviewing Fact Library entries. Entries can be sorted by confidence, date, or review count.
 
-### LLM-Powered Personality Evolution
-The evolution analyzer now sends recent session summaries to the LLM for pattern detection, producing richer and more context-aware adaptation suggestions than the previous heuristic system.
+### Personality Evolution — Full Feature Release
+Utsuwa now includes a complete personality evolution system that lets your companion grow through real conversation experience:
 
-### User-Confirmed Evolution
-Before any personality adaptations are applied, a confirmation modal shows the suggested changes with explanations. The user can select which adaptations to keep, or reject them entirely.
+- **LLM-powered analysis** — After every N sessions (configurable), the configured LLM analyzes session summaries and suggests concrete, reasoned communication adaptations.
+- **User confirmation** — A localized modal ("[Name] has evolved") shows each suggestion with its justification. You pick which ones to apply.
+- **Language support** — Adaptations are generated in the user's configured TTS language (e.g., German, French, Spanish) so the UI and the learned traits stay consistent.
+- **Configurable threshold** — Adjust how often evolution triggers under **Settings > Character > Personality > Evolution Threshold** (default: 10, useful range: 2–100).
+- **Persistent impact** — Accepted adaptations are written into the system prompt as *Learned communication patterns* and influence every future response. They are capped at 5 active entries.
+- **Works in both modes** — Active in Companion Mode and Dating Sim Mode alike.
 
 ### Temporary VRM Preview in Developer Tools
 **Settings > Developer Tools** now lets you upload a `.vrm` file for temporary preview. The model loads into the viewport immediately — you can test expressions, animations, and look-at behavior. The uploaded model is **never persisted**; clicking **Restore Original** or leaving the page automatically switches back to the previously active avatar.

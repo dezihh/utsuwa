@@ -5,7 +5,30 @@ import { getLLMProvider } from '$lib/services/providers/registry';
 import type { SessionSummary } from '$lib/types/memory';
 import type { PersonalityProfile } from '$lib/types/character';
 
-const EVOLUTION_SYSTEM_PROMPT = `You are a personality evolution analyst for an AI companion.
+function getLanguageName(code: string): string {
+	const names: Record<string, string> = {
+		de: 'German',
+		fr: 'French',
+		es: 'Spanish',
+		it: 'Italian',
+		pt: 'Portuguese',
+		nl: 'Dutch',
+		ja: 'Japanese',
+		ko: 'Korean',
+		zh: 'Chinese',
+		ru: 'Russian',
+		pl: 'Polish',
+		tr: 'Turkish'
+	};
+	return names[code] ?? 'English';
+}
+
+function buildEvolutionSystemPrompt(language?: string): string {
+	const langInstruction =
+		language && language !== 'en'
+			? `\n\nIMPORTANT: Write all "adaptation" and "reason" values in ${getLanguageName(language)}. Do NOT use English for these fields.`
+			: '';
+	return `You are a personality evolution analyst for an AI companion.
 
 Analyze the provided conversation sessions and current personality profile.
 Identify patterns in how the user interacts with the companion and suggest subtle
@@ -18,6 +41,7 @@ Rules:
 - Be specific but concise
 - Only suggest adaptations if there is clear evidence from the sessions
 - If no clear patterns emerge, return an empty array
+${langInstruction}
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -28,6 +52,7 @@ Respond ONLY with valid JSON in this exact format:
     }
   ]
 }`;
+}
 
 export interface EvolutionSuggestion {
 	adaptation: string;
@@ -41,7 +66,8 @@ export interface EvolutionAnalysisResult {
 export async function analyzePersonalityEvolution(
 	sessions: SessionSummary[],
 	currentPersonality: PersonalityProfile,
-	companionName: string = 'Companion'
+	companionName: string = 'Companion',
+	language?: string
 ): Promise<EvolutionSuggestion[]> {
 	if (sessions.length === 0) return [];
 
@@ -95,7 +121,7 @@ export async function analyzePersonalityEvolution(
 				model: selectedModel,
 				apiKey: apiKey || undefined,
 				baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
-				systemPrompt: EVOLUTION_SYSTEM_PROMPT
+				systemPrompt: buildEvolutionSystemPrompt(language)
 			},
 			(text) => {
 				responseText += text;

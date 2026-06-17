@@ -1,3 +1,4 @@
+#   docker compose build utsuwa-prod && docker compose up -d  utsuwa-prod  --force-recreate
 name: utsuwa
 
 services:

@@ -409,6 +409,16 @@ function createCharacterStore() {
 		save();
 	}
 
+	function setEvolutionThreshold(threshold: number): void {
+		const clamped = Math.max(1, Math.min(100, threshold));
+		state = {
+			...state,
+			evolutionThreshold: clamped,
+			updatedAt: new Date()
+		};
+		save();
+	}
+
 	// Get current character ID
 	function getCurrentCharacterId(): string {
 		return currentCharacterId;
@@ -507,6 +517,7 @@ function createCharacterStore() {
 		incrementSessionCount,
 		isEvolutionDue,
 		applyEvolution,
+		setEvolutionThreshold,
 		getCurrentCharacterId,
 		setCurrentCharacterId
 	};

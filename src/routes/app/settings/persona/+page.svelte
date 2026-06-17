@@ -1072,6 +1072,27 @@
 								</span>
 							{/if}
 						</div>
+						<!-- Evolution Threshold -->
+						<div class="preset-avatar-row">
+							<span class="preset-avatar-label">
+								<Icon name="sparkles" size={14} />
+								Evolution Threshold
+							</span>
+							<input
+								id="ps-evolution-threshold"
+								type="number"
+								min="1"
+								max="100"
+								step="1"
+								value={characterStore.state.evolutionThreshold}
+								onchange={(e) => characterStore.setEvolutionThreshold(Number(e.currentTarget.value))}
+								class="preset-avatar-select"
+								style="width: 80px; text-align: center;"
+							/>
+							<span class="preset-avatar-hint">
+								Sessions between personality adaptations
+							</span>
+						</div>
 					</div>
 				{/if}
 			</div>

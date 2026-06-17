@@ -131,7 +131,8 @@ export interface EvolutionSuggestion {
 export async function analyzeEvolution(
 	sessions: SessionSummary[],
 	currentPersonality: import('$lib/types/character').PersonalityProfile,
-	companionName?: string
+	companionName?: string,
+	language?: string
 ): Promise<EvolutionSuggestion[]> {
 	if (sessions.length === 0) return [];
 
@@ -140,7 +141,8 @@ export async function analyzeEvolution(
 		const suggestions = await analyzePersonalityEvolution(
 			sessions,
 			currentPersonality,
-			companionName || 'Companion'
+			companionName || 'Companion',
+			language
 		);
 		return suggestions;
 	} catch (e) {

@@ -117,6 +117,7 @@
 
 	// Evolution confirmation modal state
 	let pendingEvolutionSuggestions = $state<Array<{ adaptation: string; reason: string }> | null>(null);
+	let evolutionLanguage = $state<string | undefined>(undefined);
 
 	// Onboarding state
 	let showOnboarding = $state(false);
@@ -586,13 +587,24 @@
 				limit: characterStore.state.evolutionThreshold
 			});
 			const { analyzeEvolution } = await import('$lib/engine/memory');
+
+			// Sprache aus TTS-Config ableiten
+			const speechSettings = modulesStore.getModuleSettings('speech');
+			const activeTTSProvider = speechSettings?.activeProvider as string | undefined;
+			const ttsConfig = activeTTSProvider
+				? settingsStore.getProviderConfig(activeTTSProvider)
+				: null;
+			const language = ttsConfig?.language || undefined;
+
 			const suggestions = await analyzeEvolution(
 				sessions,
 				characterStore.state.personality,
-				characterStore.state.name
+				characterStore.state.name,
+				language
 			);
 			if (suggestions.length > 0) {
 				pendingEvolutionSuggestions = suggestions;
+				evolutionLanguage = language;
 				debugStore.logSession('Evolution pending', `${suggestions.length} suggestion(s) awaiting user confirmation`);
 			}
 		} catch (e) {
@@ -603,11 +615,13 @@
 	function handleEvolutionConfirm(adaptations: string[]) {
 		characterStore.applyEvolution(adaptations);
 		pendingEvolutionSuggestions = null;
+		evolutionLanguage = undefined;
 		debugStore.logSession('Evolution applied', adaptations.join(', '));
 	}
 
 	function handleEvolutionReject() {
 		pendingEvolutionSuggestions = null;
+		evolutionLanguage = undefined;
 		debugStore.logSession('Evolution rejected', 'User declined adaptations');
 	}
 
@@ -1163,6 +1177,7 @@
 			companionName={characterStore.state.name}
 			onConfirm={handleEvolutionConfirm}
 			onReject={handleEvolutionReject}
+			language={evolutionLanguage}
 		/>
 	{/if}
 
