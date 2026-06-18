@@ -63,7 +63,7 @@ Build a meaningful relationship with your AI companion through a dating sim-insp
 - **Multi-axis Relationships**: Track affection, trust, intimacy, comfort, and respect separately
 - **8 Relationship Stages**: Progress from Stranger → Acquaintance → Friend → Close Friend → Romantic Interest → Dating → Committed → Soulmate
 - **Dynamic Mood**: Real-time emotions with causality tracking (she remembers *why* she feels a certain way)
-- **Visual Novel Events**: Milestone moments, romantic scenes, and choices that matter - with custom dialogue and branching responses
+- **Visual Novel Events**: Milestone moments, romantic scenes, and choices that matter - with custom dialogue and branching responses. Event UI and content are localized (German, English, Spanish, Portuguese, French, Japanese, Chinese) based on your TTS language setting
 - **Semantic Memory**: Facts are indexed with vector embeddings for meaning-based retrieval - "outdoor activities" finds memories about hiking. Runs locally using Transformers.js, no API calls
 - **Natural Progression**: Hybrid system combining app heuristics + LLM suggestions for believable relationship growth
 - **Time-Aware**: Your companion notices when you've been away and reacts accordingly
@@ -719,6 +719,15 @@ Utsuwa now includes a complete personality evolution system that lets your compa
 - **Configurable threshold** — Adjust how often evolution triggers under **Settings > Character > Personality > Evolution Threshold** (default: 10, useful range: 2–100).
 - **Persistent impact** — Accepted adaptations are written into the system prompt as *Learned communication patterns* and influence every future response. They are capped at 5 active entries.
 - **Works in both modes** — Active in Companion Mode and Dating Sim Mode alike.
+
+### TTS JSON-State Filter
+LLM state-update blocks (e.g. `{"mood_change": {"emotion": "happy"}, "trust_delta": 1}`) are now detected even when they span multiple streaming chunks and are never passed to text-to-speech. The streaming speech buffer tracks open/closed curly-brace depth and strips the entire JSON block before it reaches TTS, so you no longer hear raw JSON in the spoken response.
+
+### Dating-Sim Event Localization
+Dating-sim event popups are now fully localized:
+- **UI labels** (`Continue`, `Finish`, `You said:`, `Click anywhere to continue`) adapt to the configured TTS language.
+- **Event content** (intros, dialogue, choices, and responses) supports per-language objects. Romantic and time-based events ship with English and German texts; the structure is open for additional languages.
+- Language is derived automatically from the active TTS provider configuration.
 
 ### Temporary VRM Preview in Developer Tools
 **Settings > Developer Tools** now lets you upload a `.vrm` file for temporary preview. The model loads into the viewport immediately — you can test expressions, animations, and look-at behavior. The uploaded model is **never persisted**; clicking **Restore Original** or leaving the page automatically switches back to the previously active avatar.

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Scene, SceneChoice, EventType } from '$lib/types/events';
+	import type { LocalizedString, Scene, SceneChoice, EventType } from '$lib/types/events';
 	import type { StateUpdates } from '$lib/types/character';
 	import { Icon } from '$lib/components/ui';
 	import ChoiceDialog from './ChoiceDialog.svelte';
@@ -10,11 +10,62 @@
 		eventType?: EventType;
 		companionName?: string;
 		overlay?: boolean;
+		language?: string;
 		onComplete: (choiceIndex?: number, stateChanges?: Partial<StateUpdates>) => void;
 		onClose: () => void;
 	}
 
-	let { scene, eventName, eventType, companionName = 'Companion', overlay = false, onComplete, onClose }: Props = $props();
+	let { scene, eventName, eventType, companionName = 'Companion', overlay = false, language = 'en', onComplete, onClose }: Props = $props();
+
+	function t(key: string): string {
+		const translations: Record<string, Record<string, string>> = {
+			continue: {
+				de: 'Weiter',
+				en: 'Continue',
+				es: 'Continuar',
+				pt: 'Continuar',
+				fr: 'Continuer',
+				ja: '続ける',
+				zh: '继续'
+			},
+			finish: {
+				de: 'Fertig',
+				en: 'Finish',
+				es: 'Terminar',
+				pt: 'Concluir',
+				fr: 'Terminer',
+				ja: '終わる',
+				zh: '完成'
+			},
+			youSaid: {
+				de: 'Du hast gesagt:',
+				en: 'You said:',
+				es: 'Dijiste:',
+				pt: 'Você disse:',
+				fr: 'Tu as dit:',
+				ja: 'あなたは言った：',
+				zh: '你说：'
+			},
+			clickToContinue: {
+				de: 'Klicken zum Fortfahren',
+				en: 'Click anywhere to continue',
+				es: 'Haz clic para continuar',
+				pt: 'Clique para continuar',
+				fr: 'Cliquez pour continuer',
+				ja: 'クリックして続ける',
+				zh: '点击继续'
+			}
+		};
+		const lang = language?.split('-')[0] ?? 'en';
+		return translations[key]?.[lang] ?? translations[key]['en'];
+	}
+
+	function localize(field: LocalizedString | undefined): string {
+		if (!field) return '';
+		if (typeof field === 'string') return field;
+		const lang = language?.split('-')[0] ?? 'en';
+		return field[lang] ?? field['en'] ?? Object.values(field)[0] ?? '';
+	}
 
 	// Get icon based on event type
 	const eventIcon = $derived.by(() => {
@@ -107,8 +158,8 @@
 			<!-- Intro phase -->
 			{#if phase === 'intro' && scene.intro}
 				<div class="scene-intro">
-					<p class="intro-text">{scene.intro}</p>
-					<button class="continue-btn" onclick={advance}>Continue</button>
+					<p class="intro-text">{localize(scene.intro)}</p>
+					<button class="continue-btn" onclick={advance}>{t('continue')}</button>
 				</div>
 			{/if}
 
@@ -116,9 +167,9 @@
 			{#if phase === 'dialogue' && scene.dialogue}
 				<div class="scene-dialogue">
 					<div class="speaker-name">{companionName}</div>
-					<p class="dialogue-text">"{scene.dialogue}"</p>
+					<p class="dialogue-text">"{localize(scene.dialogue)}"</p>
 					{#if !scene.choices || scene.choices.length === 0}
-						<button class="continue-btn" onclick={advance}>Continue</button>
+						<button class="continue-btn" onclick={advance}>{t('continue')}</button>
 					{/if}
 				</div>
 			{/if}
@@ -127,8 +178,8 @@
 			{#if phase === 'choices' && scene.choices}
 				<div class="scene-choices">
 					<div class="speaker-name">{companionName}</div>
-					<p class="dialogue-text">"{scene.dialogue}"</p>
-					<ChoiceDialog choices={scene.choices} onSelect={handleChoice} />
+					<p class="dialogue-text">"{localize(scene.dialogue)}"</p>
+					<ChoiceDialog choices={scene.choices} {language} onSelect={handleChoice} />
 				</div>
 			{/if}
 
@@ -136,26 +187,26 @@
 			{#if phase === 'response' && selectedChoice}
 				<div class="scene-response">
 					<div class="your-choice">
-						<span class="choice-label">You said:</span>
-						<p class="choice-text">"{selectedChoice.text}"</p>
+						<span class="choice-label">{t('youSaid')}</span>
+						<p class="choice-text">"{localize(selectedChoice.text)}"</p>
 					</div>
 					<div class="speaker-name">{companionName}</div>
-					<p class="dialogue-text">"{selectedChoice.response}"</p>
-					<button class="continue-btn" onclick={advance}>Continue</button>
+					<p class="dialogue-text">"{localize(selectedChoice.response)}"</p>
+					<button class="continue-btn" onclick={advance}>{t('continue')}</button>
 				</div>
 			{/if}
 
 			<!-- Outro phase -->
 			{#if phase === 'outro' && scene.outro}
 				<div class="scene-outro">
-					<p class="outro-text">{scene.outro}</p>
-					<button class="continue-btn" onclick={advance}>Finish</button>
+					<p class="outro-text">{localize(scene.outro)}</p>
+					<button class="continue-btn" onclick={advance}>{t('finish')}</button>
 				</div>
 			{/if}
 
 			<!-- Click to continue hint -->
 			{#if phase !== 'choices'}
-				<div class="hint">Click anywhere to continue</div>
+				<div class="hint">{t('clickToContinue')}</div>
 			{/if}
 		</div>
 	</div>

@@ -1,5 +1,5 @@
 import type { SpeechSegment } from '../voice-orchestrator.ts';
-import { splitIntoSegments } from '../../utils/sentences.ts';
+import { splitIntoSegments, stripForSpeech } from '../../utils/sentences.ts';
 
 export interface StreamingSpeechBufferOptions {
 	defaultLanguage?: string;
@@ -10,6 +10,9 @@ export interface StreamingSpeechBufferOptions {
 export class StreamingSpeechBuffer {
 	private buffer = '';
 	private emittedLength = 0;
+	// Tracks depth of curly braces so JSON state-update blocks that span
+	// multiple streaming chunks are held back from TTS until fully received.
+	private jsonDepth = 0;
 	// Accumulates [lang:xx] / [voice:xxx] tags that were consumed at position 0
 	// so they can be prepended to the next emitted text block. Without this,
 	// a leading [lang:es] would be discarded and the following text would be
@@ -22,19 +25,36 @@ export class StreamingSpeechBuffer {
 	}
 
 	feed(chunk: string): void {
+		// Track curly-brace depth across chunks so we never emit text that is
+		// inside an open JSON state-update block.
+		for (const ch of chunk) {
+			if (ch === '{') this.jsonDepth++;
+			else if (ch === '}') this.jsonDepth--;
+		}
 		this.buffer += chunk;
 		this.tryEmit();
 	}
 
 	flush(): void {
-		const remaining = (this.pendingStatePrefix + this.buffer.slice(this.emittedLength)).trim();
+		let remaining = (this.pendingStatePrefix + this.buffer.slice(this.emittedLength)).trim();
 		if (!remaining) return;
+
+		// Ensure any trailing JSON state-update block is stripped before TTS.
+		const { cleaned } = stripForSpeech(remaining);
+		remaining = cleaned.trim();
+		if (!remaining) {
+			this.emittedLength = this.buffer.length;
+			this.pendingStatePrefix = '';
+			this.jsonDepth = 0;
+			return;
+		}
 
 		for (const seg of splitIntoSegments(remaining, this.options.defaultLanguage, false)) {
 			this.options.onSegment(seg);
 		}
 		this.emittedLength = this.buffer.length;
 		this.pendingStatePrefix = '';
+		this.jsonDepth = 0;
 	}
 
 	reset(): void {
@@ -64,6 +84,19 @@ export class StreamingSpeechBuffer {
 	}
 
 	private tryEmitBlock(text: string): void {
+		// While we are inside an open JSON state-update block, do not emit anything.
+		// The block may span multiple streaming chunks.
+		if (this.jsonDepth > 0) return;
+
+		// Strip any completed JSON state-update block(s) from the current tail so
+		// they are never passed to TTS. If stripping changes the text, rewrite the
+		// buffer tail to match the cleaned version.
+		const { cleaned } = stripForSpeech(text);
+		if (cleaned !== text) {
+			this.buffer = this.buffer.slice(0, this.emittedLength) + cleaned;
+			text = cleaned;
+		}
+
 		const TAG_RE = /\[lang:[a-z]{2,3}\]|\[voice:(?:default|alt)\]/gi;
 
 		// When a control tag sits at position 0, accumulate it in pendingStatePrefix

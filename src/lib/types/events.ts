@@ -3,6 +3,9 @@ import type { Emotion, RelationshipStage, StateUpdates } from './character';
 // Event types
 export type EventType = 'milestone' | 'random' | 'scheduled' | 'conditional' | 'anniversary';
 
+// Localized content: either a plain string (backwards compatible) or a map of language codes.
+export type LocalizedString = string | Partial<Record<string, string>>;
+
 // Time of day for time-based conditions
 export type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
 
@@ -32,8 +35,8 @@ export type EventCondition =
 
 // Scene choice (for branching events)
 export interface SceneChoice {
-	text: string; // What the user sees
-	response: string; // Companion's response if chosen
+	text: LocalizedString; // What the user sees
+	response: LocalizedString; // Companion's response if chosen
 	stateChanges: Partial<StateUpdates>; // State changes if chosen
 	nextSceneId?: string; // For multi-scene branches
 	unlocks?: string[]; // Content/feature unlocks
@@ -42,10 +45,10 @@ export interface SceneChoice {
 // Scene definition
 export interface Scene {
 	id: string;
-	intro?: string; // Narration before dialogue (optional)
-	dialogue?: string; // What the companion says
+	intro?: LocalizedString; // Narration before dialogue (optional)
+	dialogue?: LocalizedString; // What the companion says
 	choices?: SceneChoice[]; // Branching options (optional)
-	outro?: string; // Narration after (optional)
+	outro?: LocalizedString; // Narration after (optional)
 	backgroundChange?: string; // Change background/scene
 	expressionOverride?: string; // Force a specific VRM expression
 	musicCue?: string; // Play specific music/sound

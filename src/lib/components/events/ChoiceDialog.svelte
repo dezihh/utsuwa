@@ -1,12 +1,20 @@
 <script lang="ts">
-	import type { SceneChoice } from '$lib/types/events';
+	import type { LocalizedString, SceneChoice } from '$lib/types/events';
 
 	interface Props {
 		choices: SceneChoice[];
+		language?: string;
 		onSelect: (index: number) => void;
 	}
 
-	let { choices, onSelect }: Props = $props();
+	let { choices, language = 'en', onSelect }: Props = $props();
+
+	function localize(field: LocalizedString | undefined): string {
+		if (!field) return '';
+		if (typeof field === 'string') return field;
+		const lang = language?.split('-')[0] ?? 'en';
+		return field[lang] ?? field['en'] ?? Object.values(field)[0] ?? '';
+	}
 </script>
 
 <div class="choices-container">
@@ -17,7 +25,7 @@
 			style="animation-delay: {index * 0.1}s"
 		>
 			<span class="choice-number">{index + 1}</span>
-			<span class="choice-text">{choice.text}</span>
+			<span class="choice-text">{localize(choice.text)}</span>
 		</button>
 	{/each}
 </div>

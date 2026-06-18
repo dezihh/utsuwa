@@ -179,6 +179,16 @@
 	// Derived current character ID from active preset
 	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
 
+	// UI language derived from the active TTS provider config
+	const uiLanguage = $derived(
+		(() => {
+			const speechSettings = modulesStore.getModuleSettings('speech');
+			const ttsProvider = speechSettings?.activeProvider as string | undefined;
+			const cfg = ttsProvider ? settingsStore.getProviderConfig(ttsProvider) : null;
+			return (cfg?.language as string | undefined) ?? 'en';
+		})()
+	);
+
 	// Auto-switch VRM avatar when active preset defines one
 	$effect(() => {
 		const models = vrmStore.models;
@@ -1253,6 +1263,7 @@
 				eventName={activeEvent.name}
 				eventType={activeEvent.type}
 				companionName={personaStore.activeCard.name}
+				language={uiLanguage}
 				onComplete={handleEventComplete}
 				onClose={handleEventClose}
 			/>
