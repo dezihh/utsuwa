@@ -11,9 +11,21 @@ import { normalizeChatBaseURL } from '$lib/services/chat/base-url';
 import { isLocalLLMProvider } from '$lib/services/providers/local-endpoints';
 import type { LLMProvider } from '$lib/types';
 
+interface TextPart {
+	type: 'text';
+	text: string;
+}
+
+interface ImagePart {
+	type: 'image_url';
+	image_url: { url: string };
+}
+
+type ContentPart = TextPart | ImagePart;
+
 interface ChatMessage {
 	role: 'system' | 'user' | 'assistant' | 'tool';
-	content: string | null;
+	content: string | ContentPart[] | null;
 	tool_call_id?: string;
 	tool_calls?: ToolCall[];
 }
@@ -36,6 +48,24 @@ interface LLMResponse {
 }
 
 const MAX_TOOL_ROUNDS = 5;
+
+/** Try to extract a base64 image from an MCP tool result.
+ *  Supports tools that return JSON like {"success":true,"mime_type":"image/png","data":"iVBORw0KGgo..."}.
+ */
+function extractImageFromToolResult(content: string): { mimeType: string; data: string } | null {
+	try {
+		const parsed = JSON.parse(content);
+		if (parsed.success !== false && typeof parsed.data === 'string' && typeof parsed.mime_type === 'string') {
+			const data = parsed.data.trim();
+			if (data.length > 0) {
+				return { mimeType: parsed.mime_type, data };
+			}
+		}
+	} catch {
+		// Not JSON — ignore
+	}
+	return null;
+}
 
 function toolsToOpenAI(tools: McpTool[]) {
 	return tools.map((t) => ({
@@ -146,7 +176,6 @@ Already written (do not repeat):
 	];
 
 	let finalText = '';
-	let toolCallSummary: string[] = [];
 
 	try {
 	// Agentic loop
@@ -189,20 +218,41 @@ Already written (do not repeat):
 				} catch {}
 
 				const result = await callTool(server, tc.function.name, args);
-				toolCallSummary.push(
-					`🔧 **${tc.function.name}**: ${result.isError ? '❌' : '✅'} ${result.content.slice(0, 200)}`
-				);
 				return { tool_call_id: tc.id, name: tc.function.name, content: result.content };
 			})
 		);
 
 		// Add tool results to message history
 		for (const r of toolResults) {
-			llmMessages.push({
-				role: 'tool',
-				tool_call_id: r.tool_call_id,
-				content: r.content
-			});
+			const image = extractImageFromToolResult(r.content);
+			if (image) {
+				// Keep a lightweight tool ack so the conversation structure is valid,
+				// then inject the actual image as a multimodal user message.
+				llmMessages.push({
+					role: 'tool',
+					tool_call_id: r.tool_call_id,
+					content: `[${r.name} returned an image of type ${image.mimeType}]`
+				});
+				llmMessages.push({
+					role: 'user',
+					content: [
+						{
+							type: 'text',
+							text: 'Here is the image returned by the tool:'
+						},
+						{
+							type: 'image_url',
+							image_url: { url: `data:${image.mimeType};base64,${image.data}` }
+						}
+					]
+				});
+			} else {
+				llmMessages.push({
+					role: 'tool',
+					tool_call_id: r.tool_call_id,
+					content: r.content
+				});
+			}
 		}
 
 		// If finish_reason was tool_calls but no content, loop continues
@@ -231,15 +281,6 @@ Already written (do not repeat):
 	const yield_ = () => new Promise<void>((r) => setTimeout(r, 0));
 	const stream = new ReadableStream({
 		async start(controller) {
-			// Prepend tool call summary if present
-			if (toolCallSummary.length > 0) {
-				const summaryBlock =
-					`<details><summary>🔧 ${toolCallSummary.length} tool call(s)</summary>\n\n` +
-					toolCallSummary.join('\n\n') +
-					`\n\n</details>\n\n`;
-				controller.enqueue(encoder.encode(`0:${JSON.stringify(summaryBlock)}\n`));
-				await yield_();
-			}
 
 			// Emit sentence-by-sentence so the client can start TTS after the first sentence.
 			// Each await yields to the event loop, letting Node.js flush the write buffer.

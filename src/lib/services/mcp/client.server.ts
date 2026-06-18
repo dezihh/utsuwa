@@ -20,21 +20,28 @@ function rpcRequest(method: string, params: unknown = {}) {
 
 // ── HTTP transport ───────────────────────────────────────────────────────────
 
+/** Per-URL MCP session IDs returned by Streamable HTTP initialize responses. */
+const httpSessionIds = new Map<string, string>();
+
 async function httpRpc(url: string, method: string, params: unknown = {}): Promise<unknown> {
 	const body = JSON.stringify(rpcRequest(method, params));
+	const sessionId = httpSessionIds.get(url);
 
-	const res = await fetch(url, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			Accept: 'application/json, text/event-stream'
-		},
-		body
-	});
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json',
+		Accept: 'application/json, text/event-stream'
+	};
+	if (sessionId) headers['mcp-session-id'] = sessionId;
+
+	const res = await fetch(url, { method: 'POST', headers, body });
 
 	if (!res.ok) {
 		throw new Error(`MCP HTTP error ${res.status}: ${await res.text()}`);
 	}
+
+	// Update session ID if the server refreshes it.
+	const newSessionId = res.headers.get('mcp-session-id');
+	if (newSessionId) httpSessionIds.set(url, newSessionId);
 
 	const contentType = res.headers.get('content-type') ?? '';
 
@@ -173,9 +180,15 @@ async function httpInitialize(url: string) {
 			clientInfo: { name: 'utsuwa', version: '1.0.0' }
 		});
 		// Send initialized notification (fire and forget)
+		const sessionId = httpSessionIds.get(url);
+		const headers: Record<string, string> = {
+			'Content-Type': 'application/json',
+			Accept: 'application/json, text/event-stream'
+		};
+		if (sessionId) headers['mcp-session-id'] = sessionId;
 		fetch(url, {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
+			headers,
 			body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })
 		}).catch(() => {});
 	} catch {
