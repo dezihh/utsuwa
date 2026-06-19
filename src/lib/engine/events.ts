@@ -100,20 +100,10 @@ export function checkEvent(
 	event: EventDefinition,
 	state: CharacterState,
 	completedEvents: CompletedEventRecord[],
-	currentMessage?: string,
-	messageCount?: number
+	currentMessage?: string
 ): EventCheckResult {
 	// Check if on cooldown
 	if (isEventOnCooldown(event, completedEvents)) {
-		return { triggered: false, failedConditions: [] };
-	}
-
-	// Conditional and random events should only trigger within the first few
-	// turns of a session so they do not interrupt an ongoing conversation.
-	const EARLY_SESSION_TURN_LIMIT = 3;
-	if ((event.type === 'conditional' || event.type === 'random') &&
-		messageCount !== undefined &&
-		messageCount > EARLY_SESSION_TURN_LIMIT) {
 		return { triggered: false, failedConditions: [] };
 	}
 
@@ -139,13 +129,12 @@ export function checkAllEvents(
 	events: EventDefinition[],
 	state: CharacterState,
 	completedEvents: CompletedEventRecord[],
-	currentMessage?: string,
-	messageCount?: number
+	currentMessage?: string
 ): EventDefinition[] {
 	const triggered: EventDefinition[] = [];
 
 	for (const event of events) {
-		const result = checkEvent(event, state, completedEvents, currentMessage, messageCount);
+		const result = checkEvent(event, state, completedEvents, currentMessage);
 		if (result.triggered && result.event) {
 			triggered.push(result.event);
 		}

@@ -6,7 +6,7 @@
 
 	interface Props {
 		scene: Scene;
-		eventName?: LocalizedString;
+		eventName?: LocalizedString | string;
 		eventType?: EventType;
 		companionName?: string;
 		overlay?: boolean;
@@ -142,7 +142,7 @@
 			<div class="scene-header">
 				<div class="event-title">
 					<Icon name={eventIcon} size={18} />
-					<span>{localize(eventName)}</span>
+					<span>{typeof eventName === 'string' ? eventName : localize(eventName)}</span>
 				</div>
 				<button class="close-btn" onclick={onClose} aria-label="Close">
 					<Icon name="x" size={16} />

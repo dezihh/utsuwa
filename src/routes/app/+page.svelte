@@ -32,7 +32,7 @@
 	import { isTauri } from '$lib/services/platform';
 	import type { TTSProvider } from '$lib/types';
 	import type { StateUpdates } from '$lib/types/character';
-	import type { EventDefinition } from '$lib/types/events';
+	import type { EventDefinition, EventType } from '$lib/types/events';
 	import { onMount } from 'svelte';
 
 	// V2 companion system imports
@@ -577,7 +577,10 @@
 			try {
 				const completedEvents = await eventsApi.getCompletedEvents();
 				const wm = getWorkingMemory();
-				const triggeredEvents = checkAllEvents(allEvents, characterStore.state, completedEvents, userMessage, wm.messageCount);
+				const isEarlyInSession = (wm.messageCount ?? 0) <= 3;
+				const contextFreeTypes: EventType[] = ['milestone', 'anniversary'];
+				const triggeredEvents = checkAllEvents(allEvents, characterStore.state, completedEvents, userMessage)
+					.filter(event => contextFreeTypes.includes(event.type) || isEarlyInSession);
 				if (triggeredEvents.length > 0) {
 					activeEvent = triggeredEvents[0];
 				}

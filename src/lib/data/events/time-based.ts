@@ -4,7 +4,7 @@ export const timeBasedEvents: EventDefinition[] = [
 	// Morning greeting
 	{
 		id: 'morning_greeting',
-		name: 'Good Morning',
+		name: { en: 'Good Morning', de: 'Guten Morgen' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'time_of_day', value: 'morning' },
@@ -27,7 +27,7 @@ export const timeBasedEvents: EventDefinition[] = [
 	// Late night chat
 	{
 		id: 'late_night_chat',
-		name: 'Late Night Thoughts',
+		name: { en: 'Late Night Thoughts', de: 'Gedanken in der Nacht' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'time_of_day', value: 'night' },
@@ -54,7 +54,7 @@ export const timeBasedEvents: EventDefinition[] = [
 	// Weekend relaxation
 	{
 		id: 'weekend_relax',
-		name: 'Weekend Vibes',
+		name: { en: 'Weekend Vibes', de: 'Wochenend-Stimmung' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'day_of_week', value: 6 }, // Saturday
@@ -77,7 +77,7 @@ export const timeBasedEvents: EventDefinition[] = [
 	// Evening wind down
 	{
 		id: 'evening_wind_down',
-		name: 'Evening Chat',
+		name: { en: 'Evening Chat', de: 'Abendgespräch' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'time_of_day', value: 'evening' },
@@ -100,7 +100,7 @@ export const timeBasedEvents: EventDefinition[] = [
 	// Coming back after absence
 	{
 		id: 'return_after_absence',
-		name: 'Welcome Back',
+		name: { en: 'Welcome Back', de: 'Willkommen zurück' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'hours_since_last_interaction_min', value: 72 },
@@ -126,7 +126,7 @@ export const timeBasedEvents: EventDefinition[] = [
 	// Romantic good morning (for dating+)
 	{
 		id: 'romantic_morning',
-		name: 'Romantic Morning',
+		name: { en: 'Romantic Morning', de: 'Romantischer Morgen' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'time_of_day', value: 'morning' },
@@ -149,7 +149,7 @@ export const timeBasedEvents: EventDefinition[] = [
 	// Late night romantic
 	{
 		id: 'romantic_night',
-		name: 'Romantic Night',
+		name: { en: 'Romantic Night', de: 'Romantische Nacht' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'time_of_day', value: 'night' },

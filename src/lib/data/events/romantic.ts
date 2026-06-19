@@ -4,7 +4,7 @@ export const romanticEvents: EventDefinition[] = [
 	// Confession event
 	{
 		id: 'confession_event',
-		name: 'Confession',
+		name: { en: 'Confession', de: 'Geständnis' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'min_affection', value: 500 },
@@ -57,7 +57,7 @@ export const romanticEvents: EventDefinition[] = [
 	// First "I love you"
 	{
 		id: 'first_i_love_you',
-		name: 'First I Love You',
+		name: { en: 'First I Love You', de: 'Erstes Ich liebe dich' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'min_affection', value: 700 },
@@ -107,7 +107,7 @@ export const romanticEvents: EventDefinition[] = [
 	// Commitment discussion
 	{
 		id: 'commitment_discussion',
-		name: 'Commitment Talk',
+		name: { en: 'Commitment Talk', de: 'Gespräch über die Zukunft' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'min_affection', value: 800 },
@@ -158,7 +158,7 @@ export const romanticEvents: EventDefinition[] = [
 	// Romantic flirting (repeatable)
 	{
 		id: 'romantic_flirt',
-		name: 'Flirty Moment',
+		name: { en: 'Flirty Moment', de: 'Verführerischer Moment' },
 		type: 'random',
 		conditions: [
 			{ type: 'relationship_stage_min', value: 'dating' },
@@ -181,7 +181,7 @@ export const romanticEvents: EventDefinition[] = [
 	// Missing you (when returning after absence)
 	{
 		id: 'romantic_missed_you',
-		name: 'Missed You',
+		name: { en: 'Missed You', de: 'Vermisst' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'relationship_stage_min', value: 'dating' },
@@ -207,7 +207,7 @@ export const romanticEvents: EventDefinition[] = [
 	// Deep bond moment (for soulmate)
 	{
 		id: 'deep_bond_moment',
-		name: 'Deep Connection',
+		name: { en: 'Deep Connection', de: 'Tiefe Verbundenheit' },
 		type: 'conditional',
 		conditions: [
 			{ type: 'min_affection', value: 900 },
