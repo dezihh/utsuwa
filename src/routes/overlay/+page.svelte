@@ -40,6 +40,7 @@
 		calculateFactImportance,
 		backfillEmbeddings,
 		getEmbeddingBackfillStatus,
+		getWorkingMemory,
 		SHARED_CHARACTER_ID
 	} from '$lib/engine/memory';
 	import { getMemoryBudget } from '$lib/types/memory';
@@ -235,7 +236,8 @@
 			emotionMappings,
 			factLibraryEnabled: true,
 			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
-			memoryBudget
+			memoryBudget,
+			sessionStartedAt: getWorkingMemory().sessionStartedAt
 		};
 
 		return buildSystemPrompt(context);

@@ -8,13 +8,16 @@
 	let { message }: Props = $props();
 
 	const isUser = $derived(message.role === 'user');
+	const isSystem = $derived(message.role === 'system');
 </script>
 
+{#if !isSystem}
 <div class="message-bubble" class:user={isUser} class:assistant={!isUser}>
 	<div class="bubble">
 		{message.content || '...'}
 	</div>
 </div>
+{/if}
 
 <style>
 	.message-bubble {

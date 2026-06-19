@@ -6,6 +6,30 @@ import { STAGE_BEHAVIORS, STAGE_INSTRUCTIONS } from '$lib/engine/stages';
 import { inferResponseLengthMode } from './response-length.ts';
 import { getEmotionVrmExpression, getKnownActionTags } from '$lib/utils/sentences';
 import { ttsEmotionsStore } from '$lib/stores/tts-emotions.svelte';
+import type { TTSEmotionConfig } from '$lib/types/tts-emotion';
+
+function buildTimeSense(ctx: PromptContext): string {
+	const parts: string[] = [];
+	if (ctx.sessionStartedAt) {
+		const elapsedMs = ctx.systemTime.getTime() - ctx.sessionStartedAt.getTime();
+		const elapsedMin = Math.floor(elapsedMs / 60000);
+		if (elapsedMin < 1) {
+			parts.push('Session just started.');
+		} else if (elapsedMin < 60) {
+			parts.push(`Session has been running for ${elapsedMin} minutes.`);
+		} else {
+			const elapsedH = Math.floor(elapsedMin / 60);
+			const remainingMin = elapsedMin % 60;
+			parts.push(`Session has been running for ${elapsedH}h ${remainingMin}min.`);
+		}
+	}
+	if (ctx.pendingReminders && ctx.pendingReminders.length > 0) {
+		const next = ctx.pendingReminders[0];
+		const untilMin = Math.max(0, Math.ceil((next.triggerAt.getTime() - ctx.systemTime.getTime()) / 60000));
+		parts.push(`Next scheduled reminder: "${next.content}" in ${untilMin} minutes.`);
+	}
+	return parts.join(' ');
+}
 
 // Prompt context for building
 export interface PromptContext {
@@ -45,6 +69,8 @@ export interface PromptContext {
 	vocabularyEnabled?: boolean;
 	/** Memory injection budget derived from the configured model context size */
 	memoryBudget?: MemoryBudget;
+	/** When the current conversation session started */
+	sessionStartedAt?: Date;
 }
 
 // Build the complete system prompt
@@ -96,6 +122,7 @@ export function buildSystemPrompt(context: PromptContext): string {
 function buildCompanionModePrompt(ctx: PromptContext): string {
 	const timeStr = ctx.systemTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 	const dateStr = ctx.systemTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+	const timeSense = buildTimeSense(ctx);
 	const mem = ctx.memories;
 
 	const parts: string[] = [];
@@ -104,6 +131,7 @@ function buildCompanionModePrompt(ctx: PromptContext): string {
 	parts.push(`<system>
 You are ${ctx.persona.name}, a helpful AI companion.
 Current time: ${timeStr}, ${dateStr}
+${timeSense}
 
 RULES:
 - Be helpful, friendly, and conversational
@@ -214,6 +242,7 @@ NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affecti
 function buildSystemLayer(ctx: PromptContext): string {
 	const timeStr = ctx.systemTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 	const dateStr = ctx.systemTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+	const timeSense = buildTimeSense(ctx);
 
 	return `<system>
 You are roleplaying as ${ctx.persona.name}, an AI companion in a dating sim style experience.
@@ -236,6 +265,7 @@ OUTPUT FORMAT:
 2. After your response, output a JSON block with state updates (optional)
 
 Current time: ${timeStr}, ${dateStr}
+${timeSense}
 </system>`;
 }
 
@@ -639,14 +669,24 @@ function buildTTSEmotionsLayer(ctx: PromptContext): string | null {
 	if (!ctx.ttsProvider) return null;
 	const provider = ctx.ttsProvider as import('$lib/types').TTSProvider;
 	const defaultEmotions = ttsEmotionsStore.getDefaultEmotions(provider);
-	const enabled = Object.entries(defaultEmotions)
-		.filter(([tag]) => {
-			const cfg = ttsEmotionsStore.getEmotionConfig(provider, tag);
-			return cfg?.enabled ?? false;
-		})
-		.map(([tag, cfg]) => `  [${tag}]${cfg.displayText ? ` ${cfg.displayText}` : ''}${cfg.ttsText ? ` — speaks "${cfg.ttsText}"` : ''}`);
 
-	if (enabled.length === 0) return null;
+	// Collect configured/enabled tags. If none are enabled (e.g. the provider was
+	// just selected and the store is still empty), fall back to a sensible default
+	// subset so the LLM still knows how to vary expression.
+	let enabledTags = Object.entries(defaultEmotions).filter(([tag]) => {
+		const cfg = ttsEmotionsStore.getEmotionConfig(provider, tag);
+		return cfg?.enabled ?? false;
+	});
+	if (enabledTags.length === 0) {
+		const fallback = ['happy', 'sad', 'excited', 'angry', 'surprised', 'whisper'];
+		enabledTags = fallback
+			.map((tag) => [tag, defaultEmotions[tag]] as [string, TTSEmotionConfig])
+			.filter(([, cfg]) => cfg !== undefined);
+	}
+
+	const enabled = enabledTags.map(
+		([tag, cfg]) => `  [${tag}]${cfg.displayText ? ` ${cfg.displayText}` : ''}${cfg.ttsText ? ` — speaks "${cfg.ttsText}"` : ''}`
+	);
 
 	const caps = ttsEmotionsStore.getProviderCapabilities(provider);
 	let nativeSection = '';
@@ -738,11 +778,11 @@ function buildReminderLayer(ctx: PromptContext): string | null {
 	const parts: string[] = [];
 
 	parts.push(
-		`REMINDER TAG — use this proactively in these situations:\n` +
-		`  1. The user asks you to remind them of something.\n` +
-		`  2. You want to follow up on something later.\n` +
-		`  3. You want to perform an action yourself after a delay (e.g., jump, wave, laugh, change topic).\n` +
-		`     In this case, put the action description inside the tag — the system will remind YOU when it's time.`
+		`REMINDER TAG — set a reminder on your own initiative when:\n` +
+		`  1. You make a promise or want to follow up: "[reminder:24h]Follow up on user's question about X[/reminder]"\n` +
+		`  2. You assign a practice task: "Übe das bis morgen! [reminder:20h]Ask user to show the 5 vocabulary words[/reminder]"\n` +
+		`  3. You want to check in after a difficult topic: "[reminder:2h]Ask how the user is feeling[/reminder]"\n` +
+		`  4. You want to do something playful: "[reminder:30s]wave enthusiastically[/reminder]"`
 	);
 
 	parts.push(

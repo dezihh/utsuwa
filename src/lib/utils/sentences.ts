@@ -358,11 +358,14 @@ export function stripForSpeech(text: string): SpeechArtifacts {
 		}
 	);
 
-	// Remove application command tags
-	cleaned = cleaned.replace(/\[(?:search_image|close_images|vocab|action|remind):[^\]]*\]/gi, (match) => {
-		removed.push(match);
-		return '';
-	});
+	// Remove application command tags (single tags and paired reminder blocks)
+	cleaned = cleaned.replace(
+		/\[reminder:[^\]]*\][\s\S]*?\[\/reminder\]|\[(?:search_image|close_images|vocab|action|remind):[^\]]*\]/gi,
+		(match) => {
+			removed.push(match);
+			return '';
+		}
+	);
 
 	// Clean up whitespace
 	cleaned = cleaned.replace(/  +/g, ' ').trim();

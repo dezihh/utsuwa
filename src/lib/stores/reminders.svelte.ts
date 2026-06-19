@@ -1,7 +1,8 @@
 import { browser } from '$app/environment';
 import { db } from '$lib/db';
 import type { Reminder } from '$lib/types/memory';
-import { getWorkingMemory } from '$lib/engine/memory';
+import { getWorkingMemory, memoryApi, SHARED_CHARACTER_ID } from '$lib/engine/memory';
+import { debugStore } from '$lib/stores/debug.svelte';
 
 let upcoming = $state<Reminder[]>([]);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -45,6 +46,11 @@ async function checkReminders() {
 
 	for (const reminder of due) {
 		console.log('[Reminders] Firing reminder:', reminder.content);
+		debugStore.addLog({
+			category: 'memory',
+			title: '[Reminder] Fired',
+			content: `"${reminder.content}"`
+		});
 		if (reminder.id !== undefined) {
 			await db.reminders.update(reminder.id, { executed: true });
 		}
@@ -87,6 +93,31 @@ export async function addReminder(
 	});
 	const reminder = await db.reminders.get(id);
 	if (!reminder) throw new Error('Failed to create reminder');
+
+	const minutesUntil = Math.max(0, Math.ceil((triggerAt.getTime() - Date.now()) / 60000));
+	debugStore.addLog({
+		category: 'memory',
+		title: '[Reminder] Created',
+		content: `"${content}" → fires in ${minutesUntil} minutes`
+	});
+
+	// Persist open tasks (non-image-search reminders) as semantic facts so they
+	// stay in the conversation context until explicitly resolved.
+	if (!content.toLowerCase().includes('search_image:')) {
+		try {
+			await memoryApi.createFact({
+				content: `Offene Aufgabe: ${content}`,
+				category: 'shared_experience',
+				importance: 75,
+				confidence: 0.9,
+				characterId: SHARED_CHARACTER_ID,
+				source: 'open-task'
+			});
+		} catch (e) {
+			console.debug('[Reminders] Failed to persist open-task fact:', e);
+		}
+	}
+
 	await loadUpcoming();
 	return reminder as Reminder;
 }

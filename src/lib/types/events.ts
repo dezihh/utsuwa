@@ -57,7 +57,7 @@ export interface Scene {
 // Full event definition
 export interface EventDefinition {
 	id: string;
-	name: string;
+	name: LocalizedString;
 	type: EventType;
 
 	// Trigger conditions (all must be met)

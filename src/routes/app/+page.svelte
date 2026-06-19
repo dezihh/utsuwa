@@ -576,7 +576,8 @@
 		if (characterStore.appMode === 'dating_sim') {
 			try {
 				const completedEvents = await eventsApi.getCompletedEvents();
-				const triggeredEvents = checkAllEvents(allEvents, characterStore.state, completedEvents, userMessage);
+				const wm = getWorkingMemory();
+				const triggeredEvents = checkAllEvents(allEvents, characterStore.state, completedEvents, userMessage, wm.messageCount);
 				if (triggeredEvents.length > 0) {
 					activeEvent = triggeredEvents[0];
 				}
@@ -683,7 +684,8 @@
 			imageModalQuery: imageSearchStore.isOpen ? imageSearchStore.currentQuery : undefined,
 			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
 			factLibraryEnabled: true,
-			memoryBudget
+			memoryBudget,
+			sessionStartedAt: getWorkingMemory().sessionStartedAt
 		};
 
 		const systemPrompt = buildSystemPrompt(context);
@@ -1155,6 +1157,10 @@
 	function handleEventClose() {
 		activeEvent = null;
 	}
+
+	async function deleteReminder(id: number) {
+		await reminderStore.deleteReminder(id);
+	}
 </script>
 
 <div class="app-container" style:--debug-panel-height={debugStore.panelVisible ? '30vh' : '0px'}>
@@ -1165,6 +1171,8 @@
 		sidebarOpen={sidebarOpen}
 		onToggleSidebar={() => sidebarOpen = !sidebarOpen}
 		{rightOffset}
+		upcomingReminders={reminderStore.upcoming}
+		onDeleteReminder={deleteReminder}
 	/>
 	{#if showInfoModal}
 		<InfoModal onClose={() => showInfoModal = false} />
