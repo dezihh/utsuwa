@@ -46,6 +46,7 @@
 	import { getMemoryBudget } from '$lib/types/memory';
 	import { initEmbeddingModel, subscribeToEmbeddingState } from '$lib/services/embeddings';
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
+	import { stripTagsForBubble } from '$lib/utils/sentences';
 
 	let latestResponse = $state('');
 	let isTyping = $state(false);
@@ -355,7 +356,7 @@
 			isTyping = false;
 			const cleanedResponse = await processCompanionResponse(content, fullContent);
 			chatStore.updateLastMessage(cleanedResponse);
-			latestResponse = cleanedResponse;
+			latestResponse = stripTagsForBubble(cleanedResponse);
 
 			if (cleanedResponse) {
 				vrmStore.startTalking(cleanedResponse);

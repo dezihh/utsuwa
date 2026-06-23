@@ -62,7 +62,7 @@
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
 	import { allEvents } from '$lib/data/events';
 	import { debugStore } from '$lib/stores/debug.svelte';
-	import { splitIntoSegments, stripAllTags, stripForApiContext, stripForSpeech, stripTagsForBubble, isContinueRequest } from '$lib/utils/sentences';
+	import { splitIntoSegments, splitIntoSentences, stripAllTags, stripForApiContext, stripForSpeech, stripTagsForBubble, isContinueRequest } from '$lib/utils/sentences';
 	import { reminderStore } from '$lib/stores/reminders.svelte';
 	import { tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
 	import { extractImageSearchTags, tryExtractDelayedImageSearch, isCloseImageRequest } from '$lib/utils/image-search';
@@ -141,6 +141,15 @@
 	let sessionSegments: SpeechSegment[] = [];
 
 	let lastPlayedSegmentIndex = -1;
+
+	// Fallback text for the speech bubble when a TTS segment is only emotion sounds.
+	function getLastChatSentence(): string {
+		const messages = chatStore.messages;
+		const last = messages[messages.length - 1];
+		if (!last || last.role !== 'assistant' || !last.content) return '';
+		const sentences = splitIntoSentences(stripAllTags(last.content));
+		return sentences[sentences.length - 1] ?? '';
+	}
 
 	// Chat sidebar state
 	let sidebarOpen = $state(displayStore.chatDisplayMode !== 'bubble');
@@ -826,7 +835,7 @@
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-							const bubbleSentence = stripTagsForBubble(sentence);
+							const bubbleSentence = stripTagsForBubble(sentence) || getLastChatSentence();
 							if (bubbleSentence) latestResponse = bubbleSentence;
 							duplexStore.setTtsText(sentence);
 						}
@@ -936,7 +945,7 @@
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-							const bubbleSentence = stripTagsForBubble(sentence);
+							const bubbleSentence = stripTagsForBubble(sentence) || getLastChatSentence();
 							if (bubbleSentence) latestResponse = bubbleSentence;
 							duplexStore.setTtsText(sentence);
 						}
@@ -1065,7 +1074,7 @@
 				ttsStore.beginSpeechSession(ttsOptions!, {
 					onSentenceStart: (sentence) => {
 						isTyping = false;
-						const bubbleSentence = stripTagsForBubble(sentence);
+						const bubbleSentence = stripTagsForBubble(sentence) || getLastChatSentence();
 						if (bubbleSentence) latestResponse = bubbleSentence;
 						spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
 						duplexStore.setTtsText(sentence);
