@@ -2,7 +2,7 @@
 	import VrmScene from '$lib/components/vrm/VrmScene.svelte';
 	import CompanionStatus from '$lib/components/ui/CompanionStatus.svelte';
 	import FloatingStatIndicators from '$lib/components/ui/FloatingStatIndicators.svelte';
-	import { TopRightButtons, TopLeftButtons, InfoModal, ImageSearchModal } from '$lib/components/ui';
+	import { TopRightButtons, TopLeftButtons, InfoModal, ImageSearchModal, Icon } from '$lib/components/ui';
 	import BottomChatBar from '$lib/components/chat/BottomChatBar.svelte';
 	import SpeechBubble from '$lib/components/chat/SpeechBubble.svelte';
 	import ChatSidebar from '$lib/components/chat/ChatSidebar.svelte';
@@ -1261,9 +1261,18 @@
 
 		<!-- Error toast for chat errors -->
 		{#if chatStore.error}
-			<div class="chat-error-toast" onclick={() => chatStore.setError(null)} role="button" tabindex="0" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chatStore.setError(null); } }}>
-				<span>{chatStore.error}</span>
-				<button type="button" class="toast-dismiss" aria-label="Dismiss">✕</button>
+			<div class="chat-error-toast" role="alert">
+				<span class="chat-error-text">{chatStore.error}</span>
+				<button
+					type="button"
+					class="toast-copy"
+					aria-label="Copy error"
+					title="Copy error"
+					onclick={() => navigator.clipboard?.writeText(chatStore.error ?? '')}
+				>
+					<Icon name="copy" size={14} />
+				</button>
+				<button type="button" class="toast-dismiss" onclick={() => chatStore.dismissError()} aria-label="Dismiss">✕</button>
 			</div>
 		{/if}
 
@@ -1371,7 +1380,6 @@
 		border-radius: 16px;
 		color: white;
 		font-size: 0.875rem;
-		cursor: pointer;
 		z-index: 50;
 		animation: errorSlideDownShake 0.5s ease-out;
 		box-shadow:
@@ -1379,14 +1387,25 @@
 			0 2px 4px rgba(0, 0, 0, 0.1),
 			inset 0 1px 0 rgba(255, 255, 255, 0.3);
 		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+		user-select: text;
+		-webkit-user-select: text;
+		-moz-user-select: text;
 	}
 
-	.error-toast span,
-	.chat-error-toast span {
+	.error-toast span {
 		flex: 1;
 		word-wrap: break-word;
 	}
 
+	.chat-error-text {
+		flex: 1;
+		word-wrap: break-word;
+		user-select: text;
+		-webkit-user-select: text;
+		-moz-user-select: text;
+	}
+
+	.toast-copy,
 	.toast-dismiss {
 		background: rgba(255, 255, 255, 0.2);
 		border: none;
@@ -1401,8 +1420,10 @@
 		align-items: center;
 		justify-content: center;
 		transition: all 0.15s ease;
+		flex-shrink: 0;
 	}
 
+	.toast-copy:hover,
 	.toast-dismiss:hover {
 		opacity: 1;
 		background: rgba(255, 255, 255, 0.3);
