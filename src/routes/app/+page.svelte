@@ -824,8 +824,8 @@
 						onSentenceStart: (sentence, index) => {
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
-							latestResponse = sentence;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
+							latestResponse = spokenSoFar;
 							duplexStore.setTtsText(sentence);
 						}
 					});
@@ -933,8 +933,8 @@
 						onSentenceStart: (sentence, index) => {
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
-							latestResponse = sentence;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
+							latestResponse = spokenSoFar;
 							duplexStore.setTtsText(sentence);
 						}
 					});
