@@ -401,6 +401,7 @@
 					ttsStore.pushSpeechSegment(seg);
 				}
 				await ttsStore.endSpeechSession();
+				currentBubbleSentence = latestResponse;
 			}
 		} catch (err) {
 			chatStore.setError(err instanceof Error ? err.message : 'Unknown error');

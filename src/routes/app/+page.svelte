@@ -843,6 +843,7 @@
 					});
 					for (const seg of unplayed) ttsStore.pushSpeechSegment(seg);
 					await ttsStore.endSpeechSession();
+					currentBubbleSentence = latestResponse;
 					onTTSDone();
 					return;
 				}
@@ -1085,10 +1086,12 @@
 					ttsStore.pushSpeechSegment(seg);
 				}
 				await ttsStore.endSpeechSession();
+				currentBubbleSentence = latestResponse;
 				onTTSDone();
 			} else if (ttsEnabled && ttsStarted) {
 				// Pipeline session already open — close it and wait for remaining audio.
 				await ttsStore.endSpeechSession();
+				currentBubbleSentence = latestResponse;
 				spokenSoFar = '';
 				onTTSDone();
 			} else {
