@@ -15,6 +15,11 @@ interface ChatOptions {
 	apiKey?: string;
 	baseURL?: string;
 	systemPrompt: string;
+	llmTemperature?: number;
+	llmTopP?: number;
+	llmMaxTokens?: number;
+	llmPresencePenalty?: number;
+	llmFrequencyPenalty?: number;
 }
 
 function getCurrentSiteOrigin(): string | undefined {
@@ -65,7 +70,19 @@ export async function streamChatDirect(
 	onDone: () => void,
 	signal?: AbortSignal
 ): Promise<void> {
-	const { messages, provider, model, apiKey, baseURL, systemPrompt } = options;
+	const {
+		messages,
+		provider,
+		model,
+		apiKey,
+		baseURL,
+		systemPrompt,
+		llmTemperature,
+		llmTopP,
+		llmMaxTokens,
+		llmPresencePenalty,
+		llmFrequencyPenalty
+	} = options;
 
 	const isCustomEndpoint = provider === 'custom-endpoint';
 	const requiresKey = provider !== 'custom-endpoint';
@@ -93,21 +110,33 @@ export async function streamChatDirect(
 
 	const headers = buildHeaders(provider, apiKey);
 
+	// Build request body with optional sampling parameters.
+	const anthropicBody: Record<string, unknown> = {
+		model,
+		max_tokens: llmMaxTokens ?? 4096,
+		system: combinedSystem,
+		messages: messages.filter((m) => m.role !== 'system'),
+		stream: true
+	};
+	if (llmTemperature !== undefined) anthropicBody.temperature = llmTemperature;
+	if (llmTopP !== undefined) anthropicBody.top_p = llmTopP;
+
+	const openAICompatibleBody: Record<string, unknown> = {
+		model,
+		messages: messagesWithSystem,
+		stream: true
+	};
+	if (llmTemperature !== undefined) openAICompatibleBody.temperature = llmTemperature;
+	if (llmTopP !== undefined) openAICompatibleBody.top_p = llmTopP;
+	if (llmMaxTokens !== undefined) openAICompatibleBody.max_tokens = llmMaxTokens;
+	if (llmPresencePenalty !== undefined) openAICompatibleBody.presence_penalty = llmPresencePenalty;
+	if (llmFrequencyPenalty !== undefined) openAICompatibleBody.frequency_penalty = llmFrequencyPenalty;
+
 	// Anthropic uses a different request format
 	const body =
 		provider === 'anthropic'
-			? JSON.stringify({
-					model,
-					max_tokens: 4096,
-					system: combinedSystem,
-					messages: messages.filter((m) => m.role !== 'system'),
-					stream: true
-				})
-			: JSON.stringify({
-					model,
-					messages: messagesWithSystem,
-					stream: true
-				});
+			? JSON.stringify(anthropicBody)
+			: JSON.stringify(openAICompatibleBody);
 
 	const url =
 		provider === 'anthropic'
@@ -119,14 +148,18 @@ export async function streamChatDirect(
 
 		if (!response.ok) {
 			const errorData = await response.json().catch(() => ({}));
-			const msg =
+			let msg =
 				(errorData as { error?: { message?: string } })?.error?.message ||
 				`Provider error (${response.status})`;
-			onError(
-				isCustomEndpoint && response.status === 404
-					? `${msg}. Pull or select an installed model.`
-					: msg
-			);
+
+			// Surface deprecated/unavailable models as an actionable user message.
+			if (/no longer available|has been deprecated|has been shut down|is not available/i.test(msg)) {
+				msg = `The selected model is no longer available. Please choose a different model in Settings > Character > AI Services. (${msg})`;
+			} else if (isCustomEndpoint && response.status === 404) {
+				msg = `${msg}. Pull or select an installed model.`;
+			}
+
+			onError(msg);
 			return;
 		}
 

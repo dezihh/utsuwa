@@ -651,6 +651,15 @@
 		modulesStore.setModuleSetting('consciousness', 'contextSize', value);
 	}
 
+	function handleLLMParamChange(
+		key: 'llmTemperature' | 'llmTopP' | 'llmMaxTokens' | 'llmPresencePenalty' | 'llmFrequencyPenalty',
+		value: number | undefined
+	) {
+		const providerId = consciousnessSettings.activeProvider as string;
+		if (!providerId) return;
+		settingsStore.setProviderConfig(providerId, { [key]: value });
+	}
+
 	function handleTTSProviderChange(providerId: string) {
 		modulesStore.setModuleSetting('speech', 'activeProvider', providerId);
 		const provider = getTTSProvider(providerId);
@@ -1266,6 +1275,106 @@
 									</div>
 									<p class="provider-note">Maximum context size of the selected model. Used to scale memory injection.</p>
 								</div>
+
+								<!-- Advanced LLM Parameters -->
+								<details class="llm-advanced-params">
+									<summary>Advanced Parameters</summary>
+									<div class="llm-param-grid">
+										<div class="llm-param-row">
+											<label class="llm-param-label" for="ps-llm-temperature">
+												Temperature
+												<span class="llm-param-value">{(settingsStore.getProviderConfig((consciousnessSettings.activeProvider as string) || 'openai').llmTemperature ?? 0.7).toFixed(2)}</span>
+											</label>
+											<input
+												id="ps-llm-temperature"
+												type="range"
+												class="llm-param-slider"
+												min="0"
+												max="2"
+												step="0.05"
+												value={settingsStore.getProviderConfig((consciousnessSettings.activeProvider as string) || 'openai').llmTemperature ?? 0.7}
+												oninput={(e) => handleLLMParamChange('llmTemperature', Number(e.currentTarget.value))}
+											/>
+											<p class="provider-note">Controls randomness: 0 = focused/repetitive, 2 = highly creative/unpredictable. Default: 0.7</p>
+										</div>
+
+										<div class="llm-param-row">
+											<label class="llm-param-label" for="ps-llm-top-p">
+												Top-P
+												<span class="llm-param-value">{(settingsStore.getProviderConfig((consciousnessSettings.activeProvider as string) || 'openai').llmTopP ?? 1).toFixed(2)}</span>
+											</label>
+											<input
+												id="ps-llm-top-p"
+												type="range"
+												class="llm-param-slider"
+												min="0"
+												max="1"
+												step="0.05"
+												value={settingsStore.getProviderConfig((consciousnessSettings.activeProvider as string) || 'openai').llmTopP ?? 1}
+												oninput={(e) => handleLLMParamChange('llmTopP', Number(e.currentTarget.value))}
+											/>
+											<p class="provider-note">Nucleus sampling: only consider tokens whose cumulative probability reaches this value. 1 = disabled. Default: 1.0</p>
+										</div>
+
+										<div class="llm-param-row">
+											<label class="llm-param-label" for="ps-llm-max-tokens">
+												Max Tokens
+												<span class="llm-param-value">{settingsStore.getProviderConfig((consciousnessSettings.activeProvider as string) || 'openai').llmMaxTokens ?? '—'}</span>
+											</label>
+											<input
+												id="ps-llm-max-tokens"
+												type="number"
+												class="api-key-input"
+												min="1"
+												max="32768"
+												step="1"
+												placeholder="Unlimited"
+												value={settingsStore.getProviderConfig((consciousnessSettings.activeProvider as string) || 'openai').llmMaxTokens ?? ''}
+												oninput={(e) => {
+													const val = e.currentTarget.value;
+													handleLLMParamChange('llmMaxTokens', val ? Number(val) : undefined);
+												}}
+											/>
+											<p class="provider-note">Hard limit for the number of tokens in the response. Leave empty to use the provider default.</p>
+										</div>
+
+										<div class="llm-param-row">
+											<label class="llm-param-label" for="ps-llm-presence-penalty">
+												Presence Penalty
+												<span class="llm-param-value">{(settingsStore.getProviderConfig((consciousnessSettings.activeProvider as string) || 'openai').llmPresencePenalty ?? 0).toFixed(1)}</span>
+											</label>
+											<input
+												id="ps-llm-presence-penalty"
+												type="range"
+												class="llm-param-slider"
+												min="-2"
+												max="2"
+												step="0.1"
+												value={settingsStore.getProviderConfig((consciousnessSettings.activeProvider as string) || 'openai').llmPresencePenalty ?? 0}
+												oninput={(e) => handleLLMParamChange('llmPresencePenalty', Number(e.currentTarget.value))}
+											/>
+											<p class="provider-note">Penalizes tokens that have already appeared in the text, regardless of how often. Positive values reduce repetition. Default: 0</p>
+										</div>
+
+										<div class="llm-param-row">
+											<label class="llm-param-label" for="ps-llm-frequency-penalty">
+												Frequency Penalty
+												<span class="llm-param-value">{(settingsStore.getProviderConfig((consciousnessSettings.activeProvider as string) || 'openai').llmFrequencyPenalty ?? 0).toFixed(1)}</span>
+											</label>
+											<input
+												id="ps-llm-frequency-penalty"
+												type="range"
+												class="llm-param-slider"
+												min="-2"
+												max="2"
+												step="0.1"
+												value={settingsStore.getProviderConfig((consciousnessSettings.activeProvider as string) || 'openai').llmFrequencyPenalty ?? 0}
+												oninput={(e) => handleLLMParamChange('llmFrequencyPenalty', Number(e.currentTarget.value))}
+											/>
+											<p class="provider-note">Penalizes tokens based on how often they have already appeared. Higher values reduce repetition more strongly. Default: 0</p>
+										</div>
+									</div>
+								</details>
 							{/if}
 						</div>
 
@@ -4549,6 +4658,60 @@
 		font-size: 0.75rem;
 		color: var(--text-tertiary);
 		white-space: nowrap;
+	}
+
+	.llm-advanced-params {
+		margin-top: 0.75rem;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 0.5rem;
+		padding: 0.75rem;
+		background: rgba(0, 0, 0, 0.02);
+	}
+
+	:global(.dark) .llm-advanced-params {
+		border-color: rgba(255, 255, 255, 0.08);
+		background: rgba(255, 255, 255, 0.02);
+	}
+
+	.llm-advanced-params summary {
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--text-secondary);
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.llm-param-grid {
+		margin-top: 0.75rem;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+		gap: 0.75rem;
+	}
+
+	.llm-param-row {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.llm-param-label {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: var(--text-secondary);
+	}
+
+	.llm-param-value {
+		font-size: 0.75rem;
+		color: var(--text-tertiary);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.llm-param-slider {
+		width: 100%;
+		cursor: pointer;
 	}
 
 	@media (max-width: 640px) {

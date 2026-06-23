@@ -1,4 +1,4 @@
-import { streamText } from '@xsai/stream-text';
+import { streamText, type StreamTextOptions } from '@xsai/stream-text';
 import type { RequestHandler } from './$types';
 import type { LLMProvider } from '$lib/types';
 import { getChatBaseUrl } from '$lib/services/providers/local-endpoints';
@@ -20,19 +20,33 @@ async function streamOpenAICompatibleChat(
 	url: string,
 	model: string,
 	messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-	apiKey?: string
+	apiKey?: string,
+	options?: {
+		llmTemperature?: number;
+		llmTopP?: number;
+		llmMaxTokens?: number;
+		llmPresencePenalty?: number;
+		llmFrequencyPenalty?: number;
+	}
 ): Promise<Response> {
 	const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 	if (apiKey) {
 		headers.Authorization = `Bearer ${apiKey}`;
 	}
 
+	const body: Record<string, unknown> = { model, messages, stream: true };
+	if (options?.llmTemperature !== undefined) body.temperature = options.llmTemperature;
+	if (options?.llmTopP !== undefined) body.top_p = options.llmTopP;
+	if (options?.llmMaxTokens !== undefined) body.max_tokens = options.llmMaxTokens;
+	if (options?.llmPresencePenalty !== undefined) body.presence_penalty = options.llmPresencePenalty;
+	if (options?.llmFrequencyPenalty !== undefined) body.frequency_penalty = options.llmFrequencyPenalty;
+
 	let response: Response;
 	try {
 		response = await fetch(url, {
 			method: 'POST',
 			headers,
-			body: JSON.stringify({ model, messages, stream: true })
+			body: JSON.stringify(body)
 		});
 	} catch (err) {
 		return new Response(JSON.stringify({ error: formatCustomEndpointError(err, url) }), {
@@ -43,9 +57,15 @@ async function streamOpenAICompatibleChat(
 
 	if (!response.ok) {
 		const errorData = await response.json().catch(() => ({}));
-		const msg =
+		let msg =
 			(errorData as { error?: { message?: string } })?.error?.message ||
 			`Provider error (${response.status})`;
+
+		// Surface deprecated/unavailable models as an actionable user message.
+		if (/no longer available|has been deprecated|has been shut down|is not available/i.test(msg)) {
+			msg = `The selected model is no longer available. Please choose a different model in Settings > Character > AI Services. (${msg})`;
+		}
+
 		return new Response(JSON.stringify({ error: msg }), {
 			status: 502,
 			headers: { 'Content-Type': 'application/json' }
@@ -115,7 +135,27 @@ async function streamOpenAICompatibleChat(
 
 export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
-	const { messages, provider, model, apiKey, baseURL, systemPrompt } = body;
+	const {
+		messages,
+		provider,
+		model,
+		apiKey,
+		baseURL,
+		systemPrompt,
+		llmTemperature,
+		llmTopP,
+		llmMaxTokens,
+		llmPresencePenalty,
+		llmFrequencyPenalty
+	} = body;
+
+	const llmOptions = {
+		llmTemperature,
+		llmTopP,
+		llmMaxTokens,
+		llmPresencePenalty,
+		llmFrequencyPenalty
+	};
 
 	const typedProvider = provider as LLMProvider;
 	const isCustomEndpoint = typedProvider === 'custom-endpoint';
@@ -172,18 +212,25 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		if (isCustomEndpoint) {
 			const chatURL = `${providerBaseURL.replace(/\/+$/, '')}/chat/completions`;
-			return await streamOpenAICompatibleChat(chatURL, model, messagesWithSystem, apiKey || undefined);
+			return await streamOpenAICompatibleChat(chatURL, model, messagesWithSystem, apiKey || undefined, llmOptions);
 		}
 
 		let result;
 		try {
-			result = streamText({
+			const xsaiOptions: StreamTextOptions & Record<string, unknown> = {
 				apiKey: apiKey || 'not-needed',
 				baseURL: providerBaseURL,
 				model,
 				messages: messagesWithSystem,
 				headers
-			});
+			};
+			if (llmTemperature !== undefined) xsaiOptions.temperature = llmTemperature;
+			if (llmTopP !== undefined) xsaiOptions.topP = llmTopP;
+			if (llmMaxTokens !== undefined) xsaiOptions.maxTokens = llmMaxTokens;
+			if (llmPresencePenalty !== undefined) xsaiOptions.presencePenalty = llmPresencePenalty;
+			if (llmFrequencyPenalty !== undefined) xsaiOptions.frequencyPenalty = llmFrequencyPenalty;
+
+			result = streamText(xsaiOptions);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : 'Failed to connect to provider';
 			return new Response(JSON.stringify({ error: msg }), {
