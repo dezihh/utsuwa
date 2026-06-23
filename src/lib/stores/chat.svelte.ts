@@ -13,7 +13,6 @@ function createChatStore() {
 	let isLoading = $state(false);
 	let error = $state<string | null>(null);
 	let streamingContent = $state('');
-	let errorTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	function addMessage(role: 'user' | 'assistant' | 'system', content: string) {
 		const message: Message = {
@@ -43,19 +42,12 @@ function createChatStore() {
 	}
 
 	function setError(err: string | null) {
-		// Clear any existing timeout
-		if (errorTimeout) {
-			clearTimeout(errorTimeout);
-			errorTimeout = null;
-		}
+		// Errors now persist until the user explicitly dismisses them.
 		error = err;
-		// Auto-dismiss after 5 seconds if error is set
-		if (err) {
-			errorTimeout = setTimeout(() => {
-				error = null;
-				errorTimeout = null;
-			}, 5000);
-		}
+	}
+
+	function dismissError() {
+		error = null;
 	}
 
 	function setStreamingContent(content: string) {
@@ -91,6 +83,7 @@ function createChatStore() {
 		removeLastMessage,
 		setLoading,
 		setError,
+		dismissError,
 		setStreamingContent,
 		clearMessages
 	};

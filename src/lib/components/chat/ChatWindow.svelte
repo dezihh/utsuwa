@@ -529,8 +529,11 @@
 	<MessageList />
 
 	{#if chatStore.error}
-		<div class="error-message">
-			{chatStore.error}
+		<div class="error-message" role="alert">
+			<span class="error-text">{chatStore.error}</span>
+			<button class="error-close" onclick={() => chatStore.dismissError()} aria-label="Dismiss error">
+				<Icon name="x" size={14} />
+			</button>
 		</div>
 	{/if}
 
@@ -582,6 +585,31 @@
 		border-radius: 0.5rem;
 		color: var(--color-error);
 		font-size: 0.75rem;
+		display: flex;
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
+
+	.error-text {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.error-close {
+		flex-shrink: 0;
+		padding: 0.25rem;
+		background: none;
+		border: none;
+		color: var(--color-error);
+		cursor: pointer;
+		border-radius: 0.25rem;
+		opacity: 0.7;
+		transition: opacity 0.15s, background 0.15s;
+	}
+
+	.error-close:hover {
+		opacity: 1;
+		background: color-mix(in srgb, var(--color-error) 15%, transparent);
 	}
 
 	.reminder-badge {
