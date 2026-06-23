@@ -360,7 +360,7 @@ export function stripForSpeech(text: string): SpeechArtifacts {
 
 	// Remove application command tags (single tags and paired reminder blocks)
 	cleaned = cleaned.replace(
-		/\[reminder:[^\]]*\][\s\S]*?\[\/reminder\]|\[(?:search_image|close_images|vocab|action|remind):[^\]]*\]/gi,
+		/\[reminder:[^\]]*\][\s\S]*?\[\/reminder\]|\[(?:search_image|close_images|vocab|action|emote|remind):[^\]]*\]/gi,
 		(match) => {
 			removed.push(match);
 			return '';

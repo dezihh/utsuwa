@@ -220,11 +220,13 @@ function cleanDialogue(text: string): string {
 	cleaned = cleaned.replace(/\{[^}]*"(?:mood|delta|emotion)[^}]*\}/gi, '');
 	cleaned = cleaned.replace(/\{[^{}]*"(?:new_memory|structured_fact_seen|triggered_event|mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta)[^{}]*\}/gi, '');
 
-	// Remove action asterisks (we want dialogue only)
-	cleaned = cleaned.replace(/\*[^*]+\*/g, '');
+	// Remove [emote:...] action tags. The prompt instructs the model to use these
+	// instead of asterisks for physical/emotional actions.
+	cleaned = cleaned.replace(/\[emote:[^\]]+\]/gi, '');
 
-	// Remove stage directions in parentheses
-	cleaned = cleaned.replace(/\([^)]*(?:smiles|laughs|sighs|blushes|looks|nods)[^)]*\)/gi, '');
+	// Keep asterisks and parentheses in the dialogue — the model should not use
+	// them for actions, and stripping them risks removing meaningful emphasis
+	// or parenthetical narration.
 
 	// Remove character name prefixes (e.g., "Character: ")
 	cleaned = cleaned.replace(/^[A-Za-z]+:\s*/gm, '');
