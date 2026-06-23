@@ -139,6 +139,7 @@
 	// orchestrator index of the last segment that started playing.
 	// Used by "setze fort" to replay unspoken content without a new LLM call.
 	let sessionSegments: SpeechSegment[] = [];
+
 	let lastPlayedSegmentIndex = -1;
 
 	// Chat sidebar state
@@ -825,7 +826,7 @@
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-							latestResponse = spokenSoFar;
+							latestResponse = stripAllTags(sentence);
 							duplexStore.setTtsText(sentence);
 						}
 					});
@@ -934,7 +935,7 @@
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-							latestResponse = spokenSoFar;
+							latestResponse = stripAllTags(sentence);
 							duplexStore.setTtsText(sentence);
 						}
 					});
@@ -1062,7 +1063,7 @@
 				ttsStore.beginSpeechSession(ttsOptions!, {
 					onSentenceStart: (sentence) => {
 						isTyping = false;
-						latestResponse = sentence;
+						latestResponse = stripAllTags(sentence);
 						spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
 						duplexStore.setTtsText(sentence);
 					}
