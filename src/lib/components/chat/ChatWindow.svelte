@@ -529,23 +529,8 @@
 	<MessageList />
 
 	{#if chatStore.error}
-		<div class="error-overlay" role="presentation" onclick={(e) => e.stopPropagation()}>
-			<div class="error-message" role="alert">
-				<span class="error-text">{chatStore.error}</span>
-				<div class="error-actions">
-					<button
-						class="error-copy"
-						onclick={() => navigator.clipboard?.writeText(chatStore.error ?? '')}
-						aria-label="Copy error"
-						title="Copy error"
-					>
-						<Icon name="copy" size={14} />
-					</button>
-					<button class="error-close" onclick={() => chatStore.dismissError()} aria-label="Dismiss error">
-						<Icon name="x" size={14} />
-					</button>
-				</div>
-			</div>
+		<div class="error-message">
+			{chatStore.error}
 		</div>
 	{/if}
 
@@ -589,67 +574,14 @@
 		padding: 0.375rem;
 	}
 
-	.error-overlay {
-		position: fixed;
-		inset: 0;
-		z-index: 1000;
-		background: rgba(0, 0, 0, 0.35);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 1rem;
-	}
-
 	.error-message {
-		max-width: 600px;
-		width: 100%;
-		padding: 1rem 1.25rem;
-		background: var(--glass-bg, rgba(255, 255, 255, 0.95));
-		border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
-		border-radius: 0.75rem;
+		margin: 0 1rem;
+		padding: 0.75rem 1rem;
+		background: color-mix(in srgb, var(--color-error) 10%, transparent);
+		border: 1px solid color-mix(in srgb, var(--color-error) 20%, transparent);
+		border-radius: 0.5rem;
 		color: var(--color-error);
-		font-size: 0.875rem;
-		line-height: 1.5;
-		display: flex;
-		align-items: flex-start;
-		gap: 0.75rem;
-		box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-		user-select: text;
-		-webkit-user-select: text;
-		-moz-user-select: text;
-	}
-
-	.error-text {
-		flex: 1;
-		min-width: 0;
-		user-select: text;
-		-webkit-user-select: text;
-		-moz-user-select: text;
-	}
-
-	.error-actions {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		flex-shrink: 0;
-	}
-
-	.error-copy,
-	.error-close {
-		padding: 0.375rem;
-		background: none;
-		border: none;
-		color: var(--color-error);
-		cursor: pointer;
-		border-radius: 0.375rem;
-		opacity: 0.7;
-		transition: opacity 0.15s, background 0.15s;
-	}
-
-	.error-copy:hover,
-	.error-close:hover {
-		opacity: 1;
-		background: color-mix(in srgb, var(--color-error) 15%, transparent);
+		font-size: 0.75rem;
 	}
 
 	.reminder-badge {
