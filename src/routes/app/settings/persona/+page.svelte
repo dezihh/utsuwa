@@ -576,10 +576,10 @@
 			settingsStore.markProviderAdded(providerId);
 
 			if (providerId === 'custom-endpoint') {
-				// Apply default template if none set
+				// Default to the "custom" template so the user can enter any URL manually.
 				const config = settingsStore.getProviderConfig(providerId);
 				if (!config.endpointTemplate) {
-					handleLLMEndpointTemplateChange('ollama');
+					handleLLMEndpointTemplateChange('custom');
 				} else {
 					applyEndpointTemplate(config.endpointTemplate);
 				}
@@ -603,7 +603,7 @@
 		const config = settingsStore.getProviderConfig('custom-endpoint');
 		settingsStore.setProviderConfig('custom-endpoint', {
 			endpointTemplate: templateId as import('$lib/types').CustomEndpointTemplate,
-			baseUrl: config.baseUrl || template.baseUrl
+			baseUrl: template.id === 'custom' ? config.baseUrl : template.baseUrl
 		});
 		modulesStore.setModuleSetting('consciousness', 'endpointTemplate', templateId);
 	}
@@ -611,6 +611,29 @@
 	function handleLLMEndpointTemplateChange(templateId: string) {
 		applyEndpointTemplate(templateId);
 		debouncedFetchLLMModels('custom-endpoint');
+	}
+
+	function handleLLMBaseUrlChange(baseUrl: string) {
+		const providerId = consciousnessSettings.activeProvider as string;
+		if (!providerId) return;
+
+		llmFetchError = null;
+		settingsStore.setProviderConfig(providerId, { baseUrl });
+
+		// If the user edits the URL away from the selected preset, switch to custom mode.
+		if (providerId === 'custom-endpoint') {
+			const provider = getLLMProvider('custom-endpoint');
+			const config = settingsStore.getProviderConfig(providerId);
+			const currentTemplate = provider?.endpointTemplates?.find(t => t.id === config.endpointTemplate);
+			if (currentTemplate && currentTemplate.id !== 'custom' && baseUrl !== currentTemplate.baseUrl) {
+				settingsStore.setProviderConfig(providerId, {
+					endpointTemplate: 'custom' as import('$lib/types').CustomEndpointTemplate,
+					baseUrl
+				});
+				modulesStore.setModuleSetting('consciousness', 'endpointTemplate', 'custom');
+			}
+			if (baseUrl) debouncedFetchLLMModels(providerId);
+		}
 	}
 
 	function handleLLMModelChange(modelId: string) {
@@ -689,18 +712,6 @@
 		const config = settingsStore.getProviderConfig(providerId);
 		if (config.apiKey && (providerId !== 'custom-endpoint' || config.baseUrl)) {
 			debouncedFetchLLMModels();
-		}
-	}
-
-	function handleLLMBaseUrlChange(baseUrl: string) {
-		const providerId = consciousnessSettings.activeProvider as string;
-		if (!providerId) return;
-
-		llmFetchError = null;
-		settingsStore.setProviderConfig(providerId, { baseUrl });
-		const config = settingsStore.getProviderConfig(providerId);
-		if (providerId === 'custom-endpoint' && baseUrl) {
-			debouncedFetchLLMModels(providerId);
 		}
 	}
 
@@ -1148,7 +1159,7 @@
 											<div class="api-key-row">
 												<select
 													class="api-key-input"
-													value={settingsStore.getProviderConfig(provider.id).endpointTemplate ?? 'ollama'}
+													value={settingsStore.getProviderConfig(provider.id).endpointTemplate ?? 'custom'}
 													onchange={(e) => handleLLMEndpointTemplateChange(e.currentTarget.value)}
 												>
 													{#each provider.endpointTemplates ?? [] as template}
@@ -1181,7 +1192,7 @@
 											<details class="custom-endpoint-help">
 												<summary>How to configure this endpoint</summary>
 												<div class="custom-endpoint-help-content">
-													<p>{provider.endpointTemplates?.find(t => t.id === (settingsStore.getProviderConfig(provider.id).endpointTemplate ?? 'ollama'))?.docsHint}</p>
+													<p>{provider.endpointTemplates?.find(t => t.id === (settingsStore.getProviderConfig(provider.id).endpointTemplate ?? 'custom'))?.docsHint}</p>
 													<ul>
 														<li><strong>Google Gemini:</strong> set Base URL to <code>https://generativelanguage.googleapis.com/v1beta/openai/</code> and use a Google AI Studio API key. Enter the model ID manually (e.g. <code>gemini-1.5-flash-latest</code>).</li>
 														<li><strong>DeepSeek / xAI:</strong> use their OpenAI-compatible base URL and API key, then enter the model ID manually.</li>

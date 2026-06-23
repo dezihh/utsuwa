@@ -315,9 +315,10 @@
 			settingsStore.markProviderAdded(providerId);
 
 			if (providerId === 'custom-endpoint') {
+				// Default to the "custom" template so the user can enter any URL manually.
 				const config = settingsStore.getProviderConfig(providerId);
 				if (!config.endpointTemplate) {
-					handleLLMEndpointTemplateChange('ollama');
+					handleLLMEndpointTemplateChange('custom');
 				} else {
 					applyEndpointTemplate(config.endpointTemplate);
 				}
@@ -340,7 +341,7 @@
 		const config = settingsStore.getProviderConfig('custom-endpoint');
 		settingsStore.setProviderConfig('custom-endpoint', {
 			endpointTemplate: templateId as import('$lib/types').CustomEndpointTemplate,
-			baseUrl: config.baseUrl || template.baseUrl
+			baseUrl: template.id === 'custom' ? config.baseUrl : template.baseUrl
 		});
 		modulesStore.setModuleSetting('consciousness', 'endpointTemplate', templateId);
 	}
@@ -352,6 +353,28 @@
 
 	function handleLLMModelChange(modelId: string) {
 		modulesStore.setModuleSetting('consciousness', 'activeModel', modelId);
+	}
+
+	function handleLLMBaseUrlChange(baseUrl: string) {
+		if (llmProvider) {
+			llmFetchError = null;
+			settingsStore.setProviderConfig(llmProvider.id, { baseUrl });
+
+			// If the user edits the URL away from the selected preset, switch to custom mode.
+			if (llmProvider.id === 'custom-endpoint') {
+				const provider = getLLMProvider('custom-endpoint');
+				const config = settingsStore.getProviderConfig(llmProvider.id);
+				const currentTemplate = provider?.endpointTemplates?.find(t => t.id === config.endpointTemplate);
+				if (currentTemplate && currentTemplate.id !== 'custom' && baseUrl !== currentTemplate.baseUrl) {
+					settingsStore.setProviderConfig(llmProvider.id, {
+						endpointTemplate: 'custom' as import('$lib/types').CustomEndpointTemplate,
+						baseUrl
+					});
+					modulesStore.setModuleSetting('consciousness', 'endpointTemplate', 'custom');
+				}
+				if (baseUrl) debouncedFetchLLMModels(llmProvider.id);
+			}
+		}
 	}
 
 	function handleLLMApiKeyChange(apiKey: string) {
@@ -369,16 +392,6 @@
 		const config = settingsStore.getProviderConfig(llmProvider.id);
 		if (config.apiKey && (llmProvider.id !== 'custom-endpoint' || config.baseUrl)) {
 			debouncedFetchLLMModels();
-		}
-	}
-
-	function handleLLMBaseUrlChange(baseUrl: string) {
-		if (llmProvider) {
-			llmFetchError = null;
-			settingsStore.setProviderConfig(llmProvider.id, { baseUrl });
-			if (llmProvider.id === 'custom-endpoint' && baseUrl) {
-				debouncedFetchLLMModels(llmProvider.id);
-			}
 		}
 	}
 
@@ -517,7 +530,7 @@
 			{#if llmProvider.id === 'custom-endpoint'}
 				<select
 					class="api-key-input"
-					value={settingsStore.getProviderConfig(llmProvider.id).endpointTemplate ?? 'ollama'}
+					value={settingsStore.getProviderConfig(llmProvider.id).endpointTemplate ?? 'custom'}
 					onchange={(e) => handleLLMEndpointTemplateChange(e.currentTarget.value)}
 				>
 					{#each llmProvider.endpointTemplates ?? [] as template}
@@ -543,7 +556,7 @@
 				<details class="custom-endpoint-help">
 					<summary>How to configure this endpoint</summary>
 					<div class="custom-endpoint-help-content">
-						<p>{llmProvider.endpointTemplates?.find(t => t.id === (settingsStore.getProviderConfig(llmProvider.id).endpointTemplate ?? 'ollama'))?.docsHint}</p>
+						<p>{llmProvider.endpointTemplates?.find(t => t.id === (settingsStore.getProviderConfig(llmProvider.id).endpointTemplate ?? 'custom'))?.docsHint}</p>
 						<ul>
 							<li><strong>Google Gemini:</strong> set Base URL to <code>https://generativelanguage.googleapis.com/v1beta/openai/</code> and use a Google AI Studio API key. Enter the model ID manually (e.g. <code>gemini-1.5-flash-latest</code>).</li>
 							<li><strong>DeepSeek / xAI:</strong> use their OpenAI-compatible base URL and API key, then enter the model ID manually.</li>

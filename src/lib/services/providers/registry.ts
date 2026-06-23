@@ -58,6 +58,12 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 		defaultBaseUrl: '',
 		endpointTemplates: [
 			{
+				id: 'custom',
+				name: 'Custom (manual URL)',
+				baseUrl: '',
+				docsHint: 'Enter the base URL of any OpenAI-compatible API.'
+			},
+			{
 				id: 'ollama',
 				name: 'Ollama',
 				baseUrl: 'http://localhost:11434/v1/',
@@ -92,12 +98,6 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 				name: 'xAI (Grok)',
 				baseUrl: 'https://api.x.ai/v1/',
 				docsHint: 'Use your xAI API key and enter the model ID manually (e.g. grok-2-latest).'
-			},
-			{
-				id: 'custom',
-				name: 'Custom',
-				baseUrl: '',
-				docsHint: 'Enter the base URL of any OpenAI-compatible API.'
 			}
 		]
 	}
