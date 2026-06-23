@@ -318,6 +318,10 @@ export function stripForApiContext(text: string): string {
 	return text.replace(ACTION_TAG_REGEX, '').replace(/  +/g, ' ').trim();
 }
 
+export function getEmotionDisplayText(emotion: string): string {
+	return EMOTION_TAGS[emotion.toLowerCase()]?.displayText ?? '';
+}
+
 export function replaceEmotionTagsForDisplay(text: string): string {
 	return text
 		.replace(/\[([\w][\w-]*)\]/g, (_match, tag) => {

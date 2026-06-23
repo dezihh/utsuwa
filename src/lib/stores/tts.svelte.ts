@@ -19,11 +19,11 @@ function createTTSStore() {
 
 	function buildOrchestratorCallbacks(
 		provider: string,
-		extraCallbacks?: { onSentenceStart?: (sentence: string, index: number) => void }
+		extraCallbacks?: { onSentenceStart?: (sentence: string, index: number, emotion?: string) => void }
 	) {
 		return {
 			onSegmentStart: extraCallbacks?.onSentenceStart
-				? (segment: SpeechSegment, index: number) => extraCallbacks.onSentenceStart!(segment.text, index)
+				? (segment: SpeechSegment, index: number) => extraCallbacks.onSentenceStart!(segment.text, index, segment.emotion)
 				: undefined,
 			onAnalyserUpdate: (analyser: AnalyserNode) => {
 				currentAnalyser = analyser;
@@ -79,7 +79,7 @@ function createTTSStore() {
 	async function speakSentences(
 		sentences: SpeechSegment[],
 		options: TTSOptions,
-		callbacks?: { onSentenceStart?: (sentence: string, index: number) => void }
+		callbacks?: { onSentenceStart?: (sentence: string, index: number, emotion?: string) => void }
 	) {
 		const provider = getTTSMetadata(options.provider);
 
@@ -109,7 +109,7 @@ function createTTSStore() {
 	 */
 	function beginSpeechSession(
 		options: TTSOptions,
-		callbacks?: { onSentenceStart?: (sentence: string, index: number) => void }
+		callbacks?: { onSentenceStart?: (sentence: string, index: number, emotion?: string) => void }
 	): void {
 		const provider = getTTSMetadata(options.provider);
 		if (provider?.requiresApiKey && !options.apiKey) {

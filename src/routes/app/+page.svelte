@@ -62,7 +62,7 @@
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
 	import { allEvents } from '$lib/data/events';
 	import { debugStore } from '$lib/stores/debug.svelte';
-	import { splitIntoSegments, splitIntoSentences, stripAllTags, stripForApiContext, stripForSpeech, stripTagsForBubble, isContinueRequest } from '$lib/utils/sentences';
+	import { splitIntoSegments, splitIntoSentences, stripAllTags, stripForApiContext, stripForSpeech, stripTagsForBubble, isContinueRequest, getEmotionDisplayText } from '$lib/utils/sentences';
 	import { reminderStore } from '$lib/stores/reminders.svelte';
 	import { tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
 	import { extractImageSearchTags, tryExtractDelayedImageSearch, isCloseImageRequest } from '$lib/utils/image-search';
@@ -832,11 +832,12 @@
 					onTTSStarted();
 					vrmStore.startTalking(unplayed[0].text);
 					ttsStore.beginSpeechSession(ttsOptions, {
-						onSentenceStart: (sentence, index) => {
+						onSentenceStart: (sentence, index, emotion) => {
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-							currentBubbleSentence = stripTagsForBubble(sentence) || currentBubbleSentence;
+							const cleanedBubble = stripTagsForBubble(sentence);
+							currentBubbleSentence = (cleanedBubble ? (emotion ? getEmotionDisplayText(emotion) + ' ' : '') + cleanedBubble : '') || currentBubbleSentence;
 							duplexStore.setTtsText(sentence);
 						}
 					});
@@ -941,11 +942,12 @@
 					// Open a pipeline session — synthesis of each segment starts immediately
 					// when pushSpeechSegment() is called, overlapping with playback.
 					ttsStore.beginSpeechSession(ttsOptions, {
-						onSentenceStart: (sentence, index) => {
+						onSentenceStart: (sentence, index, emotion) => {
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-							currentBubbleSentence = stripTagsForBubble(sentence) || currentBubbleSentence;
+							const cleanedBubble = stripTagsForBubble(sentence);
+							currentBubbleSentence = (cleanedBubble ? (emotion ? getEmotionDisplayText(emotion) + ' ' : '') + cleanedBubble : '') || currentBubbleSentence;
 							duplexStore.setTtsText(sentence);
 						}
 					});
@@ -1071,10 +1073,11 @@
 				onTTSStarted();
 				const segments = splitIntoSegments(cleanedResponse, ttsConfig?.language || undefined, isChatterbox);
 				ttsStore.beginSpeechSession(ttsOptions!, {
-					onSentenceStart: (sentence) => {
+					onSentenceStart: (sentence, _index, emotion) => {
 						isTyping = false;
 						spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-						currentBubbleSentence = stripTagsForBubble(sentence) || currentBubbleSentence;
+						const cleanedBubble = stripTagsForBubble(sentence);
+						currentBubbleSentence = (cleanedBubble ? (emotion ? getEmotionDisplayText(emotion) + ' ' : '') + cleanedBubble : '') || currentBubbleSentence;
 						duplexStore.setTtsText(sentence);
 					}
 				});

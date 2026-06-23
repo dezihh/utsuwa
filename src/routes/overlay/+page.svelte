@@ -46,7 +46,7 @@
 	import { getMemoryBudget } from '$lib/types/memory';
 	import { initEmbeddingModel, subscribeToEmbeddingState } from '$lib/services/embeddings';
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
-	import { splitIntoSegments, splitIntoSentences, stripTagsForBubble } from '$lib/utils/sentences';
+	import { splitIntoSegments, splitIntoSentences, stripTagsForBubble, getEmotionDisplayText } from '$lib/utils/sentences';
 
 	let isTyping = $state(false);
 	let isMemoryReady = $state(false);
@@ -391,9 +391,10 @@
 					omnivoiceNumStep: ttsConfig.omnivoiceNumStep,
 					language: ttsConfig.language
 				}, {
-					onSentenceStart: (sentence) => {
+					onSentenceStart: (sentence, _index, emotion) => {
 						isTyping = false;
-						currentBubbleSentence = stripTagsForBubble(sentence) || currentBubbleSentence;
+						const cleanedBubble = stripTagsForBubble(sentence);
+						currentBubbleSentence = (cleanedBubble ? (emotion ? getEmotionDisplayText(emotion) + ' ' : '') + cleanedBubble : '') || currentBubbleSentence;
 					}
 				});
 				for (const seg of segments) {
