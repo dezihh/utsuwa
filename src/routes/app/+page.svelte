@@ -148,7 +148,7 @@
 		const messages = chatStore.messages;
 		const last = messages[messages.length - 1];
 		if (!last || last.role !== 'assistant' || !last.content) return '';
-		const sentences = splitIntoSentences(stripTagsForBubble(last.content));
+		const sentences = splitIntoSentences(stripTagsForBubble(last.content)).filter((s) => s.trim());
 		return sentences[sentences.length - 1] ?? '';
 	});
 
@@ -836,7 +836,7 @@
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-							currentBubbleSentence = stripTagsForBubble(sentence);
+							currentBubbleSentence = stripTagsForBubble(sentence) || currentBubbleSentence;
 							duplexStore.setTtsText(sentence);
 						}
 					});
@@ -945,7 +945,7 @@
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-							currentBubbleSentence = stripTagsForBubble(sentence);
+							currentBubbleSentence = stripTagsForBubble(sentence) || currentBubbleSentence;
 							duplexStore.setTtsText(sentence);
 						}
 					});
@@ -1074,7 +1074,7 @@
 					onSentenceStart: (sentence) => {
 						isTyping = false;
 						spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-						currentBubbleSentence = stripTagsForBubble(sentence);
+						currentBubbleSentence = stripTagsForBubble(sentence) || currentBubbleSentence;
 						duplexStore.setTtsText(sentence);
 					}
 				});

@@ -59,7 +59,7 @@
 		const messages = chatStore.messages;
 		const last = messages[messages.length - 1];
 		if (!last || last.role !== 'assistant' || !last.content) return '';
-		const sentences = splitIntoSentences(stripTagsForBubble(last.content));
+		const sentences = splitIntoSentences(stripTagsForBubble(last.content)).filter((s) => s.trim());
 		return sentences[sentences.length - 1] ?? '';
 	});
 
@@ -393,7 +393,7 @@
 				}, {
 					onSentenceStart: (sentence) => {
 						isTyping = false;
-						currentBubbleSentence = stripTagsForBubble(sentence);
+						currentBubbleSentence = stripTagsForBubble(sentence) || currentBubbleSentence;
 					}
 				});
 				for (const seg of segments) {

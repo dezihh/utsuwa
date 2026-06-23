@@ -349,13 +349,17 @@ export function stripTagsForBubble(text: string): string {
 		.trim();
 
 	// Remove TTS emotion prepend sounds in all supported languages.
+	// The dictionary entries include trailing punctuation (e.g. 'Hihihi,'), so we
+	// derive a word-only pattern and also drop any trailing punctuation/whitespace.
 	for (const ttsText of getAllEmotionTtsTexts()) {
 		if (!ttsText) continue;
-		const escaped = ttsText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-		cleaned = cleaned.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), '');
+		const core = ttsText.replace(/[^\p{L}\p{N}]+/gu, '').trim();
+		if (!core) continue;
+		const escaped = core.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		cleaned = cleaned.replace(new RegExp(`\\b${escaped}\\b[\\p{P}\\s]*`, 'giu'), '');
 	}
 
-	return cleaned.replace(/\s+/g, ' ').trim();
+	return cleaned.replace(/\s+/g, ' ').replace(/^[\p{P}\s]+/gu, '').trim();
 }
 
 export interface SpeechArtifacts {
