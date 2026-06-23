@@ -149,9 +149,8 @@
 
 	.speech-bubble {
 		position: relative;
-		max-width: 280px;
+		max-width: 320px;
 		min-width: 60px;
-		max-height: 120px;
 		overflow: hidden;
 		backdrop-filter: blur(16px);
 		-webkit-backdrop-filter: blur(16px);
@@ -167,28 +166,7 @@
 	}
 
 	.speech-bubble-content {
-		max-height: 120px;
-		overflow-y: auto;
 		padding: 0.75rem 1rem;
-	}
-
-	/* Custom scrollbar */
-	.speech-bubble-content::-webkit-scrollbar {
-		width: 6px;
-	}
-
-	.speech-bubble-content::-webkit-scrollbar-track {
-		background: transparent;
-		margin: 4px 0;
-	}
-
-	.speech-bubble-content::-webkit-scrollbar-thumb {
-		background: var(--scrollbar-thumb);
-		border-radius: 3px;
-	}
-
-	.speech-bubble-content::-webkit-scrollbar-thumb:hover {
-		background: var(--scrollbar-thumb-hover);
 	}
 
 	.bubble-tail {
@@ -208,6 +186,12 @@
 		font-size: 0.8125rem;
 		line-height: 1.5;
 		word-wrap: break-word;
+		overflow-wrap: break-word;
+		display: -webkit-box;
+		line-clamp: 4;
+		-webkit-line-clamp: 4;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
 
 	.typing-indicator {
@@ -250,7 +234,7 @@
 
 	@media (max-width: 640px) {
 		.speech-bubble {
-			max-width: 220px;
+			max-width: 260px;
 		}
 	}
 </style>

@@ -46,18 +46,21 @@
 	import { getMemoryBudget } from '$lib/types/memory';
 	import { initEmbeddingModel, subscribeToEmbeddingState } from '$lib/services/embeddings';
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
-	import { stripTagsForBubble } from '$lib/utils/sentences';
+	import { splitIntoSegments, splitIntoSentences, stripTagsForBubble } from '$lib/utils/sentences';
 
 	let isTyping = $state(false);
 	let isMemoryReady = $state(false);
 	let activeEvent = $state<EventDefinition | null>(null);
+	// Speech bubble shows exactly the sentence currently spoken by TTS.
+	let currentBubbleSentence = $state('');
 
-	// Speech bubble reflects the latest assistant message.
+	// Fallback bubble text: last sentence of the latest assistant message.
 	const latestResponse = $derived.by(() => {
 		const messages = chatStore.messages;
 		const last = messages[messages.length - 1];
 		if (!last || last.role !== 'assistant' || !last.content) return '';
-		return stripTagsForBubble(last.content);
+		const sentences = splitIntoSentences(stripTagsForBubble(last.content));
+		return sentences[sentences.length - 1] ?? '';
 	});
 
 	const chatExpanded = $derived(overlayStore.chatExpanded);
@@ -263,6 +266,7 @@
 		chatStore.setLoading(true);
 		chatStore.setError(null);
 		isTyping = true;
+		currentBubbleSentence = '';
 
 		// Collapse chat after sending
 		overlayStore.setChatExpanded(false);
@@ -374,16 +378,28 @@
 				const ttsProvider = speechSettings.activeProvider as TTSProvider;
 				const ttsConfig = settingsStore.getProviderConfig(ttsProvider);
 				const ttsMeta = getTTSProvider(ttsProvider);
+				const isChatterbox = ttsProvider === 'chatterbox';
 
-				ttsStore.speak(cleanedResponse, {
+				const segments = splitIntoSegments(cleanedResponse, ttsConfig.language || undefined, isChatterbox);
+				ttsStore.beginSpeechSession({
 					provider: ttsProvider,
 					apiKey: ttsConfig.apiKey,
 					voiceId: speechSettings.activeVoiceId as string || ttsConfig.voiceId,
 					rvcVoiceId: speechSettings.activeRvcVoiceId as string || ttsConfig.rvcVoiceId,
 					baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
 					speed: speechSettings.speed as number ?? 1,
-					omnivoiceNumStep: ttsConfig.omnivoiceNumStep
+					omnivoiceNumStep: ttsConfig.omnivoiceNumStep,
+					language: ttsConfig.language
+				}, {
+					onSentenceStart: (sentence) => {
+						isTyping = false;
+						currentBubbleSentence = stripTagsForBubble(sentence);
+					}
 				});
+				for (const seg of segments) {
+					ttsStore.pushSpeechSegment(seg);
+				}
+				await ttsStore.endSpeechSession();
 			}
 		} catch (err) {
 			chatStore.setError(err instanceof Error ? err.message : 'Unknown error');
@@ -435,7 +451,7 @@
 
 	<!-- Speech Bubble -->
 	<SpeechBubble
-		message={latestResponse}
+		message={currentBubbleSentence || latestResponse}
 		isTyping={isTyping}
 		onHide={handleBubbleHide}
 	/>

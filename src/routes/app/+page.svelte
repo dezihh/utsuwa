@@ -129,6 +129,8 @@
 	let isTyping = $state(false);
 	// Sidebar TTS sync: grows sentence-by-sentence as audio plays
 	let spokenSoFar = $state('');
+	// Speech bubble shows exactly the sentence currently spoken by TTS.
+	let currentBubbleSentence = $state('');
 	let llmAbortController: AbortController | null = null;
 	// Monotonic counter so aborted sends don't overwrite state of the active one.
 	let sendGeneration = $state(0);
@@ -140,14 +142,13 @@
 
 	let lastPlayedSegmentIndex = -1;
 
-	// Speech bubble always reflects the last sentence of the latest assistant message.
-	// This avoids getting stuck on TTS emotion sounds (e.g. "Hihihi") and stays in sync
-	// with the visible chat text.
+	// Fallback bubble text: last sentence of the latest assistant message, with all
+	// tags and TTS emotion prepend sounds stripped so it never shows "Hihihi".
 	const latestResponse = $derived.by(() => {
 		const messages = chatStore.messages;
 		const last = messages[messages.length - 1];
 		if (!last || last.role !== 'assistant' || !last.content) return '';
-		const sentences = splitIntoSentences(stripAllTags(last.content));
+		const sentences = splitIntoSentences(stripTagsForBubble(last.content));
 		return sentences[sentences.length - 1] ?? '';
 	});
 
@@ -827,6 +828,7 @@
 					sessionSegments = unplayed;
 					lastPlayedSegmentIndex = -1;
 					spokenSoFar = '';
+					currentBubbleSentence = '';
 					onTTSStarted();
 					vrmStore.startTalking(unplayed[0].text);
 					ttsStore.beginSpeechSession(ttsOptions, {
@@ -834,6 +836,7 @@
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
+							currentBubbleSentence = stripTagsForBubble(sentence);
 							duplexStore.setTtsText(sentence);
 						}
 					});
@@ -861,6 +864,7 @@
 		chatStore.setError(null);
 		isTyping = true;
 		spokenSoFar = '';
+		currentBubbleSentence = '';
 
 		characterStore.updateStreak();
 		characterStore.updateDaysKnown();
@@ -941,6 +945,7 @@
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
+							currentBubbleSentence = stripTagsForBubble(sentence);
 							duplexStore.setTtsText(sentence);
 						}
 					});
@@ -1069,6 +1074,7 @@
 					onSentenceStart: (sentence) => {
 						isTyping = false;
 						spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
+						currentBubbleSentence = stripTagsForBubble(sentence);
 						duplexStore.setTtsText(sentence);
 					}
 				});
@@ -1234,7 +1240,7 @@
 		<!-- Speech Bubble (shows latest response, click to dismiss) -->
 		{#if showBubble || (typingDotsVisible && isTyping)}
 			<SpeechBubble
-				message={displayStore.chatDisplayMode === 'off' ? '' : latestResponse}
+				message={displayStore.chatDisplayMode === 'off' ? '' : (currentBubbleSentence || latestResponse)}
 				isTyping={isTyping && typingDotsVisible}
 				onHide={handleBubbleHide}
 			/>
