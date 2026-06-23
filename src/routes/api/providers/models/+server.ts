@@ -155,6 +155,50 @@ async function fetchOpenAITTSModels(apiKey: string, baseUrl: string): Promise<Mo
 		}));
 }
 
+/**
+ * Resolve provider wildcards (e.g. "openrouter/*") into concrete models.
+ * LiteLLM returns both the wildcard placeholder and already-resolved models;
+ * we drop the placeholder and, for known public providers, fetch the full list.
+ */
+async function resolveWildcards(models: ModelInfo[]): Promise<ModelInfo[]> {
+	const wildcardIds = models.map((m) => m.id).filter((id) => id.includes('*'));
+	if (wildcardIds.length === 0) return models;
+
+	const resolved: ModelInfo[] = [];
+	const existingIds = new Set(models.map((m) => m.id));
+
+	for (const id of wildcardIds) {
+		const [providerPrefix] = id.split('*');
+		const provider = providerPrefix.replace(/\/$/, '');
+
+		if (provider === 'openrouter') {
+			try {
+				const response = await fetch('https://openrouter.ai/api/v1/models');
+				if (response.ok) {
+					const data = await response.json();
+					const openRouterModels = (data.data as Array<{ id: string; name?: string; architecture?: { modality?: string } }>)
+						.filter((m) => {
+							const modality = m.architecture?.modality ?? '';
+							return modality === '' || modality.includes('text');
+						})
+						.map((m) => ({
+							id: `openrouter/${m.id}`,
+							name: `openrouter/${m.id}`
+						}))
+						.filter((m) => !existingIds.has(m.id));
+					resolved.push(...openRouterModels);
+				}
+			} catch (err) {
+				console.warn('[Models API] Failed to resolve openrouter wildcard:', err);
+			}
+		}
+		// Other wildcards (gemini/*, moonshot/*, etc.) are dropped because LiteLLM
+		// already returns the resolved concrete models alongside the placeholder.
+	}
+
+	return [...models.filter((m) => !m.id.includes('*')), ...resolved];
+}
+
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const { providerId, apiKey, baseUrl } = await request.json();
@@ -196,6 +240,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					models = await fetchOllamaModels(cleanBaseUrl);
 				} else {
 					models = await fetchOpenAICompatibleModels(apiKey || '', cleanBaseUrl);
+					models = await resolveWildcards(models);
 				}
 				break;
 			}

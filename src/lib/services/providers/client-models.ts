@@ -112,6 +112,46 @@ async function fetchOllamaModels(baseUrl: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * Resolve provider wildcards (e.g. "openrouter/*") into concrete models.
+ */
+async function resolveWildcards(models: ModelInfo[]): Promise<ModelInfo[]> {
+	const wildcardIds = models.map((m) => m.id).filter((id) => id.includes('*'));
+	if (wildcardIds.length === 0) return models;
+
+	const resolved: ModelInfo[] = [];
+	const existingIds = new Set(models.map((m) => m.id));
+
+	for (const id of wildcardIds) {
+		const [providerPrefix] = id.split('*');
+		const provider = providerPrefix.replace(/\/$/, '');
+
+		if (provider === 'openrouter') {
+			try {
+				const res = await fetch('https://openrouter.ai/api/v1/models');
+				if (res.ok) {
+					const data = await res.json();
+					const openRouterModels = (data.data as Array<{ id: string; architecture?: { modality?: string } }>)
+						.filter((m) => {
+							const modality = m.architecture?.modality ?? '';
+							return modality === '' || modality.includes('text');
+						})
+						.map((m) => ({
+							id: `openrouter/${m.id}`,
+							name: `openrouter/${m.id}`
+						}))
+						.filter((m) => !existingIds.has(m.id));
+					resolved.push(...openRouterModels);
+				}
+			} catch (err) {
+				console.warn('[fetchModelsDirect] Failed to resolve openrouter wildcard:', err);
+			}
+		}
+	}
+
+	return [...models.filter((m) => !m.id.includes('*')), ...resolved];
+}
+
+/**
  * Fetch models directly from provider APIs.
  * Used in Tauri builds where SvelteKit server routes aren't available.
  */
@@ -150,6 +190,7 @@ export async function fetchModelsDirect(
 					models = await fetchOllamaModels(cleanBaseUrl);
 				} else {
 					models = await fetchOpenAICompatibleModels(cleanBaseUrl, apiKey);
+					models = await resolveWildcards(models);
 				}
 				break;
 			}
