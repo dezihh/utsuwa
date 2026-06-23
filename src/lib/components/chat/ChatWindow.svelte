@@ -531,6 +531,14 @@
 	{#if chatStore.error}
 		<div class="error-message" role="alert">
 			<span class="error-text">{chatStore.error}</span>
+			<button
+				class="error-copy"
+				onclick={() => navigator.clipboard?.writeText(chatStore.error ?? '')}
+				aria-label="Copy error"
+				title="Copy error"
+			>
+				<Icon name="copy" size={14} />
+			</button>
 			<button class="error-close" onclick={() => chatStore.dismissError()} aria-label="Dismiss error">
 				<Icon name="x" size={14} />
 			</button>
@@ -587,14 +595,21 @@
 		font-size: 0.75rem;
 		display: flex;
 		align-items: flex-start;
-		gap: 0.75rem;
+		gap: 0.5rem;
+		user-select: text;
+		-webkit-user-select: text;
+		-moz-user-select: text;
 	}
 
 	.error-text {
 		flex: 1;
 		min-width: 0;
+		user-select: text;
+		-webkit-user-select: text;
+		-moz-user-select: text;
 	}
 
+	.error-copy,
 	.error-close {
 		flex-shrink: 0;
 		padding: 0.25rem;
@@ -607,6 +622,7 @@
 		transition: opacity 0.15s, background 0.15s;
 	}
 
+	.error-copy:hover,
 	.error-close:hover {
 		opacity: 1;
 		background: color-mix(in srgb, var(--color-error) 15%, transparent);
