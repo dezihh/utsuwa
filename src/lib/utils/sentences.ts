@@ -271,6 +271,16 @@ function getEmotionTtsText(tag: string, language?: string): string {
 	return langMap[tag] ?? EMOTION_TTS_BY_LANG.default[tag] ?? '';
 }
 
+function getAllEmotionTtsTexts(): string[] {
+	const seen = new Set<string>();
+	for (const langMap of Object.values(EMOTION_TTS_BY_LANG)) {
+		for (const text of Object.values(langMap)) {
+			if (text) seen.add(text.toLowerCase());
+		}
+	}
+	return [...seen];
+}
+
 export function getEmotionVrmExpression(emotionTag: string): string | null {
 	return EMOTION_TAGS[emotionTag.toLowerCase()]?.vrmExpression ?? null;
 }
@@ -325,6 +335,27 @@ export function stripActionTags(text: string): string {
 
 export function stripAllTags(text: string): string {
 	return replaceEmotionTagsForDisplay(stripActionTags(stripLangTags(text)));
+}
+
+/**
+ * Strip every bracketed tag from text without replacing emotion tags with display text.
+ * Also removes emotion TTS prepend sounds (e.g. 'Hihihi') that the orchestrator inserts
+ * for tags like [giggle]. Useful for UI previews (e.g. speech bubble).
+ */
+export function stripTagsForBubble(text: string): string {
+	let cleaned = text
+		.replace(/\[reminder:[^\]]*\][\s\S]*?\[\/reminder\]/gi, '')
+		.replace(/\[[^\]]+\]/g, '')
+		.trim();
+
+	// Remove TTS emotion prepend sounds in all supported languages.
+	for (const ttsText of getAllEmotionTtsTexts()) {
+		if (!ttsText) continue;
+		const escaped = ttsText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		cleaned = cleaned.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), '');
+	}
+
+	return cleaned.replace(/\s+/g, ' ').trim();
 }
 
 export interface SpeechArtifacts {
