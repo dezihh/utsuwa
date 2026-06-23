@@ -647,6 +647,33 @@ export class VoiceOrchestrator {
 			callbacks?.onSegmentStart?.(firstSeg, index);
 			callbacks?.onAnalyserUpdate?.(analyser);
 
+			// Chatterbox streams the whole text as one continuous audio clip, so we only
+			// get one natural segment-start event. Estimate per-sentence timings and fire
+			// onSegmentStart for subsequent segments so the speech bubble advances
+			// sentence-by-sentence instead of getting stuck on the first sentence.
+			const segmentTimers: ReturnType<typeof setTimeout>[] = [];
+			const CHARS_PER_SECOND = 13;
+			let accumulatedMs = 0;
+			for (let i = 1; i < segments.length; i++) {
+				accumulatedMs += (segments[i - 1].text.length / CHARS_PER_SECOND) * 1000;
+				const seg = segments[i];
+				const segIndex = index + i;
+				const fireAt = accumulatedMs;
+				segmentTimers.push(
+					setTimeout(() => {
+						if (signal.aborted) return;
+						callbacks?.onSegmentStart?.(seg, segIndex);
+					}, fireAt)
+				);
+			}
+			signal.addEventListener(
+				'abort',
+				() => {
+					for (const t of segmentTimers) clearTimeout(t);
+				},
+				{ once: true }
+			);
+
 			// Build combined text. Ensure each sentence ends with sentence-final punctuation
 			// so Chatterbox's sentence splitter works correctly.
 			const combinedText = segments
