@@ -126,8 +126,6 @@
 	// Working memory reference
 	let workingMemory = getWorkingMemory();
 
-	// Speech bubble state
-	let latestResponse = $state('');
 	let isTyping = $state(false);
 	// Sidebar TTS sync: grows sentence-by-sentence as audio plays
 	let spokenSoFar = $state('');
@@ -142,14 +140,16 @@
 
 	let lastPlayedSegmentIndex = -1;
 
-	// Fallback text for the speech bubble when a TTS segment is only emotion sounds.
-	function getLastChatSentence(): string {
+	// Speech bubble always reflects the last sentence of the latest assistant message.
+	// This avoids getting stuck on TTS emotion sounds (e.g. "Hihihi") and stays in sync
+	// with the visible chat text.
+	const latestResponse = $derived.by(() => {
 		const messages = chatStore.messages;
 		const last = messages[messages.length - 1];
 		if (!last || last.role !== 'assistant' || !last.content) return '';
 		const sentences = splitIntoSentences(stripAllTags(last.content));
 		return sentences[sentences.length - 1] ?? '';
-	}
+	});
 
 	// Chat sidebar state
 	let sidebarOpen = $state(displayStore.chatDisplayMode !== 'bubble');
@@ -827,7 +827,6 @@
 					sessionSegments = unplayed;
 					lastPlayedSegmentIndex = -1;
 					spokenSoFar = '';
-					latestResponse = '';
 					onTTSStarted();
 					vrmStore.startTalking(unplayed[0].text);
 					ttsStore.beginSpeechSession(ttsOptions, {
@@ -835,8 +834,6 @@
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-							const bubbleSentence = stripTagsForBubble(sentence) || getLastChatSentence();
-							if (bubbleSentence) latestResponse = bubbleSentence;
 							duplexStore.setTtsText(sentence);
 						}
 					});
@@ -863,7 +860,6 @@
 		chatStore.setLoading(true);
 		chatStore.setError(null);
 		isTyping = true;
-		latestResponse = '';
 		spokenSoFar = '';
 
 		characterStore.updateStreak();
@@ -945,8 +941,6 @@
 							lastPlayedSegmentIndex = index;
 							isTyping = false;
 							spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
-							const bubbleSentence = stripTagsForBubble(sentence) || getLastChatSentence();
-							if (bubbleSentence) latestResponse = bubbleSentence;
 							duplexStore.setTtsText(sentence);
 						}
 					});
@@ -1074,8 +1068,6 @@
 				ttsStore.beginSpeechSession(ttsOptions!, {
 					onSentenceStart: (sentence) => {
 						isTyping = false;
-						const bubbleSentence = stripTagsForBubble(sentence) || getLastChatSentence();
-						if (bubbleSentence) latestResponse = bubbleSentence;
 						spokenSoFar = spokenSoFar ? spokenSoFar + ' ' + sentence : sentence;
 						duplexStore.setTtsText(sentence);
 					}
@@ -1089,10 +1081,8 @@
 				// Pipeline session already open — close it and wait for remaining audio.
 				await ttsStore.endSpeechSession();
 				spokenSoFar = '';
-				latestResponse = '';
 				onTTSDone();
 			} else {
-				latestResponse = stripTagsForBubble(displayText);
 				if (displayText) {
 					vrmStore.startTalking(displayText);
 				}
@@ -1142,7 +1132,6 @@
 
 	// Handle speech bubble hide
 	function handleBubbleHide() {
-		latestResponse = '';
 	}
 
 	// Handle event completion

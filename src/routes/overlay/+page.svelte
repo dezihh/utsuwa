@@ -48,10 +48,17 @@
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
 	import { stripTagsForBubble } from '$lib/utils/sentences';
 
-	let latestResponse = $state('');
 	let isTyping = $state(false);
 	let isMemoryReady = $state(false);
 	let activeEvent = $state<EventDefinition | null>(null);
+
+	// Speech bubble reflects the latest assistant message.
+	const latestResponse = $derived.by(() => {
+		const messages = chatStore.messages;
+		const last = messages[messages.length - 1];
+		if (!last || last.role !== 'assistant' || !last.content) return '';
+		return stripTagsForBubble(last.content);
+	});
 
 	const chatExpanded = $derived(overlayStore.chatExpanded);
 	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
@@ -256,7 +263,6 @@
 		chatStore.setLoading(true);
 		chatStore.setError(null);
 		isTyping = true;
-		latestResponse = '';
 
 		// Collapse chat after sending
 		overlayStore.setChatExpanded(false);
@@ -356,7 +362,6 @@
 			isTyping = false;
 			const cleanedResponse = await processCompanionResponse(content, fullContent);
 			chatStore.updateLastMessage(cleanedResponse);
-			latestResponse = stripTagsForBubble(cleanedResponse);
 
 			if (cleanedResponse) {
 				vrmStore.startTalking(cleanedResponse);
@@ -389,7 +394,6 @@
 	}
 
 	function handleBubbleHide() {
-		latestResponse = '';
 	}
 
 	function handleCharacterClick() {
