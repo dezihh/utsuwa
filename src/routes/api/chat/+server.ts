@@ -1,7 +1,7 @@
 import { streamText } from '@xsai/stream-text';
 import type { RequestHandler } from './$types';
 import type { LLMProvider } from '$lib/types';
-import { getChatBaseUrl, isLocalLLMProvider } from '$lib/services/providers/local-endpoints';
+import { getChatBaseUrl } from '$lib/services/providers/local-endpoints';
 import { normalizeChatBaseURL } from '$lib/services/chat/base-url';
 import { PROVIDER_BASE_URLS } from '$lib/services/providers/base-urls';
 
@@ -98,10 +98,11 @@ export const POST: RequestHandler = async ({ request }) => {
 	const { messages, provider, model, apiKey, baseURL, systemPrompt } = await request.json();
 
 	const typedProvider = provider as LLMProvider;
+	const isCustomEndpoint = typedProvider === 'custom-endpoint';
+	const requiresApiKey = typedProvider !== 'custom-endpoint';
 
-	// Local providers don't require API keys
-	const isLocalProvider = isLocalLLMProvider(typedProvider);
-	if (!apiKey && !isLocalProvider) {
+	// API key required for all providers except custom endpoint (local or keyless OpenAI-compatible APIs)
+	if (!apiKey && requiresApiKey) {
 		return new Response(JSON.stringify({ error: 'API key required' }), {
 			status: 400,
 			headers: { 'Content-Type': 'application/json' }
@@ -129,7 +130,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			providerBaseURL = providerBaseURL || PROVIDER_BASE_URLS.openrouter;
 			headers['HTTP-Referer'] = 'https://utsuwa.app';
 			headers['X-Title'] = 'Utsuwa';
-		} else if (isLocalProvider) {
+		} else if (isCustomEndpoint) {
 			providerBaseURL = getChatBaseUrl(typedProvider, providerBaseURL);
 		} else {
 			// Use default base URL for provider
@@ -149,7 +150,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			...messages
 		];
 
-		if (isLocalProvider) {
+		if (isCustomEndpoint) {
 			const chatURL = `${providerBaseURL.replace(/\/+$/, '')}/chat/completions`;
 			return await streamOpenAICompatibleChat(chatURL, model, messagesWithSystem, apiKey || undefined);
 		}

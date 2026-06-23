@@ -13,16 +13,9 @@ interface FetchModelsResponse {
 }
 
 // Default base URLs per provider (LLM and TTS)
-const DEFAULT_BASE_URLS: Record<string, string> = {
-	// LLM providers
+const DEFAULT_BASE_URLS: Partial<Record<LLMProvider | 'elevenlabs' | 'openai-tts', string>> = {
 	openai: 'https://api.openai.com/v1',
 	anthropic: 'https://api.anthropic.com/v1',
-	ollama: 'http://localhost:11434',
-	lmstudio: 'http://localhost:1234/v1',
-	llamacpp: 'http://localhost:11435/v1',
-	deepseek: 'https://api.deepseek.com',
-	xai: 'https://api.x.ai/v1',
-	google: 'https://generativelanguage.googleapis.com/v1beta',
 	openrouter: 'https://openrouter.ai/api/v1',
 	// TTS providers
 	elevenlabs: 'https://api.elevenlabs.io/v1',
@@ -30,18 +23,18 @@ const DEFAULT_BASE_URLS: Record<string, string> = {
 };
 
 // Model filter patterns - only keep chat-compatible models
-// Note: Google IDs have 'models/' prefix stripped before filtering
-const MODEL_FILTERS: Record<string, RegExp> = {
+const MODEL_FILTERS: Partial<Record<LLMProvider, RegExp>> = {
 	openai: /^(gpt-|o1-|o3-|chatgpt-4o-)/,
-	anthropic: /^claude-/,
-	deepseek: /^deepseek-(chat|reasoner)/,
-	xai: /^grok-/,
-	google: /^gemini-/
+	anthropic: /^claude-/
 };
 
-function filterModels(providerId: string, models: ModelInfo[], baseUrl?: string): ModelInfo[] {
+function isOllamaUrl(url: string): boolean {
+	return /localhost:11434|127\.0\.0\.1:11434/.test(url);
+}
+
+function filterModels(providerId: LLMProvider, models: ModelInfo[], baseUrl?: string): ModelInfo[] {
 	const filter = MODEL_FILTERS[providerId];
-	if (!filter) return models; // No filter = keep all (Ollama, LM Studio, llama.cpp)
+	if (!filter) return models;
 	// If a custom baseUrl is set for a cloud provider, treat it as a proxy — keep all models
 	const defaultUrl = DEFAULT_BASE_URLS[providerId];
 	if (baseUrl && defaultUrl && baseUrl.replace(/\/+$/, '') !== defaultUrl.replace(/\/+$/, '')) {
@@ -50,18 +43,13 @@ function filterModels(providerId: string, models: ModelInfo[], baseUrl?: string)
 	return models.filter((m) => filter.test(m.id));
 }
 
-function normalizeModelName(id: string, providerId: string): string {
+function normalizeModelName(id: string, providerId: LLMProvider): string {
 	let name = id;
-
-	// Remove 'models/' prefix from Google
-	if (providerId === 'google' && name.startsWith('models/')) {
-		name = name.replace('models/', '');
-	}
 
 	// Strip date suffixes from Anthropic models (e.g., -20251101)
 	if (providerId === 'anthropic') {
 		name = name.replace(/-\d{8}$/, '');
-		// Convert version like "opus-4-5" to "opus-4.5" (match version after model tier)
+		// Convert version like "opus-4-5" to "opus-4.5"
 		name = name.replace(/(opus|sonnet|haiku)-(\d+)-(\d+)$/, '$1-$2.$3');
 	}
 
@@ -76,15 +64,14 @@ function normalizeModelName(id: string, providerId: string): string {
 	return name;
 }
 
-async function fetchOpenAIModels(apiKey: string, baseUrl: string): Promise<ModelInfo[]> {
-	const response = await fetch(`${baseUrl}/models`, {
-		headers: { Authorization: `Bearer ${apiKey}` }
-	});
+async function fetchOpenAICompatibleModels(apiKey: string, baseUrl: string): Promise<ModelInfo[]> {
+	const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` };
+	const response = await fetch(`${baseUrl}/models`, { headers });
 	if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
 	const data = await response.json();
-	return data.data.map((m: { id: string }) => ({
+	return (data.data || []).map((m: { id: string }) => ({
 		id: m.id,
-		name: normalizeModelName(m.id, 'openai')
+		name: m.id
 	}));
 }
 
@@ -97,55 +84,20 @@ async function fetchAnthropicModels(apiKey: string, baseUrl: string): Promise<Mo
 	});
 	if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
 	const data = await response.json();
-	return data.data.map((m: { id: string }) => ({
+	return (data.data || []).map((m: { id: string }) => ({
 		id: m.id,
 		name: normalizeModelName(m.id, 'anthropic')
 	}));
 }
 
 async function fetchOllamaModels(baseUrl: string): Promise<ModelInfo[]> {
-	const response = await fetch(`${baseUrl}/api/tags`);
+	const ollamaBase = baseUrl.replace(/\/v1$/, '');
+	const response = await fetch(`${ollamaBase}/api/tags`);
 	if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
 	const data = await response.json();
 	return (data.models || []).map((m: { name: string }) => ({
 		id: m.name,
 		name: m.name
-	}));
-}
-
-async function fetchLMStudioModels(baseUrl: string, apiKey?: string): Promise<ModelInfo[]> {
-	const headers: Record<string, string> = {};
-	if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-	const response = await fetch(`${baseUrl}/models`, { headers });
-	if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
-	const data = await response.json();
-	return data.data.map((m: { id: string }) => ({
-		id: m.id,
-		name: m.id
-	}));
-}
-
-async function fetchDeepSeekModels(apiKey: string, baseUrl: string): Promise<ModelInfo[]> {
-	const response = await fetch(`${baseUrl}/models`, {
-		headers: { Authorization: `Bearer ${apiKey}` }
-	});
-	if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
-	const data = await response.json();
-	return data.data.map((m: { id: string }) => ({
-		id: m.id,
-		name: normalizeModelName(m.id, 'deepseek')
-	}));
-}
-
-async function fetchXAIModels(apiKey: string, baseUrl: string): Promise<ModelInfo[]> {
-	const response = await fetch(`${baseUrl}/models`, {
-		headers: { Authorization: `Bearer ${apiKey}` }
-	});
-	if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
-	const data = await response.json();
-	return data.data.map((m: { id: string }) => ({
-		id: m.id,
-		name: normalizeModelName(m.id, 'xai')
 	}));
 }
 
@@ -169,18 +121,6 @@ async function fetchOpenRouterModels(apiKey: string, baseUrl: string): Promise<M
 			id: m.id,
 			name: m.name ?? m.id
 		}));
-}
-
-async function fetchGoogleModels(apiKey: string, baseUrl: string): Promise<ModelInfo[]> {
-	const response = await fetch(`${baseUrl}/models`, {
-		headers: { 'x-goog-api-key': apiKey }
-	});
-	if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
-	const data = await response.json();
-	return (data.models || []).map((m: { name: string; displayName?: string }) => ({
-		id: m.name.replace('models/', ''),
-		name: m.displayName || normalizeModelName(m.name, 'google')
-	}));
 }
 
 // TTS Provider fetch functions
@@ -211,7 +151,7 @@ async function fetchOpenAITTSModels(apiKey: string, baseUrl: string): Promise<Mo
 		.filter((m: { id: string }) => m.id.includes('tts'))
 		.map((m: { id: string }) => ({
 			id: m.id,
-			name: normalizeModelName(m.id, 'openai-tts')
+			name: normalizeModelName(m.id, 'openai')
 		}));
 }
 
@@ -225,8 +165,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			});
 		}
 
-		const effectiveBaseUrl =
-			baseUrl || DEFAULT_BASE_URLS[providerId as LLMProvider] || '';
+		const provider = providerId as LLMProvider | 'elevenlabs' | 'openai-tts';
+		const effectiveBaseUrl = baseUrl || DEFAULT_BASE_URLS[provider] || '';
 
 		// Remove trailing slash for consistency
 		const cleanBaseUrl = effectiveBaseUrl.replace(/\/+$/, '');
@@ -234,53 +174,42 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		let models: ModelInfo[] = [];
 
-		switch (providerId) {
-			case 'openai':
+		switch (provider) {
+			case 'openai': {
 				if (!apiKey) throw new Error('API key required for OpenAI');
-				models = await fetchOpenAIModels(apiKey, cleanBaseUrl);
+				models = await fetchOpenAICompatibleModels(apiKey, cleanBaseUrl);
 				break;
-			case 'openai-compatible':
-				if (!apiKey) throw new Error('API key required');
-				models = await fetchOpenAIModels(apiKey, cleanBaseUrl);
-				break;
-			case 'anthropic':
+			}
+			case 'anthropic': {
 				if (!apiKey) throw new Error('API key required for Anthropic');
 				models = await fetchAnthropicModels(apiKey, cleanBaseUrl);
 				break;
-			case 'ollama':
-				models = await fetchOllamaModels(cleanBaseUrl);
-				break;
-			case 'lmstudio':
-				models = await fetchLMStudioModels(openAICompatibleBaseUrl ?? cleanBaseUrl);
-				break;
-			case 'llamacpp':
-				models = await fetchLMStudioModels(openAICompatibleBaseUrl ?? cleanBaseUrl, apiKey);
-				break;
-			case 'deepseek':
-				if (!apiKey) throw new Error('API key required for DeepSeek');
-				models = await fetchDeepSeekModels(apiKey, cleanBaseUrl);
-				break;
-			case 'xai':
-				if (!apiKey) throw new Error('API key required for xAI');
-				models = await fetchXAIModels(apiKey, cleanBaseUrl);
-				break;
-			case 'openrouter':
+			}
+			case 'openrouter': {
 				if (!apiKey) throw new Error('API key required for OpenRouter');
 				models = await fetchOpenRouterModels(apiKey, cleanBaseUrl);
 				break;
-			case 'google':
-				if (!apiKey) throw new Error('API key required for Google');
-				models = await fetchGoogleModels(apiKey, cleanBaseUrl);
+			}
+			case 'custom-endpoint': {
+				if (!cleanBaseUrl) throw new Error('Base URL required for custom endpoint');
+				if (isOllamaUrl(cleanBaseUrl)) {
+					models = await fetchOllamaModels(cleanBaseUrl);
+				} else {
+					models = await fetchOpenAICompatibleModels(apiKey || '', cleanBaseUrl);
+				}
 				break;
+			}
 			// TTS providers
-			case 'elevenlabs':
+			case 'elevenlabs': {
 				if (!apiKey) throw new Error('API key required for ElevenLabs');
 				models = await fetchElevenLabsModels(apiKey, cleanBaseUrl);
 				break;
-			case 'openai-tts':
+			}
+			case 'openai-tts': {
 				if (!apiKey) throw new Error('API key required for OpenAI TTS');
 				models = await fetchOpenAITTSModels(apiKey, cleanBaseUrl);
 				break;
+			}
 			default:
 				return Response.json(
 					{ models: [], error: `Unknown provider: ${providerId}` } as FetchModelsResponse,
@@ -288,8 +217,11 @@ export const POST: RequestHandler = async ({ request }) => {
 				);
 		}
 
-		// Filter to chat-compatible models
-		const filteredModels = filterModels(providerId, models, baseUrl);
+		// Filter to chat-compatible models for known LLM providers
+		const isLLM = ['openai', 'anthropic', 'openrouter', 'custom-endpoint'].includes(provider);
+		const filteredModels = isLLM
+			? filterModels(provider as LLMProvider, models, baseUrl)
+			: models;
 
 		return Response.json({ models: filteredModels } as FetchModelsResponse);
 	} catch (error) {

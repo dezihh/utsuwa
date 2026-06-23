@@ -12,24 +12,31 @@ export interface ChatMessage {
 
 // LLM Provider IDs
 export type LLMProvider =
-	// Cloud
 	| 'openai'
 	| 'anthropic'
-	| 'google'
-	| 'deepseek'
-	| 'xai'
 	| 'openrouter'
-	| 'openai-compatible'
-	// Local
+	| 'custom-endpoint';
+
+export type CustomEndpointTemplate =
 	| 'ollama'
 	| 'lmstudio'
-	| 'llamacpp';
+	| 'llamacpp'
+	| 'gemini'
+	| 'deepseek'
+	| 'xai'
+	| 'custom';
 
 export interface LLMConfig {
 	provider: LLMProvider;
 	model: string;
 	apiKey?: string;
 	baseUrl?: string;
+	/** User-defined label for the custom endpoint */
+	label?: string;
+	/** Selected template for the custom endpoint */
+	endpointTemplate?: CustomEndpointTemplate;
+	/** Context window size in tokens (1k–128k) */
+	contextSize?: number;
 }
 
 // TTS Provider IDs
@@ -52,6 +59,10 @@ export interface TTSConfig {
 export interface ProviderConfig {
 	apiKey?: string;
 	baseUrl?: string;
+	/** User-defined label for custom endpoints */
+	label?: string;
+	/** Selected template for the custom-endpoint LLM provider */
+	endpointTemplate?: CustomEndpointTemplate;
 	modelId?: string;
 	voiceId?: string;
 	/** Chatterbox: alternative voice ID for multilingual switching */

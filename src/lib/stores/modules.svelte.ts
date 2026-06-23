@@ -74,6 +74,7 @@ function createModulesStore() {
 		if (saved) {
 			try {
 				const state = JSON.parse(saved);
+				migrateModuleSettings(moduleId, state.settings);
 				moduleStates.set(moduleId, state);
 				moduleStates = new Map(moduleStates);
 			} catch (e) {
@@ -82,6 +83,26 @@ function createModulesStore() {
 			}
 		} else {
 			initDefaultState(moduleId);
+		}
+	}
+
+	function migrateModuleSettings(moduleId: string, settings: Record<string, unknown>) {
+		if (moduleId !== 'consciousness') return;
+
+		const legacyToTemplate: Record<string, import('$lib/types').CustomEndpointTemplate> = {
+			google: 'gemini',
+			deepseek: 'deepseek',
+			xai: 'xai',
+			ollama: 'ollama',
+			lmstudio: 'lmstudio',
+			llamacpp: 'llamacpp',
+			'openai-compatible': 'custom'
+		};
+
+		const activeProvider = settings.activeProvider as string | undefined;
+		if (activeProvider && legacyToTemplate[activeProvider]) {
+			settings.activeProvider = 'custom-endpoint';
+			settings.endpointTemplate = legacyToTemplate[activeProvider];
 		}
 	}
 

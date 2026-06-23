@@ -28,11 +28,8 @@
 
 	// Group providers by category for LLM
 	const llmCategories = [
-		{ id: 'cloud-commercial', label: 'Cloud Commercial', providers: ['openai', 'anthropic', 'google', 'deepseek', 'mistral', 'xai', 'groq', 'perplexity', 'moonshot', 'together'] },
-		{ id: 'cloud-additional', label: 'Cloud Additional', providers: ['cerebras', 'fireworks', 'novita', '302ai', 'comet'] },
-		{ id: 'aggregators', label: 'Aggregators', providers: ['openrouter', 'openai-compatible'] },
-		{ id: 'local', label: 'Local', providers: ['ollama', 'lmstudio', 'llamacpp', 'vllm', 'player2'] },
-		{ id: 'enterprise', label: 'Enterprise', providers: ['azure', 'cloudflare'] }
+		{ id: 'cloud-commercial', label: 'Cloud', providers: ['openai', 'anthropic', 'openrouter'] },
+		{ id: 'custom', label: 'Custom Endpoint', providers: ['custom-endpoint'] }
 	];
 
 	// Group providers by category for TTS

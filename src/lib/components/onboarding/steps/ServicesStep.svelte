@@ -23,24 +23,22 @@
 	const llmSettings = $derived(modulesStore.getModuleSettings('consciousness'));
 	const llmProvider = $derived(getLLMProvider(llmSettings.activeProvider as string));
 	const staticLLMModels = $derived(llmProvider?.models ?? []);
-	const llmSupportsBrowsing = $derived(llmProvider?.id === 'ollama' || llmProvider?.id === 'llamacpp');
 
 	// Dynamic model fetching state for LLM
 	let llmIsLoading = $state(false);
 	let llmFetchError = $state<string | null>(null);
 	let llmDynamicModels = $state<ModelInfo[] | null>(null);
-	let lastLocalLLMFetchKey = $state('');
 
 	// Use dynamic models if available, otherwise static
-	const llmModels = $derived(
-		llmSupportsBrowsing ? llmDynamicModels ?? [] : llmDynamicModels ?? staticLLMModels
-	);
+	const llmModels = $derived(llmDynamicModels ?? staticLLMModels);
 
-	// Check if API key is present for current LLM provider
-	const llmHasApiKey = $derived.by(() => {
+	// Check if provider is ready to fetch models
+	const llmIsReady = $derived.by(() => {
 		if (!llmProvider) return false;
-		if (llmProvider.isLocal || !llmProvider.requiresApiKey) return true;
 		const config = settingsStore.getProviderConfig(llmProvider.id);
+		if (llmProvider.id === 'custom-endpoint') {
+			return !!config.baseUrl;
+		}
 		return !!config.apiKey;
 	});
 
@@ -96,28 +94,36 @@
 		if (!llmSettings.activeProvider) return false;
 		const provider = getLLMProvider(llmSettings.activeProvider as string);
 		if (!provider) return false;
-		if (provider.isLocal) {
+		if (provider.id === 'custom-endpoint') {
 			const activeModel = llmSettings.activeModel as string;
-			return !!activeModel && llmModels.some((model) => model.id === activeModel);
+			return !!activeModel && !!settingsStore.getProviderConfig(provider.id).baseUrl;
 		}
-		if (!provider.requiresApiKey) return true;
 		const config = settingsStore.getProviderConfig(provider.id);
-		return !!config.apiKey;
+		return !!config.apiKey && !!llmSettings.activeModel;
 	});
 
 	// Fetch LLM models from provider API
-	async function fetchLLMModels(targetProvider = llmProvider?.id) {
+	async function fetchLLMModels(targetProvider = llmProvider?.id, forceRefresh = false) {
 		if (!targetProvider) return;
 
 		const config = settingsStore.getProviderConfig(targetProvider);
 		const provider = getLLMProvider(targetProvider);
-		const supportsBrowsing = provider?.id === 'ollama' || provider?.id === 'llamacpp';
+
+		if (forceRefresh) {
+			settingsStore.clearCachedModels(targetProvider);
+		} else {
+			const cached = getCachedModelsForProvider(targetProvider);
+			if (cached) {
+				llmDynamicModels = cached;
+				return;
+			}
+		}
 
 		await fetchModels({
 			providerId: targetProvider,
 			apiKey: config.apiKey ?? '',
 			baseUrl: config.baseUrl,
-			isLocal: provider?.isLocal,
+			isLocal: provider?.id === 'custom-endpoint',
 			getCurrentProviderId: () => modulesStore.getModuleSettings('consciousness').activeProvider as string,
 			onStart: () => {
 				llmIsLoading = true;
@@ -135,12 +141,12 @@
 			onError: (error) => {
 				llmIsLoading = false;
 				llmFetchError = error;
-				llmDynamicModels = llmProvider?.isLocal ? [] : null;
+				llmDynamicModels = provider?.id === 'custom-endpoint' ? [] : null;
 			},
 			onEmpty: () => {
 				llmIsLoading = false;
-				llmFetchError = supportsBrowsing ? 'No models found' : 'Using default list';
-				llmDynamicModels = supportsBrowsing ? [] : null;
+				llmFetchError = provider?.id === 'custom-endpoint' ? 'No models found' : 'Using default list';
+				llmDynamicModels = provider?.id === 'custom-endpoint' ? [] : null;
 			},
 			onStale: () => {
 				llmIsLoading = false;
@@ -273,18 +279,25 @@
 		debouncedFetchAllTalkSettings();
 	});
 
+	// Load models for the active LLM provider on mount/provider change.
 	$effect(() => {
-		if (!llmProvider?.isLocal) {
-			lastLocalLLMFetchKey = '';
+		const providerId = llmSettings.activeProvider as string;
+		if (!providerId) return;
+
+		if (llmDynamicModels !== null) return;
+
+		const cached = getCachedModelsForProvider(providerId);
+		if (cached) {
+			llmDynamicModels = cached;
 			return;
 		}
 
-		const baseUrl = settingsStore.getProviderConfig(llmProvider.id).baseUrl ?? llmProvider.defaultBaseUrl ?? '';
-		const fetchKey = `${llmProvider.id}:${baseUrl}`;
-
-		if (fetchKey !== lastLocalLLMFetchKey) {
-			lastLocalLLMFetchKey = fetchKey;
-			debouncedFetchLLMModels();
+		const provider = getLLMProvider(providerId);
+		const config = settingsStore.getProviderConfig(providerId);
+		if (provider?.id === 'custom-endpoint') {
+			if (config.baseUrl) debouncedFetchLLMModels(providerId);
+		} else if (config.apiKey) {
+			debouncedFetchLLMModels(providerId);
 		}
 	});
 
@@ -298,22 +311,43 @@
 		llmFetchError = null;
 		llmIsLoading = false;
 
-		// Check for cached models
-		const cached = getCachedModelsForProvider(providerId);
-		if (cached) {
-			llmDynamicModels = cached;
-		}
-
-		if (provider && !provider.isLocal && provider.models?.length) {
-			modulesStore.setModuleSetting('consciousness', 'activeModel', provider.models[0].id);
-		}
-		if (provider && (provider.id === 'ollama' || provider.id === 'llamacpp')) {
-			debouncedFetchLLMModels(providerId);
-		}
-		// Mark local providers as added immediately (they don't need API keys)
-		if (provider?.isLocal || !provider?.requiresApiKey) {
+		if (provider) {
 			settingsStore.markProviderAdded(providerId);
+
+			if (providerId === 'custom-endpoint') {
+				const config = settingsStore.getProviderConfig(providerId);
+				if (!config.endpointTemplate) {
+					handleLLMEndpointTemplateChange('ollama');
+				} else {
+					applyEndpointTemplate(config.endpointTemplate);
+				}
+			}
+
+			const config = settingsStore.getProviderConfig(providerId);
+			if (providerId === 'custom-endpoint') {
+				if (config.baseUrl) debouncedFetchLLMModels(providerId);
+			} else if (config.apiKey) {
+				debouncedFetchLLMModels(providerId);
+			}
 		}
+	}
+
+	function applyEndpointTemplate(templateId: string) {
+		const provider = getLLMProvider('custom-endpoint');
+		const template = provider?.endpointTemplates?.find(t => t.id === templateId);
+		if (!template) return;
+
+		const config = settingsStore.getProviderConfig('custom-endpoint');
+		settingsStore.setProviderConfig('custom-endpoint', {
+			endpointTemplate: templateId as import('$lib/types').CustomEndpointTemplate,
+			baseUrl: config.baseUrl || template.baseUrl
+		});
+		modulesStore.setModuleSetting('consciousness', 'endpointTemplate', templateId);
+	}
+
+	function handleLLMEndpointTemplateChange(templateId: string) {
+		applyEndpointTemplate(templateId);
+		debouncedFetchLLMModels('custom-endpoint');
 	}
 
 	function handleLLMModelChange(modelId: string) {
@@ -331,8 +365,9 @@
 	}
 
 	function handleLLMApiKeyBlur() {
-		const config = settingsStore.getProviderConfig(llmProvider?.id ?? '');
-		if (config.apiKey && llmProvider && !llmProvider.isLocal) {
+		if (!llmProvider) return;
+		const config = settingsStore.getProviderConfig(llmProvider.id);
+		if (config.apiKey && (llmProvider.id !== 'custom-endpoint' || config.baseUrl)) {
 			debouncedFetchLLMModels();
 		}
 	}
@@ -341,7 +376,7 @@
 		if (llmProvider) {
 			llmFetchError = null;
 			settingsStore.setProviderConfig(llmProvider.id, { baseUrl });
-			if (llmProvider.id === 'ollama' || llmProvider.id === 'llamacpp') {
+			if (llmProvider.id === 'custom-endpoint' && baseUrl) {
 				debouncedFetchLLMModels(llmProvider.id);
 			}
 		}
@@ -466,76 +501,93 @@
 			placeholder="Select LLM provider..."
 		/>
 
-		{#if llmProvider?.requiresApiKey}
-			<input
-				type="password"
-				class="api-key-input"
-				class:error={llmFetchError}
-				placeholder="Enter API Key..."
-				value={settingsStore.getProviderConfig(llmProvider.id).apiKey ?? ''}
-				oninput={(e) => handleLLMApiKeyChange(e.currentTarget.value)}
-				onblur={handleLLMApiKeyBlur}
-			/>
-		{/if}
-
-		{#if llmSettings.activeProvider && llmProvider?.id !== 'ollama' && llmProvider?.id !== 'llamacpp' && !llmProvider?.isLocal}
-			<ModelDropdown
-				models={llmModels}
-				value={llmSettings.activeModel as string}
-				onSelect={handleLLMModelChange}
-				placeholder="Select model..."
-				isLoading={llmIsLoading}
-				onRefresh={llmHasApiKey ? fetchLLMModels : undefined}
-				disabled={!llmHasApiKey}
-				disabledMessage="Enter API key first"
-			/>
-		{/if}
-
-		{#if llmProvider?.isLocal}
-			<div class="api-key-row">
+		{#if llmProvider}
+			{#if llmProvider.id !== 'custom-endpoint'}
 				<input
 					type="password"
 					class="api-key-input"
-					placeholder="Auth token (optional)"
+					class:error={llmFetchError}
+					placeholder="Enter API Key..."
 					value={settingsStore.getProviderConfig(llmProvider.id).apiKey ?? ''}
 					oninput={(e) => handleLLMApiKeyChange(e.currentTarget.value)}
 					onblur={handleLLMApiKeyBlur}
 				/>
-			</div>
-			{#if llmSupportsBrowsing}
+			{/if}
+
+			{#if llmProvider.id === 'custom-endpoint'}
+				<select
+					class="api-key-input"
+					value={settingsStore.getProviderConfig(llmProvider.id).endpointTemplate ?? 'ollama'}
+					onchange={(e) => handleLLMEndpointTemplateChange(e.currentTarget.value)}
+				>
+					{#each llmProvider.endpointTemplates ?? [] as template}
+						<option value={template.id}>{template.name}</option>
+					{/each}
+				</select>
+				<input
+					type="text"
+					class="api-key-input"
+					class:error={llmFetchError}
+					placeholder="https://your-endpoint.com/v1"
+					value={settingsStore.getProviderConfig(llmProvider.id).baseUrl ?? ''}
+					oninput={(e) => handleLLMBaseUrlChange(e.currentTarget.value)}
+				/>
+				<input
+					type="password"
+					class="api-key-input"
+					placeholder="API Key (optional)"
+					value={settingsStore.getProviderConfig(llmProvider.id).apiKey ?? ''}
+					oninput={(e) => handleLLMApiKeyChange(e.currentTarget.value)}
+					onblur={handleLLMApiKeyBlur}
+				/>
+				<details class="custom-endpoint-help">
+					<summary>How to configure this endpoint</summary>
+					<div class="custom-endpoint-help-content">
+						<p>{llmProvider.endpointTemplates?.find(t => t.id === (settingsStore.getProviderConfig(llmProvider.id).endpointTemplate ?? 'ollama'))?.docsHint}</p>
+						<ul>
+							<li><strong>Google Gemini:</strong> set Base URL to <code>https://generativelanguage.googleapis.com/v1beta/openai/</code> and use a Google AI Studio API key. Enter the model ID manually (e.g. <code>gemini-1.5-flash-latest</code>).</li>
+							<li><strong>DeepSeek / xAI:</strong> use their OpenAI-compatible base URL and API key, then enter the model ID manually.</li>
+							<li><strong>Ollama:</strong> run <code>ollama serve</code>, pull a model with <code>ollama pull &lt;model&gt;</code>, and use <code>http://localhost:11434/v1/</code>.</li>
+							<li><strong>LM Studio:</strong> start the developer server and use <code>http://localhost:1234/v1/</code>.</li>
+							<li><strong>llama.cpp:</strong> start the server with <code>llama-server --model &lt;model.gguf&gt;</code> and use <code>http://localhost:8080/v1/</code>.</li>
+						</ul>
+					</div>
+				</details>
+			{/if}
+
+			{#if llmProvider.id !== 'custom-endpoint'}
 				<ModelDropdown
 					models={llmModels}
 					value={llmSettings.activeModel as string}
 					onSelect={handleLLMModelChange}
-					placeholder={`Select ${llmProvider.name} model...`}
+					placeholder="Select model..."
 					isLoading={llmIsLoading}
-					onRefresh={fetchLLMModels}
+					onRefresh={() => fetchLLMModels(llmProvider.id, true)}
+					disabled={!llmIsReady}
+					disabledMessage="Enter API key first"
 				/>
 			{:else}
+				<ModelDropdown
+					models={llmModels}
+					value={llmSettings.activeModel as string}
+					onSelect={handleLLMModelChange}
+					placeholder="Select or type model..."
+					isLoading={llmIsLoading}
+					onRefresh={() => fetchLLMModels(llmProvider.id, true)}
+					disabled={!llmIsReady}
+					disabledMessage="Enter base URL first"
+				/>
 				<input
 					type="text"
 					class="api-key-input"
-					placeholder="Model name (e.g., llama3.2:latest)"
+					placeholder="Model ID (e.g. llama3.2:latest)"
 					value={llmSettings.activeModel as string ?? ''}
 					oninput={(e) => handleLLMModelChange(e.currentTarget.value)}
 				/>
 			{/if}
-			<input
-				type="text"
-				class="api-key-input"
-				class:error={!!llmFetchError}
-				placeholder={llmProvider.defaultBaseUrl || 'http://localhost:11434/v1/'}
-				value={settingsStore.getProviderConfig(llmProvider.id).baseUrl ?? ''}
-				oninput={(e) => handleLLMBaseUrlChange(e.currentTarget.value)}
-				onblur={() => fetchLLMModels()}
-			/>
 			{#if llmFetchError}
 				<p class="provider-note error">{llmFetchError}</p>
 			{/if}
-			<p class="provider-note">
-				<Icon name="check-circle" size={14} />
-				Local provider - no API key needed
-			</p>
 		{/if}
 	</div>
 
@@ -1111,6 +1163,54 @@
 
 	.provider-note.error {
 		color: var(--color-error);
+	}
+
+	.custom-endpoint-help {
+		font-size: 0.8rem;
+		color: var(--text-secondary);
+		background: rgba(0, 0, 0, 0.03);
+		border-radius: 10px;
+		padding: 0.5rem 0.75rem;
+		margin-top: 0.25rem;
+	}
+
+	:global(.dark) .custom-endpoint-help {
+		background: rgba(255, 255, 255, 0.05);
+	}
+
+	.custom-endpoint-help summary {
+		cursor: pointer;
+		font-weight: 600;
+	}
+
+	.custom-endpoint-help-content {
+		margin-top: 0.5rem;
+		line-height: 1.5;
+	}
+
+	.custom-endpoint-help-content p {
+		margin: 0 0 0.5rem;
+	}
+
+	.custom-endpoint-help-content ul {
+		margin: 0;
+		padding-left: 1.25rem;
+	}
+
+	.custom-endpoint-help-content li {
+		margin-bottom: 0.35rem;
+	}
+
+	.custom-endpoint-help-content code {
+		font-family: 'Share Tech Mono', monospace;
+		font-size: 0.75rem;
+		background: rgba(0, 0, 0, 0.06);
+		padding: 0.1rem 0.35rem;
+		border-radius: 4px;
+	}
+
+	:global(.dark) .custom-endpoint-help-content code {
+		background: rgba(255, 255, 255, 0.08);
 	}
 
 	.vad-sensitivity-row {

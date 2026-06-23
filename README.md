@@ -25,8 +25,8 @@
 - **Dockable Chat Sidebar**: Collapsible sidebar showing full conversation history alongside the 3D view
 - **Voice Input**: Speech-to-text via Groq (Whisper), local Whisper server, or Web Speech API with real-time audio visualization
 - **Duplex / VOX Mode**: Hands-free conversation — the companion listens continuously, detects speech automatically using voice activity detection (VAD), transcribes, responds, and returns to listening. Includes noise rejection, background-noise toast notifications, and live sensitivity controls.
-- **LLM Integration**: Support for 10 LLM providers including OpenAI, Anthropic, Google, xAI, DeepSeek, OpenRouter, **OpenAI Compatible** (LiteLLM, vLLM, custom proxies), Ollama, LM Studio, and llama.cpp
-- **Local Model Discovery**: Ollama and LM Studio discover installed local models directly from your device
+- **LLM Integration**: Support for OpenAI, Anthropic, OpenRouter, and any **Custom Endpoint** (Ollama, LM Studio, llama.cpp, LiteLLM, Google Gemini, DeepSeek, xAI, vLLM, or other OpenAI-compatible proxies)
+- **Dynamic Model Discovery**: Fetch available models directly from OpenRouter or any OpenAI-compatible custom endpoint, with one-click refresh
 - **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, AllTalk, Chatterbox, and OmniVoice (with per-segment language + expression tags)
 - **Provider-Specific TTS Emotions**: Configure emotion tags per TTS provider under **Settings > TTS Emotions**. Each provider has its own emotion table with adjustable speed, pitch, volume, and provider-specific settings (exaggeration for Chatterbox, native sound tags for OmniVoice). Includes body-action mapping rules with probability and cooldown controls, plus live test buttons.
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
@@ -251,13 +251,14 @@ The desktop app uses the same codebase as the web version — your save files ar
 
 ## Supported Providers
 
-### LLM Providers (10)
+### LLM Providers
 
 | Category | Providers |
 |----------|-----------|
-| **Cloud** | OpenAI, Anthropic, Google Gemini, DeepSeek, xAI (Grok), OpenRouter |
-| **OpenAI Compatible** | Any OpenAI-compatible endpoint (LiteLLM, vLLM, custom proxies) |
-| **Local** | Ollama, LM Studio, llama.cpp |
+| **Cloud** | OpenAI, Anthropic, OpenRouter |
+| **Custom Endpoint** | Any OpenAI-compatible endpoint: Ollama, LM Studio, llama.cpp, LiteLLM, vLLM, Google Gemini, DeepSeek, xAI, or custom proxies |
+
+Custom Endpoint uses a built-in template selector so common local and cloud OpenAI-compatible services can be chosen with a single click; you can also enter a fully custom base URL. Models are loaded dynamically from the endpoint and cached until you refresh the list.
 
 ### TTS Providers (5)
 
@@ -483,9 +484,8 @@ pnpm tauri dev
 1. Click the **Settings** (gear icon) in the sidebar
 2. Navigate to **Settings > Character** to configure your chat provider:
    - Enable Chat (LLM)
-   - Select a cloud provider and enter your API key
-   - Or select **OpenAI Compatible** for any OpenAI-compatible proxy (LiteLLM, vLLM, etc.) — enter your API key **and** the custom base URL
-   - Or select a local server like Ollama, LM Studio, or llama.cpp and choose an installed model
+   - Select **OpenAI**, **Anthropic**, or **OpenRouter** and enter your API key, then pick a model
+   - Or select **Custom Endpoint** for any OpenAI-compatible service (Ollama, LM Studio, llama.cpp, LiteLLM, vLLM, Google Gemini, DeepSeek, xAI, etc.) — choose a template or enter a base URL, provide an optional API key, and pick or type a model
 3. Configure text-to-speech in the same settings area (optional):
    - Select a TTS provider
    - For AllTalk, enter the local API base URL, then choose the voice and optional RVC voice
@@ -494,25 +494,34 @@ pnpm tauri dev
 
 All API keys are stored locally on your device and are never sent to any server except the respective API providers.
 
-#### Ollama URL Format
+#### Custom Endpoint URL Format
 
-When using Ollama, enter the **bare host URL** without `/v1`, for example:
+Custom Endpoint supports any service that exposes an OpenAI-compatible `/chat/completions` endpoint.
+
+**Ollama**
+
+Enter the **bare host URL** without `/v1`, for example:
 
 - `http://localhost:11434`
 - `http://127.0.0.1:11434`
 
-Utsuwa uses that URL to fetch the available model list, and it automatically adds the OpenAI-compatible `/v1` path for chat requests. If you include `/v1` in the Ollama base URL, model discovery will fail.
+Utsuwa uses that URL to fetch the available model list and automatically adds the OpenAI-compatible `/v1` path for chat requests. If you include `/v1` in the Ollama base URL, model discovery will fail.
 
-The **Auth token (optional)** field is only needed if you run Ollama behind a proxy or custom auth layer. Leave it empty for a normal local Ollama install.
+The **API key (optional)** field is only needed if you run Ollama behind a proxy or custom auth layer. Leave it empty for a normal local Ollama install.
 
-#### llama.cpp URL Format
+**llama.cpp / LM Studio / other OpenAI-compatible servers**
 
-When using llama.cpp, enter the **OpenAI-compatible base URL** for your server, for example:
+Enter the **OpenAI-compatible base URL** for your server, for example:
 
-- `http://localhost:8080/v1`
-- `http://127.0.0.1:8080/v1`
+- `http://localhost:8080/v1` (llama.cpp)
+- `http://localhost:1234/v1` (LM Studio)
+- `http://localhost:4000` (LiteLLM proxy)
 
-Utsuwa uses that URL directly for model discovery and chat requests. If your llama.cpp server is exposed behind a proxy or auth layer, you can fill in the **Auth token (optional)** field; otherwise, leave it empty.
+Utsuwa uses that URL directly for model discovery and chat requests. If the server is exposed behind a proxy or auth layer, fill in the **API key (optional)** field; otherwise, leave it empty.
+
+**Context size**
+
+The **context size** slider (1,000–128,000 tokens) controls how much working memory, facts, session summaries, and fact library entries are injected into each prompt. Match it to the context window of the model you are using.
 
 #### Loading a VRM Model
 
@@ -593,7 +602,7 @@ pnpm tauri build  # Build desktop app installer
 
 - [x] VRM model loading and display with orbit controls
 - [x] 3D speech bubbles tracking model head position
-- [x] Multi-provider LLM support (9 providers)
+- [x] Multi-provider LLM support (OpenAI, Anthropic, OpenRouter, and any OpenAI-compatible Custom Endpoint)
 - [x] Multi-provider TTS support (5 providers: ElevenLabs, OpenAI TTS, AllTalk, Chatterbox, OmniVoice)
 - [x] Multi-provider STT support (3 providers: Groq Whisper, local Whisper/speaches server, Web Speech API)
 - [x] Audio-driven lip-sync
@@ -625,7 +634,7 @@ pnpm tauri build  # Build desktop app installer
 - [x] MCP server edit form (add, edit, delete, enable/disable MCP servers in settings)
 - [x] MCP continue-mode support and progressive TTS streaming for tool-augmented responses
 - [x] VRM skeleton optimisation updated to combineSkeletons; LookAt proxy pre-registered to suppress library warnings
-- [x] **OpenAI Compatible provider** — connect any OpenAI-compatible API endpoint (LiteLLM proxy, vLLM, etc.) with custom base URL + API key; fetches all available models without filtering
+- [x] **Custom Endpoint provider** — connect any OpenAI-compatible API endpoint (Ollama, LM Studio, llama.cpp, LiteLLM, vLLM, Google Gemini, DeepSeek, xAI, etc.) with template selector, custom base URL, optional API key, dynamic model fetching, and cache refresh
 - [x] **Model search in dropdowns** — live text filter in all model selection dropdowns to quickly find models in long lists
 - [x] **Duplex VAD robustness** — 3-second calibration, 5× noise-floor multiplier, interrupt only after confirmed transcription (not on audio peaks), clean 1–10 sensitivity scale
 - [x] **Developer Expression Overrides** — manual expression values on the Developer page are protected from automatic systems (blink, lip-sync, emotion controller, LookAt)
@@ -696,6 +705,16 @@ Utsuwa is built on the shoulders of these excellent projects:
 - **[postprocessing](https://github.com/pmndrs/postprocessing)** - Post-processing effects
 
 ## Recent Updates
+
+### Consolidated LLM Provider Architecture
+The LLM provider model has been simplified and made more flexible:
+
+- **Four core providers** — OpenAI, Anthropic, OpenRouter, and **Custom Endpoint**.
+- **Template selector for Custom Endpoint** — one-click setup for Ollama, LM Studio, llama.cpp, LiteLLM, Google Gemini, DeepSeek, xAI, and fully custom OpenAI-compatible URLs.
+- **Dynamic model loading** — OpenRouter and Custom Endpoint fetch their model lists live and cache them; a refresh button reloads the list on demand.
+- **Context-size slider** — choose 1,000–128,000 tokens to match your model's context window.
+- **Automatic migration** — existing settings from legacy providers (Google, DeepSeek, xAI, Ollama, LM Studio, llama.cpp, OpenAI Compatible) are migrated to Custom Endpoint with the appropriate template and preserved base URL / API key.
+- **Unified code path** — Anthropic keeps its native `/messages` flow; every other provider uses a single OpenAI-compatible `/chat/completions` path, reducing duplication and simplifying maintenance.
 
 ### Animation Management UI
 A new **Settings > Animations** page lists every built-in and custom VRMA animation in an editable table. You can toggle animations on/off for LLM visibility, add inline descriptions that the LLM receives in its prompt, and delete custom uploads. After uploading a `.vrma` file in Developer Tools you are automatically redirected here. The LLM only sees enabled animations — no more suggestions for missing files.

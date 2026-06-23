@@ -12,11 +12,9 @@ export function normalizeChatBaseURL(provider: LLMProvider, baseURL?: string): s
 	if (!baseURL) return baseURL;
 
 	const cleanBaseURL = ensureTrailingSlash(baseURL);
-	if (provider === 'ollama') {
-		return cleanBaseURL.endsWith('/v1') ? cleanBaseURL : `${cleanBaseURL}/v1`;
-	}
-
-	if (provider === 'lmstudio' || provider === 'llamacpp') {
+	// Custom endpoints (Ollama, LM Studio, llama.cpp, self-hosted proxies) need the
+	// OpenAI-compatible /v1 prefix for chat completions.
+	if (provider === 'custom-endpoint') {
 		return cleanBaseURL.endsWith('/v1') ? cleanBaseURL : `${cleanBaseURL}/v1`;
 	}
 

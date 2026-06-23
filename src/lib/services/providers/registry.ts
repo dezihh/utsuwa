@@ -12,14 +12,15 @@ export interface ProviderMetadata {
 	isLocal?: boolean;
 	models?: Array<{ id: string; name: string }>;
 	voices?: Array<{ id: string; name: string }>;
+	/** Quick presets for the custom-endpoint provider */
+	endpointTemplates?: Array<{ id: string; name: string; baseUrl: string; docsHint?: string }>;
 }
 
 // ============================================
-// LLM PROVIDERS (8 total)
+// LLM PROVIDERS (4 total)
 // ============================================
 
 export const LLM_PROVIDERS: ProviderMetadata[] = [
-	// Cloud providers - models fetched dynamically from API after user enters key
 	{
 		id: 'openai',
 		name: 'OpenAI',
@@ -39,34 +40,6 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 		defaultBaseUrl: 'https://api.anthropic.com/v1/'
 	},
 	{
-		id: 'google',
-		name: 'Google Gemini',
-		description: 'Gemini models',
-		category: 'llm',
-		icon: '✨',
-		iconColor: '#4285F4',
-		requiresApiKey: true,
-		defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/'
-	},
-	{
-		id: 'deepseek',
-		name: 'DeepSeek',
-		description: 'DeepSeek models',
-		category: 'llm',
-		icon: '🔍',
-		requiresApiKey: true,
-		defaultBaseUrl: 'https://api.deepseek.com/'
-	},
-	{
-		id: 'xai',
-		name: 'xAI (Grok)',
-		description: 'Grok models',
-		category: 'llm',
-		icon: '𝕏',
-		requiresApiKey: true,
-		defaultBaseUrl: 'https://api.x.ai/v1/'
-	},
-	{
 		id: 'openrouter',
 		name: 'OpenRouter',
 		description: 'Access 200+ models from one API',
@@ -76,48 +49,58 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 		defaultBaseUrl: 'https://openrouter.ai/api/v1/'
 	},
 	{
-		id: 'openai-compatible',
-		name: 'OpenAI Compatible',
-		description: 'Any OpenAI-compatible API (e.g. LiteLLM proxy, vLLM)',
+		id: 'custom-endpoint',
+		name: 'Custom Endpoint',
+		description: 'Any OpenAI-compatible endpoint (Ollama, LM Studio, Gemini, self-hosted, ...)',
 		category: 'llm',
 		icon: '🔌',
-		requiresApiKey: true,
-		defaultBaseUrl: ''
-	},
-	// Local LLMs discover installed models from the user's running local server.
-	{
-		id: 'ollama',
-		name: 'Ollama',
-		description: 'Run LLMs locally on your machine',
-		category: 'llm',
-		icon: '🦙',
 		requiresApiKey: false,
-		isLocal: true,
-		defaultBaseUrl: 'http://localhost:11434',
-		models: []
-	},
-	{
-		id: 'lmstudio',
-		name: 'LM Studio',
-		description: 'Local LLM with GUI interface',
-		category: 'llm',
-		icon: '🖥️',
-		requiresApiKey: false,
-		isLocal: true,
-		defaultBaseUrl: 'http://localhost:1234/v1/',
-		models: []
-	},
-	{
-		id: 'llamacpp',
-		name: 'llama.cpp',
-		description: 'OpenAI-compatible local LLM server',
-		category: 'llm',
-		icon: '🦙',
-		requiresApiKey: false,
-		isLocal: true,
-		defaultBaseUrl: 'http://localhost:8080/v1/',
-		models: []
-	},
+		defaultBaseUrl: '',
+		endpointTemplates: [
+			{
+				id: 'ollama',
+				name: 'Ollama',
+				baseUrl: 'http://localhost:11434/v1/',
+				docsHint: 'Make sure Ollama is running with "ollama serve" and the model is pulled.'
+			},
+			{
+				id: 'lmstudio',
+				name: 'LM Studio',
+				baseUrl: 'http://localhost:1234/v1/',
+				docsHint: 'Open LM Studio, load a model, and start the developer server.'
+			},
+			{
+				id: 'llamacpp',
+				name: 'llama.cpp',
+				baseUrl: 'http://localhost:8080/v1/',
+				docsHint: 'Start llama-server with "llama-server --model <model.gguf>".'
+			},
+			{
+				id: 'gemini',
+				name: 'Google Gemini',
+				baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+				docsHint: 'Use an API key from Google AI Studio and enter the model ID manually (e.g. gemini-1.5-flash-latest).'
+			},
+			{
+				id: 'deepseek',
+				name: 'DeepSeek',
+				baseUrl: 'https://api.deepseek.com/v1/',
+				docsHint: 'Use your DeepSeek API key and enter the model ID manually (e.g. deepseek-chat).'
+			},
+			{
+				id: 'xai',
+				name: 'xAI (Grok)',
+				baseUrl: 'https://api.x.ai/v1/',
+				docsHint: 'Use your xAI API key and enter the model ID manually (e.g. grok-2-latest).'
+			},
+			{
+				id: 'custom',
+				name: 'Custom',
+				baseUrl: '',
+				docsHint: 'Enter the base URL of any OpenAI-compatible API.'
+			}
+		]
+	}
 ];
 
 // ============================================

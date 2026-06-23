@@ -103,9 +103,48 @@ function createSettingsStore() {
 				if (parsed.ttsProvider && providerConfigs[parsed.ttsProvider]?.apiKey) {
 					addedProviders[parsed.ttsProvider] = true;
 				}
+
+				// Migrate removed LLM providers to custom-endpoint
+				migrateRemovedLLMProviders(providerConfigs, addedProviders);
 			} catch (e) {
 				console.error('Failed to load settings:', e);
 			}
+		}
+	}
+
+	function migrateRemovedLLMProviders(
+		configs: Record<string, ProviderConfig>,
+		added: Record<string, boolean>
+	) {
+		const legacyToTemplate: Record<string, import('$lib/types').CustomEndpointTemplate> = {
+			google: 'gemini',
+			deepseek: 'deepseek',
+			xai: 'xai',
+			ollama: 'ollama',
+			lmstudio: 'lmstudio',
+			llamacpp: 'llamacpp',
+			'openai-compatible': 'custom'
+		};
+
+		for (const [legacyId, templateId] of Object.entries(legacyToTemplate)) {
+			const legacyConfig = configs[legacyId];
+			if (!legacyConfig) continue;
+
+			// Move config to custom-endpoint, merging if it already exists
+			const existing = configs['custom-endpoint'] ?? {};
+			configs['custom-endpoint'] = {
+				...legacyConfig,
+				...existing,
+				endpointTemplate: existing.endpointTemplate || templateId,
+				baseUrl: existing.baseUrl || legacyConfig.baseUrl
+			};
+
+			if (added[legacyId]) {
+				added['custom-endpoint'] = true;
+			}
+
+			delete configs[legacyId];
+			delete added[legacyId];
 		}
 	}
 

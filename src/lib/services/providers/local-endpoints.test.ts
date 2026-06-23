@@ -8,42 +8,35 @@ import {
 	getLocalProviderConnectionHint
 } from './local-endpoints.ts';
 
-test('identifies local LLM providers', () => {
-	assert.equal(isLocalLLMProvider('ollama'), true);
-	assert.equal(isLocalLLMProvider('lmstudio'), true);
+test('identifies custom endpoint as the local-compatible provider', () => {
+	assert.equal(isLocalLLMProvider('custom-endpoint'), true);
 	assert.equal(isLocalLLMProvider('openai'), false);
+	assert.equal(isLocalLLMProvider('ollama'), false);
 });
 
-test('normalizes Ollama root URL to OpenAI-compatible chat URL', () => {
-	assert.equal(getChatBaseUrl('ollama', 'http://localhost:11434'), 'http://localhost:11434/v1');
-	assert.equal(getChatBaseUrl('ollama', 'http://localhost:11434/'), 'http://localhost:11434/v1');
-	assert.equal(getChatBaseUrl('ollama', 'http://localhost:11434/v1'), 'http://localhost:11434/v1');
+test('custom endpoint returns the provided base URL', () => {
+	assert.equal(getChatBaseUrl('custom-endpoint', 'http://localhost:11434/v1'), 'http://localhost:11434/v1');
+	assert.equal(getModelsBaseUrl('custom-endpoint', 'http://localhost:11434'), 'http://localhost:11434');
 });
 
-test('normalizes Ollama model-list URL to the Ollama API root', () => {
-	assert.equal(getModelsBaseUrl('ollama', 'http://localhost:11434/v1'), 'http://localhost:11434');
-	assert.equal(getModelsBaseUrl('ollama'), 'http://localhost:11434');
+test('legacy local providers are no longer supported', () => {
+	assert.match(getLocalProviderConnectionHint('ollama'), /no longer supported/);
 });
 
-test('normalizes LM Studio root URL to OpenAI-compatible v1 URL', () => {
-	assert.equal(getChatBaseUrl('lmstudio', 'http://localhost:1234'), 'http://localhost:1234/v1');
-	assert.equal(getModelsBaseUrl('lmstudio', 'http://localhost:1234'), 'http://localhost:1234/v1');
-	assert.equal(getChatBaseUrl('lmstudio', 'http://localhost:1234/v1'), 'http://localhost:1234/v1');
-});
-
-test('provides local provider troubleshooting hints', () => {
-	assert.match(getLocalProviderConnectionHint('ollama', 'http://localhost:11434'), /ollama serve/);
+test('provides local endpoint troubleshooting hints for custom endpoint', () => {
+	assert.match(getLocalProviderConnectionHint('custom-endpoint', 'http://localhost:11434'), /ollama serve/);
 	assert.match(
 		getLocalProviderConnectionHint(
-			'ollama',
+			'custom-endpoint',
 			'http://localhost:11434',
 			'https://utsuwa-git-fix-ollama-local-provider.vercel.app'
 		),
 		/OLLAMA_ORIGINS="https:\/\/utsuwa-git-fix-ollama-local-provider\.vercel\.app"/
 	);
 	assert.match(
-		getLocalProviderConnectionHint('ollama', 'http://localhost:11434'),
+		getLocalProviderConnectionHint('custom-endpoint', 'http://localhost:11434'),
 		/docs\.ollama\.com\/faq#how-can-i-allow-additional-web-origins-to-access-ollama/
 	);
-	assert.match(getLocalProviderConnectionHint('lmstudio', 'http://localhost:1234/v1'), /Start Server/);
+	assert.match(getLocalProviderConnectionHint('custom-endpoint', 'http://localhost:1234/v1'), /Start Server/);
+	assert.match(getLocalProviderConnectionHint('custom-endpoint', 'http://localhost:8080/v1'), /llama-server/);
 });

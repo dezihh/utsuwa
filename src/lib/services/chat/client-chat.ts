@@ -1,9 +1,5 @@
 import type { LLMProvider } from '$lib/types';
-import {
-	getChatBaseUrl,
-	getLocalProviderConnectionHint,
-	isLocalLLMProvider
-} from '$lib/services/providers/local-endpoints';
+import { getChatBaseUrl, getLocalProviderConnectionHint } from '$lib/services/providers/local-endpoints';
 import { normalizeChatBaseURL } from './base-url';
 import { PROVIDER_BASE_URLS } from '$lib/services/providers/base-urls';
 
@@ -25,6 +21,39 @@ function getCurrentSiteOrigin(): string | undefined {
 	return typeof window !== 'undefined' ? window.location.origin : undefined;
 }
 
+function getProviderBaseURL(provider: LLMProvider, baseURL?: string): string | undefined {
+	if (provider === 'custom-endpoint') {
+		const url = getChatBaseUrl(provider, baseURL);
+		return url ? normalizeChatBaseURL(provider, url) : undefined;
+	}
+	const fallback = PROVIDER_BASE_URLS[provider];
+	if (!fallback) {
+		return undefined;
+	}
+	return normalizeChatBaseURL(provider, baseURL || fallback);
+}
+
+function buildHeaders(provider: LLMProvider, apiKey?: string): Record<string, string> {
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json'
+	};
+
+	if (provider === 'anthropic') {
+		headers['x-api-key'] = apiKey || '';
+		headers['anthropic-version'] = '2023-06-01';
+		headers['anthropic-dangerous-direct-browser-access'] = 'true';
+	} else if (provider === 'openrouter') {
+		headers['HTTP-Referer'] = 'https://utsuwa.app';
+		headers['X-Title'] = 'Utsuwa';
+	}
+
+	if (apiKey && provider !== 'anthropic') {
+		headers['Authorization'] = `Bearer ${apiKey}`;
+	}
+
+	return headers;
+}
+
 /**
  * Stream chat completions directly from provider APIs.
  * Used for local providers and Tauri builds where SvelteKit server routes aren't available.
@@ -38,17 +67,16 @@ export async function streamChatDirect(
 ): Promise<void> {
 	const { messages, provider, model, apiKey, baseURL, systemPrompt } = options;
 
-	const isLocal = isLocalLLMProvider(provider);
-	if (!apiKey && !isLocal) {
+	const isCustomEndpoint = provider === 'custom-endpoint';
+	const requiresKey = provider !== 'custom-endpoint';
+	if (!apiKey && requiresKey) {
 		onError('API key required');
 		return;
 	}
 
-	const providerBaseURL = isLocal
-		? getChatBaseUrl(provider, baseURL)
-		: normalizeChatBaseURL(provider, baseURL || PROVIDER_BASE_URLS[provider]);
+	const providerBaseURL = getProviderBaseURL(provider, baseURL);
 	if (!providerBaseURL) {
-		onError(`Unknown provider: ${provider}`);
+		onError(`Base URL required for ${provider}`);
 		return;
 	}
 
@@ -63,22 +91,7 @@ export async function streamChatDirect(
 		...messages
 	];
 
-	const headers: Record<string, string> = {
-		'Content-Type': 'application/json'
-	};
-
-	if (provider === 'anthropic') {
-		headers['x-api-key'] = apiKey || '';
-		headers['anthropic-version'] = '2023-06-01';
-		headers['anthropic-dangerous-direct-browser-access'] = 'true';
-	} else if (provider === 'openrouter') {
-		headers['HTTP-Referer'] = 'https://utsuwa.app';
-		headers['X-Title'] = 'Utsuwa';
-	}
-
-	if (apiKey) {
-		headers['Authorization'] = `Bearer ${apiKey}`;
-	}
+	const headers = buildHeaders(provider, apiKey);
 
 	// Anthropic uses a different request format
 	const body =
@@ -109,7 +122,11 @@ export async function streamChatDirect(
 			const msg =
 				(errorData as { error?: { message?: string } })?.error?.message ||
 				`Provider error (${response.status})`;
-			onError(isLocal && response.status === 404 ? `${msg}. Pull or select an installed model.` : msg);
+			onError(
+				isCustomEndpoint && response.status === 404
+					? `${msg}. Pull or select an installed model.`
+					: msg
+			);
 			return;
 		}
 
@@ -158,10 +175,11 @@ export async function streamChatDirect(
 			// Stream was cancelled by the caller — don't report as error
 			return;
 		}
-		const rawMessage = err instanceof Error ? err.message : 'Failed to connect to provider';
-		const msg = isLocal
-			? getLocalProviderConnectionHint(provider, providerBaseURL, getCurrentSiteOrigin())
-			: rawMessage;
-		onError(msg);
+		const msg = err instanceof Error ? err.message : 'Failed to connect to provider';
+		if (isCustomEndpoint && err instanceof TypeError) {
+			onError(getLocalProviderConnectionHint(provider, baseURL, getCurrentSiteOrigin()));
+		} else {
+			onError(msg);
+		}
 	}
 }

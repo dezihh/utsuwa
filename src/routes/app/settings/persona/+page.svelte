@@ -120,26 +120,18 @@
 		const provider = getLLMProvider(providerId);
 		return provider?.models ?? [];
 	});
-	const llmSupportsBrowsing = $derived.by(() => {
-		const providerId = consciousnessSettings.activeProvider as string;
-		return ['ollama', 'llamacpp'].includes(providerId);
-	});
-
 	// Use dynamic models if available, otherwise static
-	const llmModels = $derived(
-		llmSupportsBrowsing ? llmDynamicModels ?? [] : llmDynamicModels ?? staticLLMModels
-	);
+	const llmModels = $derived(llmDynamicModels ?? staticLLMModels);
 
-	// Check if API key (and baseUrl for openai-compatible) is present for current LLM provider
-	const llmHasApiKey = $derived.by(() => {
+	// Check if provider is ready to fetch models
+	const llmIsReady = $derived.by(() => {
 		const providerId = consciousnessSettings.activeProvider as string;
 		if (!providerId) return false;
 		const provider = getLLMProvider(providerId);
 		if (!provider) return false;
-		if (provider.isLocal || !provider.requiresApiKey) return true;
 		const config = settingsStore.getProviderConfig(providerId);
-		if (providerId === 'openai-compatible') {
-			return !!config.apiKey && !!config.baseUrl;
+		if (providerId === 'custom-endpoint') {
+			return !!config.baseUrl;
 		}
 		return !!config.apiKey;
 	});
@@ -201,19 +193,28 @@
 	);
 
 	// Fetch LLM models from provider API
-	async function fetchLLMModels(targetProvider = consciousnessSettings.activeProvider as string) {
+	async function fetchLLMModels(targetProvider = consciousnessSettings.activeProvider as string, forceRefresh = false) {
 		if (!targetProvider) return;
 		const provider = getLLMProvider(targetProvider);
 		if (!provider) return;
-		const supportsBrowsing = ['ollama', 'llamacpp'].includes(provider.id);
 
 		const config = settingsStore.getProviderConfig(provider.id);
+
+		if (forceRefresh) {
+			settingsStore.clearCachedModels(provider.id);
+		} else {
+			const cached = getCachedModelsForProvider(provider.id);
+			if (cached) {
+				llmDynamicModels = cached;
+				return;
+			}
+		}
 
 		await fetchModels({
 			providerId: provider.id,
 			apiKey: config.apiKey ?? '',
 			baseUrl: config.baseUrl,
-			isLocal: provider.isLocal,
+			isLocal: provider.id === 'custom-endpoint',
 			getCurrentProviderId: () => modulesStore.getModuleSettings('consciousness').activeProvider as string,
 			onStart: () => {
 				llmIsLoading = true;
@@ -232,12 +233,12 @@
 			onError: (error) => {
 				llmIsLoading = false;
 				llmFetchError = error;
-				llmDynamicModels = provider.isLocal ? [] : null;
+				llmDynamicModels = provider.id === 'custom-endpoint' ? [] : null;
 			},
 			onEmpty: () => {
 				llmIsLoading = false;
-				llmFetchError = supportsBrowsing ? 'No models found' : 'Using default list';
-				llmDynamicModels = supportsBrowsing ? [] : null;
+				llmFetchError = provider.id === 'custom-endpoint' ? 'No models found' : 'Using default list';
+				llmDynamicModels = provider.id === 'custom-endpoint' ? [] : null;
 			},
 			onStale: () => {
 				llmIsLoading = false;
@@ -434,34 +435,17 @@
 		debouncedFetchAllTalkSettings();
 	});
 
-	$effect(() => {
-		const providerId = consciousnessSettings.activeProvider as string;
-		const provider = providerId ? getLLMProvider(providerId) : null;
-		if (!provider?.isLocal) {
-			lastLocalLLMFetchKey = '';
-			return;
-		}
-
-		const baseUrl = settingsStore.getProviderConfig(provider.id).baseUrl ?? provider.defaultBaseUrl ?? '';
-		const fetchKey = `${provider.id}:${baseUrl}`;
-
-		if (fetchKey !== lastLocalLLMFetchKey) {
-			lastLocalLLMFetchKey = fetchKey;
-			debouncedFetchLLMModels();
-		}
-	});
-
-	// For non-local providers (e.g. openai-compatible), load models on mount
-	// if they haven't been fetched yet. Uses cache first, then fetches.
+	// Load models for the active LLM provider on mount/provider change.
+	// Uses cache first, then fetches if credentials/endpoint are available.
 	$effect(() => {
 		const providerId = consciousnessSettings.activeProvider as string;
 		if (!providerId) return;
 
-		const provider = getLLMProvider(providerId);
-		if (!provider || provider.isLocal) return; // Local handled above
-
 		// Already loaded — nothing to do
 		if (llmDynamicModels !== null) return;
+
+		const provider = getLLMProvider(providerId);
+		if (!provider) return;
 
 		// Try cached models first
 		const cached = getCachedModelsForProvider(providerId);
@@ -472,9 +456,9 @@
 
 		// Fetch if configured
 		const config = settingsStore.getProviderConfig(providerId);
-		const hasKey = !!config.apiKey;
-		const hasUrl = providerId !== 'openai-compatible' || !!config.baseUrl;
-		if (provider.requiresApiKey && hasKey && hasUrl) {
+		if (providerId === 'custom-endpoint') {
+			if (config.baseUrl) debouncedFetchLLMModels(providerId);
+		} else if (config.apiKey) {
 			debouncedFetchLLMModels(providerId);
 		}
 	});
@@ -582,39 +566,62 @@
 		modulesStore.setModuleSetting('consciousness', 'activeProvider', providerId);
 		const provider = getLLMProvider(providerId);
 
-		// Set default base URL if not already configured
-		if (provider?.defaultBaseUrl && !settingsStore.getProviderConfig(providerId).baseUrl) {
-			settingsStore.setProviderConfig(providerId, { baseUrl: provider.defaultBaseUrl });
-		}
-
 		// Reset dynamic models when provider changes
 		llmDynamicModels = null;
 		llmFetchError = null;
 		llmIsLoading = false;
 
-		// Check for cached models
-		const cached = getCachedModelsForProvider(providerId);
-		if (cached) {
-			llmDynamicModels = cached;
-		}
-
-		if (provider && !provider.isLocal && provider.models?.length) {
-			modulesStore.setModuleSetting('consciousness', 'activeModel', provider.models[0].id);
-		}
-		const config = settingsStore.getProviderConfig(providerId);
-		const hasKey = !!config.apiKey;
-		const hasUrl = providerId !== 'openai-compatible' || !!config.baseUrl;
-		if (provider && (provider.isLocal || (provider.requiresApiKey && hasKey && hasUrl))) {
-			debouncedFetchLLMModels(providerId);
-		}
-		// Mark local providers as added immediately (they don't need API keys)
-		if (provider?.isLocal || !provider?.requiresApiKey) {
+		if (provider) {
+			// Mark provider as added
 			settingsStore.markProviderAdded(providerId);
+
+			if (providerId === 'custom-endpoint') {
+				// Apply default template if none set
+				const config = settingsStore.getProviderConfig(providerId);
+				if (!config.endpointTemplate) {
+					handleLLMEndpointTemplateChange('ollama');
+				} else {
+					applyEndpointTemplate(config.endpointTemplate);
+				}
+			}
+
+			// Fetch models if ready
+			const config = settingsStore.getProviderConfig(providerId);
+			if (providerId === 'custom-endpoint') {
+				if (config.baseUrl) debouncedFetchLLMModels(providerId);
+			} else if (config.apiKey) {
+				debouncedFetchLLMModels(providerId);
+			}
 		}
+	}
+
+	function applyEndpointTemplate(templateId: string) {
+		const provider = getLLMProvider('custom-endpoint');
+		const template = provider?.endpointTemplates?.find(t => t.id === templateId);
+		if (!template) return;
+
+		const config = settingsStore.getProviderConfig('custom-endpoint');
+		settingsStore.setProviderConfig('custom-endpoint', {
+			endpointTemplate: templateId as import('$lib/types').CustomEndpointTemplate,
+			baseUrl: config.baseUrl || template.baseUrl
+		});
+		modulesStore.setModuleSetting('consciousness', 'endpointTemplate', templateId);
+	}
+
+	function handleLLMEndpointTemplateChange(templateId: string) {
+		applyEndpointTemplate(templateId);
+		debouncedFetchLLMModels('custom-endpoint');
 	}
 
 	function handleLLMModelChange(modelId: string) {
 		modulesStore.setModuleSetting('consciousness', 'activeModel', modelId);
+	}
+
+	const contextSizeSteps = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
+
+	function formatContextSize(value: number): string {
+		if (value >= 1024) return `${value / 1024}k`;
+		return String(value);
 	}
 
 	function handleContextSizeChange(value: number) {
@@ -679,10 +686,8 @@
 	function handleLLMApiKeyBlur() {
 		const providerId = consciousnessSettings.activeProvider as string;
 		if (!providerId) return;
-		const provider = getLLMProvider(providerId);
 		const config = settingsStore.getProviderConfig(providerId);
-		const hasUrl = providerId !== 'openai-compatible' || !!config.baseUrl;
-		if (config.apiKey && provider && !provider.isLocal && hasUrl) {
+		if (config.apiKey && (providerId !== 'custom-endpoint' || config.baseUrl)) {
 			debouncedFetchLLMModels();
 		}
 	}
@@ -690,15 +695,11 @@
 	function handleLLMBaseUrlChange(baseUrl: string) {
 		const providerId = consciousnessSettings.activeProvider as string;
 		if (!providerId) return;
-		const provider = getLLMProvider(providerId);
-		if (!provider) return;
 
 		llmFetchError = null;
 		settingsStore.setProviderConfig(providerId, { baseUrl });
 		const config = settingsStore.getProviderConfig(providerId);
-		const hasKey = !!config.apiKey;
-		const hasUrl = providerId !== 'openai-compatible' || !!baseUrl;
-		if (provider && (provider.isLocal || (provider.requiresApiKey && hasKey && hasUrl))) {
+		if (providerId === 'custom-endpoint' && baseUrl) {
 			debouncedFetchLLMModels(providerId);
 		}
 	}
@@ -726,9 +727,6 @@
 		ttsFetchError = null;
 		alltalkFetchError = null;
 		settingsStore.setProviderConfig(providerId, { baseUrl });
-		if (['ollama', 'llamacpp'].includes(provider.id)) {
-			debouncedFetchLLMModels(providerId);
-		}
 		if (providerId === 'alltalk') {
 			debouncedFetchAllTalkSettings();
 		}
@@ -1129,126 +1127,132 @@
 
 								{#if consciousnessSettings.activeProvider}
 									{@const provider = getLLMProvider(consciousnessSettings.activeProvider as string)}
-									{#if provider?.requiresApiKey}
-										<div class="api-key-row">
-											<input
-												type="password"
-												class="api-key-input"
-												class:error={llmFetchError}
-												placeholder="API Key"
-												value={settingsStore.getProviderConfig(provider.id).apiKey ?? ''}
-												oninput={(e) => handleApiKeyChange(provider.id, e.currentTarget.value, 'llm')}
-												onblur={handleLLMApiKeyBlur}
-											/>
-										</div>
-									{/if}
-									{#if provider?.id === 'openai-compatible'}
-										<div class="api-key-row">
-											<input
-												type="text"
-												class="api-key-input"
-												placeholder="https://your-proxy.com/v1"
-												value={settingsStore.getProviderConfig(provider.id).baseUrl ?? ''}
-												oninput={(e) => handleLLMBaseUrlChange(e.currentTarget.value)}
-											/>
-										</div>
-									{/if}
-								{/if}
+									{#if provider}
+										<!-- API Key (required for cloud providers, optional for custom endpoint) -->
+										{#if provider.id !== 'custom-endpoint'}
+											<div class="api-key-row">
+												<input
+													type="password"
+													class="api-key-input"
+													class:error={llmFetchError}
+													placeholder="API Key"
+													value={settingsStore.getProviderConfig(provider.id).apiKey ?? ''}
+													oninput={(e) => handleApiKeyChange(provider.id, e.currentTarget.value, 'llm')}
+													onblur={handleLLMApiKeyBlur}
+												/>
+											</div>
+										{/if}
 
-								{#if consciousnessSettings.activeProvider}
-									{@const provider = getLLMProvider(consciousnessSettings.activeProvider as string)}
-								{#if provider?.id !== 'ollama' && !provider?.isLocal}
-										<ModelDropdown
-											models={llmModels}
-											value={consciousnessSettings.activeModel as string}
-											onSelect={handleLLMModelChange}
-											placeholder="Select model..."
-											isLoading={llmIsLoading}
-											onRefresh={llmHasApiKey ? fetchLLMModels : undefined}
-											disabled={!llmHasApiKey}
-											disabledMessage={consciousnessSettings.activeProvider === 'openai-compatible' ? 'Enter API key and URL first' : 'Enter API key first'}
-										/>
+										<!-- Custom endpoint template, base URL and optional key -->
+										{#if provider.id === 'custom-endpoint'}
+											<div class="api-key-row">
+												<select
+													class="api-key-input"
+													value={settingsStore.getProviderConfig(provider.id).endpointTemplate ?? 'ollama'}
+													onchange={(e) => handleLLMEndpointTemplateChange(e.currentTarget.value)}
+												>
+													{#each provider.endpointTemplates ?? [] as template}
+														<option value={template.id}>{template.name}</option>
+													{/each}
+												</select>
+											</div>
+											<div class="api-key-row">
+												<input
+													type="text"
+													class="api-key-input"
+													class:error={llmFetchError}
+													placeholder="https://your-endpoint.com/v1"
+													value={settingsStore.getProviderConfig(provider.id).baseUrl ?? ''}
+													oninput={(e) => handleLLMBaseUrlChange(e.currentTarget.value)}
+												/>
+											</div>
+											<div class="api-key-row">
+												<input
+													type="password"
+													class="api-key-input"
+													placeholder="API Key (optional)"
+													value={settingsStore.getProviderConfig(provider.id).apiKey ?? ''}
+													oninput={(e) => handleApiKeyChange(provider.id, e.currentTarget.value, 'llm')}
+													onblur={handleLLMApiKeyBlur}
+												/>
+											</div>
+
+											<!-- Custom endpoint help -->
+											<details class="custom-endpoint-help">
+												<summary>How to configure this endpoint</summary>
+												<div class="custom-endpoint-help-content">
+													<p>{provider.endpointTemplates?.find(t => t.id === (settingsStore.getProviderConfig(provider.id).endpointTemplate ?? 'ollama'))?.docsHint}</p>
+													<ul>
+														<li><strong>Google Gemini:</strong> set Base URL to <code>https://generativelanguage.googleapis.com/v1beta/openai/</code> and use a Google AI Studio API key. Enter the model ID manually (e.g. <code>gemini-1.5-flash-latest</code>).</li>
+														<li><strong>DeepSeek / xAI:</strong> use their OpenAI-compatible base URL and API key, then enter the model ID manually.</li>
+														<li><strong>Ollama:</strong> run <code>ollama serve</code>, pull a model with <code>ollama pull &lt;model&gt;</code>, and use <code>http://localhost:11434/v1/</code>.</li>
+														<li><strong>LM Studio:</strong> start the developer server and use <code>http://localhost:1234/v1/</code>.</li>
+														<li><strong>llama.cpp:</strong> start the server with <code>llama-server --model &lt;model.gguf&gt;</code> and use <code>http://localhost:8080/v1/</code>.</li>
+													</ul>
+												</div>
+											</details>
+										{/if}
+
+										<!-- Model selection -->
+										{#if provider.id !== 'custom-endpoint'}
+											<ModelDropdown
+												models={llmModels}
+												value={consciousnessSettings.activeModel as string}
+												onSelect={handleLLMModelChange}
+												placeholder="Select model..."
+												isLoading={llmIsLoading}
+												onRefresh={() => fetchLLMModels(provider.id, true)}
+												disabled={!llmIsReady}
+												disabledMessage="Enter API key first"
+											/>
+										{:else}
+											<ModelDropdown
+												models={llmModels}
+												value={consciousnessSettings.activeModel as string}
+												onSelect={handleLLMModelChange}
+												placeholder="Select or type model..."
+												isLoading={llmIsLoading}
+												onRefresh={() => fetchLLMModels(provider.id, true)}
+												disabled={!llmIsReady}
+												disabledMessage="Enter base URL first"
+											/>
+											<div class="api-key-row">
+												<input
+													type="text"
+													class="api-key-input"
+													placeholder="Model ID (e.g. llama3.2:latest)"
+													value={consciousnessSettings.activeModel as string ?? ''}
+													onchange={(e) => handleLLMModelChange(e.currentTarget.value)}
+												/>
+											</div>
+										{/if}
 										{#if llmFetchError}
 											<p class="provider-note error">{llmFetchError}</p>
 										{/if}
 									{/if}
-								{/if}
-
-								{#if consciousnessSettings.activeProvider}
-									{@const provider = getLLMProvider(consciousnessSettings.activeProvider as string)}
-								{#if llmSupportsBrowsing && provider}
-										<ModelDropdown
-											models={llmModels}
-											value={consciousnessSettings.activeModel as string}
-											onSelect={handleLLMModelChange}
-											placeholder={`Select ${provider.name} model...`}
-											isLoading={llmIsLoading}
-											onRefresh={fetchLLMModels}
-										/>
-										<div class="api-key-row">
-											<input
-												type="text"
-												class="api-key-input"
-												class:error={!!llmFetchError}
-												placeholder={provider.defaultBaseUrl || 'http://localhost:11434/v1/'}
-												value={settingsStore.getProviderConfig(provider.id).baseUrl ?? ''}
-												oninput={(e) => handleLLMBaseUrlChange(e.currentTarget.value)}
-											/>
-										</div>
-										{#if llmFetchError}
-											<p class="provider-note error">{llmFetchError}</p>
-										{/if}
-									{:else if provider?.isLocal}
-										<div class="api-key-row">
-											<input
-												type="text"
-												class="api-key-input"
-												placeholder="Model name (e.g., llama3.2:latest)"
-												value={consciousnessSettings.activeModel as string ?? ''}
-												onchange={(e) => handleLLMModelChange(e.currentTarget.value)}
-											/>
-										</div>
-										<div class="api-key-row">
-											<input
-												type="text"
-												class="api-key-input"
-												placeholder={provider.defaultBaseUrl || 'http://localhost:11434/v1/'}
-												value={settingsStore.getProviderConfig(provider.id).baseUrl ?? ''}
-												oninput={(e) => handleLLMBaseUrlChange(e.currentTarget.value)}
-											/>
-										</div>
-									{/if}
-								{/if}
-
-								{#if consciousnessSettings.activeProvider && getLLMProvider(consciousnessSettings.activeProvider as string)?.isLocal}
-									{@const provider = getLLMProvider(consciousnessSettings.activeProvider as string)}
-									<div class="api-key-row">
-										<input
-											type="password"
-											class="api-key-input"
-											placeholder="Auth token (optional)"
-											value={settingsStore.getProviderConfig(provider?.id ?? '').apiKey ?? ''}
-											oninput={(e) => handleApiKeyChange(provider?.id ?? '', e.currentTarget.value, 'llm')}
-											onblur={handleLLMApiKeyBlur}
-										/>
-									</div>
 								{/if}
 
 								<!-- Context Window -->
 								<div class="api-key-row context-size-row">
 									<label class="context-size-label" for="ps-llm-context-size">
 										Context Window
-										<span class="context-size-value">{(consciousnessSettings.contextSize as number) || 32768}</span>
+										<span class="context-size-value">{formatContextSize((consciousnessSettings.contextSize as number) || 32768)}</span>
 									</label>
 									<input
 										id="ps-llm-context-size"
-										type="number"
-										class="api-key-input"
-										min="1024"
-										step="1024"
-										value={(consciousnessSettings.contextSize as number) || 32768}
-										onchange={(e) => handleContextSizeChange(Number(e.currentTarget.value))}
+										type="range"
+										class="context-size-slider"
+										min="0"
+										max="7"
+										step="1"
+										value={contextSizeSteps.indexOf((consciousnessSettings.contextSize as number) || 32768)}
+										oninput={(e) => handleContextSizeChange(contextSizeSteps[Number(e.currentTarget.value)])}
 									/>
+									<div class="context-size-ticks">
+										{#each contextSizeSteps as step}
+											<span>{formatContextSize(step)}</span>
+										{/each}
+									</div>
 									<p class="provider-note">Maximum context size of the selected model. Used to scale memory injection.</p>
 								</div>
 							{/if}
@@ -1314,7 +1318,7 @@
 											isLoading={ttsIsLoading}
 											onRefresh={ttsHasApiKey ? fetchTTSModels : undefined}
 											disabled={!ttsHasApiKey}
-											disabledMessage={consciousnessSettings.activeProvider === 'openai-compatible' ? 'Enter API key and URL first' : 'Enter API key first'}
+											disabledMessage="Enter API key first"
 										/>
 									{/if}
 								{/if}
@@ -3963,6 +3967,67 @@
 	.context-size-value {
 		font-size: 0.8rem;
 		color: var(--text-tertiary);
+	}
+
+	.context-size-slider {
+		width: 100%;
+		cursor: pointer;
+	}
+
+	.context-size-ticks {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.65rem;
+		color: var(--text-tertiary);
+		padding: 0 0.25rem;
+	}
+
+	.custom-endpoint-help {
+		font-size: 0.8rem;
+		color: var(--text-secondary);
+		background: rgba(0, 0, 0, 0.03);
+		border-radius: 10px;
+		padding: 0.5rem 0.75rem;
+		margin-top: 0.25rem;
+	}
+
+	:global(.dark) .custom-endpoint-help {
+		background: rgba(255, 255, 255, 0.05);
+	}
+
+	.custom-endpoint-help summary {
+		cursor: pointer;
+		font-weight: 600;
+	}
+
+	.custom-endpoint-help-content {
+		margin-top: 0.5rem;
+		line-height: 1.5;
+	}
+
+	.custom-endpoint-help-content p {
+		margin: 0 0 0.5rem;
+	}
+
+	.custom-endpoint-help-content ul {
+		margin: 0;
+		padding-left: 1.25rem;
+	}
+
+	.custom-endpoint-help-content li {
+		margin-bottom: 0.35rem;
+	}
+
+	.custom-endpoint-help-content code {
+		font-family: 'Share Tech Mono', monospace;
+		font-size: 0.75rem;
+		background: rgba(0, 0, 0, 0.06);
+		padding: 0.1rem 0.35rem;
+		border-radius: 4px;
+	}
+
+	:global(.dark) .custom-endpoint-help-content code {
+		background: rgba(255, 255, 255, 0.08);
 	}
 
 	.api-key-input {
