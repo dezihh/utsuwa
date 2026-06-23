@@ -115,7 +115,7 @@ async function fetchOpenRouterModels(apiKey: string, baseUrl: string): Promise<M
 		.filter((m) => {
 			// Keep only text-input/text-output (chat) models
 			const modality = m.architecture?.modality ?? '';
-			return modality === '' || modality.includes('text');
+			return (modality === '' || modality.includes('text')) && !m.id.includes('*');
 		})
 		.map((m) => ({
 			id: m.id,

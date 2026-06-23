@@ -5,6 +5,17 @@ import { getChatBaseUrl } from '$lib/services/providers/local-endpoints';
 import { normalizeChatBaseURL } from '$lib/services/chat/base-url';
 import { PROVIDER_BASE_URLS } from '$lib/services/providers/base-urls';
 
+function formatCustomEndpointError(err: unknown, baseURL?: string): string {
+	const message = err instanceof Error ? err.message : 'Failed to connect to provider';
+	if (!baseURL) return message;
+
+	const isLocalhost = /localhost|127\.0\.0\.1/.test(baseURL);
+	if (isLocalhost) {
+		return `${message}. If Utsuwa is running inside Docker and LiteLLM/your proxy is on the host, use http://host.docker.internal:${baseURL.match(/:(\d+)/)?.[1] ?? '4000'} instead of localhost.`;
+	}
+	return message;
+}
+
 async function streamOpenAICompatibleChat(
 	url: string,
 	model: string,
@@ -16,11 +27,19 @@ async function streamOpenAICompatibleChat(
 		headers.Authorization = `Bearer ${apiKey}`;
 	}
 
-	const response = await fetch(url, {
-		method: 'POST',
-		headers,
-		body: JSON.stringify({ model, messages, stream: true })
-	});
+	let response: Response;
+	try {
+		response = await fetch(url, {
+			method: 'POST',
+			headers,
+			body: JSON.stringify({ model, messages, stream: true })
+		});
+	} catch (err) {
+		return new Response(JSON.stringify({ error: formatCustomEndpointError(err, url) }), {
+			status: 502,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
 
 	if (!response.ok) {
 		const errorData = await response.json().catch(() => ({}));
@@ -95,7 +114,8 @@ async function streamOpenAICompatibleChat(
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	const { messages, provider, model, apiKey, baseURL, systemPrompt } = await request.json();
+	const body = await request.json();
+	const { messages, provider, model, apiKey, baseURL, systemPrompt } = body;
 
 	const typedProvider = provider as LLMProvider;
 	const isCustomEndpoint = typedProvider === 'custom-endpoint';
@@ -232,12 +252,17 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 	} catch (error) {
 		console.error('Chat API error:', error);
-		return new Response(
-			JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-			{
-				status: 500,
-				headers: { 'Content-Type': 'application/json' }
-			}
-		);
+		const typedProvider = provider as LLMProvider;
+		const baseURL = body?.baseURL;
+		const errorMessage =
+			typedProvider === 'custom-endpoint'
+				? formatCustomEndpointError(error, baseURL)
+				: error instanceof Error
+					? error.message
+					: 'Unknown error';
+		return new Response(JSON.stringify({ error: errorMessage }), {
+			status: 500,
+			headers: { 'Content-Type': 'application/json' }
+		});
 	}
 };

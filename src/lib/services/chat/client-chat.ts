@@ -177,7 +177,12 @@ export async function streamChatDirect(
 		}
 		const msg = err instanceof Error ? err.message : 'Failed to connect to provider';
 		if (isCustomEndpoint && err instanceof TypeError) {
-			onError(getLocalProviderConnectionHint(provider, baseURL, getCurrentSiteOrigin()));
+			const isLocalhost = baseURL ? /localhost|127\.0\.0\.1/.test(baseURL) : false;
+			if (isLocalhost) {
+				onError(`${msg}. If Utsuwa is running inside Docker and LiteLLM/your proxy is on the host, use http://host.docker.internal:${baseURL?.match(/:(\d+)/)?.[1] ?? '4000'} instead of localhost.`);
+			} else {
+				onError(getLocalProviderConnectionHint(provider, baseURL, getCurrentSiteOrigin()));
+			}
 		} else {
 			onError(msg);
 		}
