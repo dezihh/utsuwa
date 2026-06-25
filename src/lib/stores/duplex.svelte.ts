@@ -80,6 +80,11 @@
 	/** True while TTS audio is playing (so we know when to interrupt). */
 	let ttsActive = false;
 
+	/** Timestamp (ms) when TTS playback ended — used for echo-tail suppression. */
+	let ttsEndedAt = 0;
+	/** Duration (ms) after TTS end during which segment may still be an echo. */
+	const ECHO_TAIL_MS = 600;
+
 	/** Text of the TTS sentence currently being spoken. Used to discard echo
 	 *  (the microphone hearing the assistant's own voice) during duplex mode. */
 	let currentTtsText = '';
@@ -233,6 +238,18 @@
 				return;
 			}
 
+			// Echo-tail: the microphone may still pick up reverb/ring-off for ~600ms after
+			// TTS ends. ttsActive is already false at this point, so we check the timestamp.
+			if (ttsEndedAt > 0 && Date.now() - ttsEndedAt < ECHO_TAIL_MS) {
+				console.debug('[Duplex] Discarded suspected echo-tail transcription (within tail window):', text);
+				triggerNoiseToast();
+				ttsEndedAt = 0; // consume — subsequent real speech is not blocked
+				setPhase('listening');
+				return;
+			}
+			// Clear echo-tail guard once a real non-echo transcription is confirmed
+			ttsEndedAt = 0;
+
 			setPhase('thinking');
 			armWatchdog();
 			onTranscript?.(text);
@@ -348,6 +365,7 @@
 		if (!isDuplexActive) return;
 		clearWatchdog();
 		ttsActive = false;
+		ttsEndedAt = Date.now(); // record when TTS finished for echo-tail suppression
 		currentTtsText = '';
 		// VAD is already running — just switch phase back to listening.
 		setPhase('listening');

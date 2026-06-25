@@ -49,7 +49,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const whisperForm = new FormData();
 	whisperForm.append('file', audioBlob, audioFile.name);
 	whisperForm.append('model', model);
-	whisperForm.append('response_format', 'json');
+	whisperForm.append('response_format', 'verbose_json');
 
 	let endpoint: string;
 	try {
@@ -80,10 +80,33 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: `Whisper error (${response.status}): ${body}` }, { status: response.status });
 	}
 
-	const data = (await response.json()) as { text?: string };
+	const data = (await response.json()) as {
+		text?: string;
+		no_speech_prob?: number;
+		segments?: Array<{ avg_logprob?: number; no_speech_prob?: number }>;
+	};
+
+	// Quality filters: discard likely hallucinations produced by faster-whisper.
+	//
+	// no_speech_prob > 0.6  → Whisper itself doubts there was any speech in the audio.
+	//                         Typical cause: silence, background noise, TTS echo.
+	//
+	// avg_logprob < -1.0    → Very low token-level confidence. Typical cause: mismatched
+	//                         language ("Icelandic hallucination"), garbled audio, or
+	//                         microphone picking up non-speech sounds.
+	//
+	// Both thresholds are permissive enough not to affect normal bilingual speech
+	// (e.g. Spanish vocabulary mixed into German conversation).
+	const noSpeechProb = data.no_speech_prob ?? 0;
+	const firstSegLogprob = data.segments?.[0]?.avg_logprob ?? 0;
+	const hasSegments = Array.isArray(data.segments) && data.segments.length > 0;
+	if (noSpeechProb > 0.6 || (hasSegments && firstSegLogprob < -1.0)) {
+		return json({ text: '' });
+	}
+
 	let transcription = data.text ?? '';
 	// If the transcription contains no alphanumeric characters (in any script), treat it as empty.
-	// Use more inclusive pattern that allows German umlauts and other diacritics
+	// Use more inclusive pattern that allows German umlauts and other diacritics.
 	if (!/[\p{Letter}\p{Number}]/u.test(transcription)) {
 		transcription = '';
 	}
