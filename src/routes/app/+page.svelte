@@ -70,6 +70,7 @@
 	import { imageSearchStore } from '$lib/stores/image-search.svelte';
 	import { extractVocabTags } from '$lib/utils/vocabulary';
 	import * as vocabularyStorage from '$lib/services/storage/vocabulary';
+	import type { VocabularyEntry } from '$lib/types/vocabulary';
 	import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
 	import type { ProviderConfig } from '$lib/types';
 
@@ -131,7 +132,28 @@
 	let spokenSoFar = $state('');
 	// Speech bubble shows exactly the sentence currently spoken by TTS.
 	let currentBubbleSentence = $state('');
+	// Vocabulary words currently loaded into working memory, used for automatic
+	// [lang:xx] injection before TTS so source words keep correct pronunciation.
+	let loadedVocabulary = $state<VocabularyEntry[]>([]);
 	let llmAbortController: AbortController | null = null;
+
+	// Ensure vocabulary source words are wrapped in [lang:XX] tags before TTS,
+	// regardless of whether the LLM remembered to preserve them in its response.
+	function injectVocabLangTags(text: string): string {
+		if (loadedVocabulary.length === 0) return text;
+		let result = text;
+		for (const entry of loadedVocabulary) {
+			if (!entry.sourceLang || !entry.sourceWord) continue;
+			const escaped = entry.sourceWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			// Only wrap bare occurrences — skip text already inside a lang tag.
+			const regex = new RegExp(
+				`(?<!\\[lang:[a-z]{2,3}\\])\\b(${escaped})\\b(?!\\[lang:default\\])`,
+				'giu'
+			);
+			result = result.replace(regex, `[lang:${entry.sourceLang}]$1[lang:default]`);
+		}
+		return result;
+	}
 	// Monotonic counter so aborted sends don't overwrite state of the active one.
 	let sendGeneration = $state(0);
 
@@ -411,6 +433,12 @@
 
 		if (vocabTags.length > 0 && settingsStore.isVocabularyEnabled()) {
 			const vocabWords: string[] = [];
+			const newEntries: VocabularyEntry[] = [];
+			const speechSettings = modulesStore.getModuleSettings('speech');
+			const activeTTSProvider = speechSettings?.activeProvider as string | undefined;
+			const omniAltEnabled =
+				activeTTSProvider === 'omnivoice' &&
+				!!settingsStore.getProviderConfig('omnivoice').omnivoiceAltEnabled;
 			for (const tag of vocabTags) {
 				try {
 					const entries = await vocabularyStorage.getVocabularyEntries({
@@ -420,13 +448,23 @@
 						characterId: currentCharacterId
 					});
 					if (entries.length > 0) {
-						entries.forEach((e) => vocabWords.push(`${e.sourceWord} = ${e.targetWord}`));
+						newEntries.push(...entries);
+						entries.forEach((e) => {
+							// For OmniVoice dual-voice setups, wrap the source word in [lang:xx]
+							// so the LLM is likely to preserve the tag when it repeats the word.
+							const source =
+								omniAltEnabled && e.sourceLang
+									? `[lang:${e.sourceLang}]${e.sourceWord}[lang:default]`
+									: e.sourceWord;
+							vocabWords.push(`${source} = ${e.targetWord}`);
+						});
 					}
 				} catch (e) {
 					console.warn('[Vocabulary] Failed to load entries:', e);
 				}
 			}
 			if (vocabWords.length > 0) {
+				loadedVocabulary = newEntries;
 				addTurnToWorkingMemory({
 					role: 'system',
 					sessionId: getWorkingMemory().currentSessionId,
@@ -968,7 +1006,9 @@
 
 			const enqueueTTS = (segment: SpeechSegment) => {
 				if (!ttsOptions) return;
-				sessionSegments.push(segment);
+				// Ensure vocabulary source words keep their language tags for correct TTS pronunciation.
+				const injectedSegment = { ...segment, text: injectVocabLangTags(segment.text) };
+				sessionSegments.push(injectedSegment);
 				if (!ttsStarted) {
 					ttsStarted = true;
 					vrmStore.startTalking(segment.text);
@@ -986,7 +1026,7 @@
 						}
 					});
 				}
-				ttsStore.pushSpeechSegment(segment);
+				ttsStore.pushSpeechSegment(injectedSegment);
 			};
 			const speechBuffer = ttsOptions
 				? new StreamingSpeechBuffer({
@@ -1105,7 +1145,11 @@
 				// start a fresh pipeline session for the complete text now.
 				vrmStore.startTalking(displayText);
 				onTTSStarted();
-				const segments = splitIntoSegments(cleanedResponse, ttsConfig?.language || undefined, isChatterbox);
+				const segments = splitIntoSegments(
+					injectVocabLangTags(cleanedResponse),
+					ttsConfig?.language || undefined,
+					isChatterbox
+				);
 				ttsStore.beginSpeechSession(ttsOptions!, {
 					onSentenceStart: (sentence, _index, emotion) => {
 						isTyping = false;

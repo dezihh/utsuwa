@@ -256,7 +256,7 @@ After your response, you may optionally output state changes as JSON:
 ${buildMemoryTagInstructions()}
 
 NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affection, trust, intimacy, comfort, or respect changes - these relationship stats are disabled.${ctx.vocabularyEnabled ? `
-- VOCABULARY: If you see "Vocabulary for the next exercise" in the conversation, the words are already loaded. Do NOT output another [vocab:...] tag — just use the words naturally in your response.` : ''}
+- VOCABULARY: If you see "Vocabulary for the next exercise" in the conversation, the words are already loaded. Preserve any [lang:XX] tags wrapped around source words so they keep the correct pronunciation. Do NOT output another [vocab:...] tag — just use the words naturally in your response.` : ''}
 </instructions>`);
 
 	for (const layer of assembleOptionalLayers(ctx)) {
@@ -958,7 +958,9 @@ When the user wants to practice vocabulary or learn new words, use ONE of these 
   [vocab:category:${exampleCategory}:10] — 10 words from a specific category
   [vocab:level:${exampleLevel}:20] — 20 words at a specific level
 
-The tag is hidden from the user. The words will appear as "Vocabulary for the next exercise" in your next prompt. When you see them, simply use them conversationally — quiz, translate, or explain them.
+The tag is hidden from the user. The words will appear as "Vocabulary for the next exercise" in your next prompt. Source words may already be wrapped in [lang:XX] tags (e.g. [lang:es]casa[lang:default]) — preserve those tags when you repeat the words so pronunciation stays correct.
+
+When you see the vocabulary, simply use it conversationally — quiz, translate, or explain it.
 
 If the user asks which categories or levels are available, answer directly from the list above.
 Do NOT output another [vocab:...] tag if words are already loaded — just use them naturally.
