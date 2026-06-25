@@ -69,6 +69,16 @@ export interface PromptContext {
 	imageModalQuery?: string;
 	/** When true, injects vocabulary tag instructions */
 	vocabularyEnabled?: boolean;
+	/** Total number of imported vocabulary words */
+	vocabularyTotal?: number;
+	/** Available vocabulary categories (for LLM tag selection) */
+	vocabularyCategories?: string[];
+	/** Available vocabulary levels (e.g. A1, A2, B1) */
+	vocabularyLevels?: string[];
+	/** Source language code derived from vocabulary data (the language being learned) */
+	vocabularySourceLang?: string;
+	/** Target language code derived from vocabulary data (the user's native language) */
+	vocabularyTargetLang?: string;
 	/** Memory injection budget derived from the configured model context size */
 	memoryBudget?: MemoryBudget;
 	/** Configured context window size in tokens. Used to prevent prompt overflow. */
@@ -613,16 +623,12 @@ EXAMPLE:
 	}
 
 	if (ctx.ttsProvider === 'omnivoice') {
-		const altLangCode = ctx.ttsAltLanguage ?? 'es';
 		const monoExample = exampleAction
 			? `"[action:${exampleAction}][excited]Oh wow, that is great! [laugh]I'm so happy! [laughter]"`
 			: `"[excited]Oh wow, that is great! [laugh]I'm so happy! [laughter]"`;
 
-		return `<voice_tags>
-You are connected to a text-to-speech engine (OmniVoice) that understands special inline tags.
-Embed them directly in your response text — they control voice, emotion, and avatar animations.
-
-EMOTION / SOUND EFFECTS (these trigger spoken sounds and expressions):
+		// Shared emotion/sound block (used in both mono and dual-voice variants)
+		const emotionBlock = `EMOTION / SOUND EFFECTS (these trigger spoken sounds and expressions):
   [laugh]    — laugh out loud (speaks "Hahaha,")
   [giggle]   — giggle (speaks "Hihihi,")
   [chuckle]  — quiet chuckle (speaks "Hehe,")
@@ -647,7 +653,37 @@ NATIVE SOUND TAGS (OmniVoice produces these as authentic audio — use additiona
   [surprise-oh]         — surprised "oh!" sound
   [surprise-ah]         — surprised "ah!" sound
   [dissatisfaction-hnn] — dissatisfied grunt
-  [confirmation-en]     — confirming "mhm"
+  [confirmation-en]     — confirming "mhm"`;
+
+		// No alt language configured → emit voice_tags WITHOUT the LANGUAGE TAGS section.
+		// This prevents the LLM from hallucinating [lang:es] tags when no alt voice exists.
+		if (!ctx.ttsAltLanguage) {
+			return `<voice_tags>
+You are connected to a text-to-speech engine (OmniVoice) that understands special inline tags.
+Embed them directly in your response text — they control voice, emotion, and avatar animations.
+
+${emotionBlock}
+
+${actionBlock ? actionBlock + '\n\n' : ''}SPEED TAGS:
+  [slow]  — speak slowly and thoughtfully
+  [fast]  — speak quickly or excitedly
+
+RULES:
+- Place emotion tags immediately before the affected text, with no space.
+- Never explain the tags to the user; they are invisible in chat.
+
+${monoExample ? `EXAMPLE:
+  ${monoExample}\n` : ''}</voice_tags>`;
+		}
+
+		// Alt language IS configured → full dual-voice block
+		const altLangCode = ctx.ttsAltLanguage;
+
+		return `<voice_tags>
+You are connected to a text-to-speech engine (OmniVoice) that understands special inline tags.
+Embed them directly in your response text — they control voice, emotion, and avatar animations.
+
+${emotionBlock}
 
 ${actionBlock ? actionBlock + '\n\n' : ''}LANGUAGE TAGS — You have two voices:
   - Default voice (no tag): speaks any language naturally. OmniVoice auto-detects.
@@ -655,6 +691,8 @@ ${actionBlock ? actionBlock + '\n\n' : ''}LANGUAGE TAGS — You have two voices:
 
   [lang:${altLangCode}] — alt voice + ${altLangCode} pronunciation (persistent)
   [lang:default] — return to default voice
+
+  IMPORTANT: Do NOT use [lang:${altLangCode}] for any other language. Default voice handles all other languages automatically.
 
   EXAMPLE: "Das Wort [lang:${altLangCode}]biblioteca [lang:default]bedeutet Bibliothek."
   → "Das Wort" = default voice, "biblioteca" = alt voice, "bedeutet Bibliothek." = default voice
@@ -666,7 +704,7 @@ SPEED TAGS:
 RULES:
 - Place emotion and language tags immediately before the affected text, with no space.
 - Never explain the tags to the user; they are invisible in chat.
-- When you speak in ${altLangCode}, place [lang:${altLangCode}] before the first word. Return with [lang:default].
+- Use [lang:${altLangCode}] ONLY for ${altLangCode} words. Return to default with [lang:default].
 
 ${monoExample ? `MONOLINGUAL (no language switch needed):\n  ${monoExample}\n` : ''}</voice_tags>`;
 	}
@@ -889,16 +927,41 @@ function buildImageSearchLayer(ctx: PromptContext): string | null {
 function buildVocabularyLayer(ctx: PromptContext): string | null {
 	if (!ctx.vocabularyEnabled) return null;
 
+	const total = ctx.vocabularyTotal ?? 0;
+	const categories = ctx.vocabularyCategories ?? [];
+	const levels = ctx.vocabularyLevels ?? [];
+	const sourceLang = ctx.vocabularySourceLang;
+	const targetLang = ctx.vocabularyTargetLang;
+
+	const metaLines: string[] = [];
+	if (total > 0) metaLines.push(`Total words in library: ${total}`);
+	if (sourceLang && targetLang) {
+		metaLines.push(`Language pair: ${sourceLang} (learning) → ${targetLang} (native)`);
+	}
+	if (categories.length > 0) {
+		metaLines.push(`Available categories: ${categories.join(', ')}`);
+	}
+	if (levels.length > 0) {
+		metaLines.push(`Available levels: ${levels.join(', ')}`);
+	}
+
+	const metaBlock = metaLines.length > 0 ? metaLines.join('\n') + '\n\n' : '';
+	const exampleCategory = categories[0] ?? 'Begrüßung';
+	const exampleLevel = levels[0] ?? 'A1';
+
 	return `<vocabulary>
-The user has imported vocabulary words. You do NOT see them in this prompt — you must fetch them with a tag.
+${metaBlock}The user has imported vocabulary words. You do NOT see them in this prompt — you must fetch them with a tag.
 
 When the user wants to practice vocabulary or learn new words, use ONE of these tags:
   [vocab:random:5] — 5 random words to practice
-  [vocab:review:5] — 5 weakest words
-  [vocab:category:Begrüßung:10] — 10 words from a category
-  [vocab:level:A1:20] — 20 words at a level
+  [vocab:review:5] — 5 weakest words (lowest familiarity, not reviewed recently)
+  [vocab:category:${exampleCategory}:10] — 10 words from a specific category
+  [vocab:level:${exampleLevel}:20] — 20 words at a specific level
 
 The tag is hidden from the user. The words will appear as "Vocabulary for the next exercise" in your next prompt. When you see them, simply use them conversationally — quiz, translate, or explain them.
+
+If the user asks which categories or levels are available, answer directly from the list above.
+Do NOT output another [vocab:...] tag if words are already loaded — just use them naturally.
 </vocabulary>`;
 }
 

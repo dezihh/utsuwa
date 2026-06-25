@@ -46,7 +46,7 @@
 - **Scheduled Reminders & Open Tasks**: The companion can set time-based reminders (e.g., "remind me in 5 minutes to check the coffee") using inline `[reminder:5min]...[/reminder]` tags. Reminders are stored locally per session, polled in the background, and when triggered they are injected into the LLM context as a system message so the companion can react. The trigger itself is logged in the debug panel and does not appear in the visible chat history. Non-image reminders are also persisted as semantic facts with `source: open-task` so the companion keeps them in context until resolved. Upcoming reminders and open tasks are shown in a bell dropdown in the chat header, where you can also delete them.
 - **Image Search via SearxNG**: The companion can search for images on the web using SearxNG. When the user asks for pictures (e.g., "show me images of cats"), the companion outputs a `[search_image:cats]` tag and images appear in a popup modal. The companion can also close the popup with `[close_images]`. Requires a SearxNG instance (configured via `SEARXNG_URL` environment variable or MCP Tools settings).
 - **External Tools via MCP**: Expand your companion's abilities by connecting external tool servers under **Settings > MCP Servers**. For example, she can fetch an image from a URL you share and describe its contents directly, without showing technical details in chat or speech.
-- **Vocabulary Training System**: Dedicated vocabulary management separate from the Fact Library. Import vocabulary via CSV upload (drag & drop or paste), then practice with the companion using tag-based retrieval. The companion outputs `[vocab:MODE:FILTER:COUNT]` tags (e.g., `[vocab:category:Begrüßung:10]`, `[vocab:review:5]`, `[vocab:level:A1:20]`) and receives only the requested subset in the next prompt — never all words at once. Familiarity tracking per word. Enable/disable in Settings > Data.
+- **Vocabulary Training System**: Dedicated vocabulary management separate from the Fact Library. Import vocabulary via CSV upload (drag & drop or paste), then practice with the companion using tag-based retrieval. The companion outputs `[vocab:MODE:FILTER:COUNT]` tags (e.g., `[vocab:category:Begrüßung:10]`, `[vocab:review:5]`, `[vocab:level:A1:20]`) and receives only the requested subset in the next prompt — never all words at once. Familiarity tracking per word. The prompt also exposes the available categories, levels, and source/target language pair derived from your imported vocabulary, so the companion can answer "which categories do I have?" or pick appropriate levels automatically. Enable/disable in Settings > Data.
 - **Desktop App** *(beta, macOS only)*: Native desktop app with transparent overlay mode — your companion floats on your desktop
 
 ### Local-First Storage
@@ -376,6 +376,8 @@ Processing rules:
 
 Voice input is accessed via the microphone button in the chat bar. Groq STT uses Whisper for accurate transcription on any platform (including desktop). **Local Whisper** connects to a self-hosted whisper.cpp or faster-whisper server (tested with `deepdml/faster-whisper-large-v3-turbo-ct2` via [speaches](https://github.com/speaches-ai/speaches)) — configure the base URL under **Settings > STT Providers**. Web Speech API works without an API key in Chrome, Edge, and Safari. If a Groq API key is configured, it takes priority automatically.
 
+Local Whisper responses are filtered on `verbose_json` quality metrics (`no_speech_prob` and segment `avg_logprob`) to suppress silence, background noise, and low-confidence hallucinations (e.g. random non-speech tokens) without affecting normal bilingual speech.
+
 ### Duplex / VOX Mode
 
 Hands-free, continuous conversation without pressing any buttons:
@@ -389,7 +391,7 @@ Hands-free, continuous conversation without pressing any buttons:
 
 Duplex mode requires both an STT provider and a TTS provider to be configured.
 
-**Noise handling**: The VAD calibrates for 3 seconds on startup to measure ambient noise, then uses a 5× noise-floor multiplier so background sounds are far less likely to trigger speech detection. TTS is **only interrupted after transcription confirms real text** — not on raw audio peaks — preventing false interrupts from keyboard clicks, HVAC, or other ambient sounds. If TTS is interrupted mid-response, saying "setze fort" / "continue" / "continuer" / or the equivalent in any of 12 supported languages replays the unspoken tail without a new LLM call.
+**Noise handling**: The VAD calibrates for 3 seconds on startup to measure ambient noise, then uses a 5× noise-floor multiplier so background sounds are far less likely to trigger speech detection. TTS is **only interrupted after transcription confirms real text** — not on raw audio peaks — preventing false interrupts from keyboard clicks, HVAC, or other ambient sounds. A short echo-tail window (~600 ms) after TTS ends discards any residual speaker bleed the microphone picks up, so the assistant does not transcribe its own voice as user input. If TTS is interrupted mid-response, saying "setze fort" / "continue" / "continuer" / or the equivalent in any of 12 supported languages replays the unspoken tail without a new LLM call.
 
 ### Scene Backgrounds
 

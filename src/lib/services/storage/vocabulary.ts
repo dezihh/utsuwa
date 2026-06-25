@@ -101,6 +101,28 @@ export async function getVocabularyStats(
 	return { total, known, learning };
 }
 
+export async function getVocabularyMeta(
+	characterId: string = DEFAULT_CHARACTER_ID
+): Promise<{
+	total: number;
+	categories: string[];
+	levels: string[];
+	sourceLang: string | undefined;
+	targetLang: string | undefined;
+}> {
+	const entries = await db.vocabulary.where('characterId').equals(characterId).toArray();
+	const categories = [...new Set(entries.map((e) => e.category).filter(Boolean))].sort();
+	const levels = [...new Set(entries.map((e) => e.level).filter(Boolean))].sort();
+	const first = entries[0];
+	return {
+		total: entries.length,
+		categories,
+		levels,
+		sourceLang: first?.sourceLang,
+		targetLang: first?.targetLang
+	};
+}
+
 function deserializeVocabularyEntry(entry: VocabularyEntry): VocabularyEntry {
 	return {
 		...entry,

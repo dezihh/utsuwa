@@ -665,6 +665,23 @@
 		const persona = personaStore.activeCard;
 		const memories = await retrieveRelevantContext(userMessage, currentCharacterId);
 
+		// Load vocabulary metadata for dynamic prompt injection (categories, levels, language pair).
+		// Non-fatal: if this fails the vocabulary layer still renders with static placeholder text.
+		let vocabMeta: {
+			total: number;
+			categories: string[];
+			levels: string[];
+			sourceLang: string | undefined;
+			targetLang: string | undefined;
+		} | null = null;
+		if (settingsStore.isVocabularyEnabled()) {
+			try {
+				vocabMeta = await vocabularyStorage.getVocabularyMeta(currentCharacterId);
+			} catch {
+				// ignore — optional enrichment
+			}
+		}
+
 		const speechSettings = modulesStore.getModuleSettings('speech');
 		const activeTTSProvider = speechSettings?.activeProvider as string | undefined;
 		const ttsConfig = activeTTSProvider ? settingsStore.getProviderConfig(activeTTSProvider) : null;
@@ -704,6 +721,11 @@
 			imageModalOpen: imageSearchStore.isOpen,
 			imageModalQuery: imageSearchStore.isOpen ? imageSearchStore.currentQuery : undefined,
 			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
+			vocabularyTotal: vocabMeta?.total,
+			vocabularyCategories: vocabMeta?.categories,
+			vocabularyLevels: vocabMeta?.levels,
+			vocabularySourceLang: vocabMeta?.sourceLang,
+			vocabularyTargetLang: vocabMeta?.targetLang,
 			factLibraryEnabled: true,
 			memoryBudget,
 			contextSize,
