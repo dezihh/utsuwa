@@ -4,6 +4,7 @@ import type { LLMProvider } from '$lib/types';
 import { getChatBaseUrl } from '$lib/services/providers/local-endpoints';
 import { normalizeChatBaseURL } from '$lib/services/chat/base-url';
 import { PROVIDER_BASE_URLS } from '$lib/services/providers/base-urls';
+import { parseSSEStream } from '$lib/services/chat/stream-parser';
 
 function formatCustomEndpointError(err: unknown, baseURL?: string): string {
 	const message = err instanceof Error ? err.message : 'Failed to connect to provider';
@@ -14,6 +15,22 @@ function formatCustomEndpointError(err: unknown, baseURL?: string): string {
 		return `${message}. If Utsuwa is running inside Docker and LiteLLM/your proxy is on the host, use http://host.docker.internal:${baseURL.match(/:(\d+)/)?.[1] ?? '4000'} instead of localhost.`;
 	}
 	return message;
+}
+
+async function drainBackgroundStream(
+	stream: ReadableStream | undefined | null,
+	onError?: (err: unknown) => void
+): Promise<void> {
+	if (!stream) return;
+	try {
+		const reader = stream.getReader();
+		while (true) {
+			const { done } = await reader.read();
+			if (done) break;
+		}
+	} catch (err) {
+		onError?.(err);
+	}
 }
 
 async function streamOpenAICompatibleChat(
@@ -81,38 +98,19 @@ async function streamOpenAICompatibleChat(
 	}
 
 	const encoder = new TextEncoder();
-	const decoder = new TextDecoder();
 	const stream = new ReadableStream({
 		async start(controller) {
-			let buffer = '';
-
 			try {
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) break;
-
-					buffer += decoder.decode(value, { stream: true });
-					const lines = buffer.split('\n');
-					buffer = lines.pop() || '';
-
-					for (const line of lines) {
-						const trimmed = line.trim();
-						if (!trimmed || trimmed === 'data: [DONE]') continue;
-						if (!trimmed.startsWith('data: ')) continue;
-
-						try {
-							const json = JSON.parse(trimmed.slice(6));
-							const text = json.choices?.[0]?.delta?.content;
-							if (text) {
-								controller.enqueue(encoder.encode(`0:${JSON.stringify(text)}\n`));
-							}
-						} catch {
-							// Ignore malformed chunks.
-						}
+				await parseSSEStream(reader, {
+					onChunk: (text) => {
+						controller.enqueue(encoder.encode(`0:${JSON.stringify(text)}\n`));
+					},
+					onDone: () => controller.close(),
+					onError: (errorMessage) => {
+						controller.enqueue(encoder.encode(`e:${JSON.stringify({ error: errorMessage })}\n`));
+						controller.close();
 					}
-				}
-
-				controller.close();
+				});
 			} catch (error) {
 				console.error('Stream error:', error);
 				const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -185,7 +183,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Handle special provider configurations
 		if (typedProvider === 'anthropic') {
 			providerBaseURL = providerBaseURL || PROVIDER_BASE_URLS.anthropic;
-			headers['anthropic-dangerous-direct-browser-access'] = 'true';
 		} else if (typedProvider === 'openrouter') {
 			providerBaseURL = providerBaseURL || PROVIDER_BASE_URLS.openrouter;
 			headers['HTTP-Referer'] = 'https://utsuwa.app';
@@ -251,9 +248,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		result.steps?.catch?.(quietCatch);
 		result.totalUsage?.catch?.(quietCatch);
 		result.usage?.catch?.(quietCatch);
-		// Consume errored ReadableStreams so they don't become unhandled
-		result.fullStream?.getReader().read().catch(quietCatch);
-		result.reasoningTextStream?.getReader().read().catch(quietCatch);
+		// Fully drain errored background streams so they don't become unhandled rejections
+		drainBackgroundStream(result.fullStream, quietCatch);
+		drainBackgroundStream(result.reasoningTextStream, quietCatch);
 
 		const { textStream } = result;
 

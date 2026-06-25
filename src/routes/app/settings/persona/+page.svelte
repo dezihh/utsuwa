@@ -1273,10 +1273,23 @@
 											<span>{formatContextSize(step)}</span>
 										{/each}
 									</div>
-									<p class="provider-note">Maximum context size of the selected model. Used to scale memory injection.</p>
-								</div>
+								<p class="provider-note">Maximum context size of the selected model. Used to scale memory injection.</p>
+							</div>
 
-								<!-- Advanced LLM Parameters -->
+							<!-- NSFW Mode Toggle -->
+							<div class="nsfw-mode-row">
+								<label class="nsfw-mode-label">
+									<input
+										type="checkbox"
+										checked={!!consciousnessSettings.nsfwMode}
+										onchange={(e) => modulesStore.setModuleSettings('consciousness', { ...consciousnessSettings, nsfwMode: e.currentTarget.checked })}
+									/>
+									Unfiltered Mode (NSFW)
+								</label>
+								<p class="provider-note">Injects a preamble instructing the LLM to write uncensored, immersive prose without moralizing or content filtering. Use only with local or uncensored models.</p>
+							</div>
+
+							<!-- Advanced LLM Parameters -->
 								<details class="llm-advanced-params">
 									<summary>Advanced Parameters</summary>
 									<div class="llm-param-grid">
@@ -1728,8 +1741,9 @@
 											</div>
 											{#if omnivoiceClonesFetchError}
 												<p class="provider-note error">{omnivoiceClonesFetchError}</p>
-											{/if}
-										{/if}
+<p class="provider-note">Only text tagged with this language code triggers the alternative voice. Other languages use the default voice.</p>
+									{/if}
+								{/if}
 
 										<div class="vad-sensitivity-row">
 											<label class="vad-sensitivity-label" for="ps-ov-alt-speed">
@@ -1748,10 +1762,34 @@
 											/>
 											<div class="vad-hint">Speech rate for the alternative speaker</div>
 										</div>
-									{/if}
+								<div class="vad-sensitivity-row">
+										<label class="vad-sensitivity-label" for="ps-ov-alt-lang">Alternative Language</label>
+										<select
+											id="ps-ov-alt-lang"
+											class="api-key-input"
+											value={settingsStore.getProviderConfig('omnivoice').omnivoiceAltLanguage ?? ''}
+											onchange={(e) => settingsStore.setProviderConfig('omnivoice', { omnivoiceAltLanguage: e.currentTarget.value || undefined })}
+										>
+											<option value="">Any non-primary language</option>
+											<option value="es">Spanish (es)</option>
+											<option value="en">English (en)</option>
+											<option value="fr">French (fr)</option>
+											<option value="it">Italian (it)</option>
+											<option value="pt">Portuguese (pt)</option>
+											<option value="ja">Japanese (ja)</option>
+											<option value="zh">Chinese (zh)</option>
+											<option value="ko">Korean (ko)</option>
+											<option value="ru">Russian (ru)</option>
+											<option value="ar">Arabic (ar)</option>
+											<option value="nl">Dutch (nl)</option>
+											<option value="pl">Polish (pl)</option>
+										</select>
+									</div>
+									<p class="provider-note">Only [lang:xx] tags matching this language switch to the alternative voice. Other languages keep the default voice.</p>
 								{/if}
+							{/if}
 
-								{#if speechSettings.activeProvider === 'chatterbox'}
+							{#if speechSettings.activeProvider === 'chatterbox'}
 									<div class="api-key-row">
 										<select
 											class="api-key-input"

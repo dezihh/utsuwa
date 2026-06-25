@@ -229,6 +229,7 @@ class UtsuwaDatabase extends Dexie {
 				const sessions = tx.table('sessions');
 				const conversationTurns = tx.table('conversationTurns');
 				const factLibrary = tx.table('factLibrary');
+				const vocabulary = tx.table('vocabulary');
 
 				await characterStates.toCollection().modify((cs: Record<string, unknown>) => {
 					if (!cs.characterId) cs.characterId = 'default';
@@ -247,6 +248,9 @@ class UtsuwaDatabase extends Dexie {
 				});
 				await factLibrary.toCollection().modify((e: Record<string, unknown>) => {
 					if (!e.characterId) e.characterId = 'default';
+				});
+				await vocabulary.toCollection().modify((v: Record<string, unknown>) => {
+					if (!v.characterId) v.characterId = 'default';
 				});
 			});
 	}

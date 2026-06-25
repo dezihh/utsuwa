@@ -410,6 +410,7 @@
 		dialogue = vocabCleaned;
 
 		if (vocabTags.length > 0 && settingsStore.isVocabularyEnabled()) {
+			const vocabWords: string[] = [];
 			for (const tag of vocabTags) {
 				try {
 					const entries = await vocabularyStorage.getVocabularyEntries({
@@ -419,14 +420,19 @@
 						characterId: currentCharacterId
 					});
 					if (entries.length > 0) {
-						chatStore.addSystemMessage(
-							'Vocabulary for practice:\n' +
-								entries.map((e) => `${e.sourceWord} = ${e.targetWord}`).join('\n')
-						);
+						entries.forEach((e) => vocabWords.push(`${e.sourceWord} = ${e.targetWord}`));
 					}
 				} catch (e) {
 					console.warn('[Vocabulary] Failed to load entries:', e);
 				}
+			}
+			if (vocabWords.length > 0) {
+				addTurnToWorkingMemory({
+					role: 'system',
+					sessionId: getWorkingMemory().currentSessionId,
+					content: 'Vocabulary for the next exercise:\n' + vocabWords.join('\n'),
+					createdAt: new Date()
+				} as import('$lib/types/memory').ConversationTurn);
 			}
 		}
 
@@ -686,6 +692,7 @@
 			systemTime: new Date(),
 			ttsProvider: activeTTSProvider,
 			ttsLanguage: ttsConfig?.language || undefined,
+			ttsAltLanguage: activeTTSProvider === 'omnivoice' ? ttsConfig?.omnivoiceAltLanguage : undefined,
 			ttsAltVoiceEnabled: activeTTSProvider === 'omnivoice' && !!(ttsConfig?.omnivoiceAltEnabled),
 			mcpTools: activeMcpTools,
 			continueMode: options?.continueMode,
@@ -699,6 +706,8 @@
 			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
 			factLibraryEnabled: true,
 			memoryBudget,
+			contextSize,
+			nsfwMode: !!consciousnessSettings.nsfwMode,
 			sessionStartedAt: getWorkingMemory().sessionStartedAt
 		};
 
@@ -820,7 +829,8 @@
 					language: ttsConfig.language,
 					cfgWeight: ttsConfig.cfgWeight,
 					temperature: ttsConfig.temperature,
-					omnivoiceNumStep: ttsConfig.omnivoiceNumStep
+					omnivoiceNumStep: ttsConfig.omnivoiceNumStep,
+					altLanguage: isOmniVoice ? ttsConfig.omnivoiceAltLanguage : undefined
 				} : null;
 
 				if (ttsOptions) {
@@ -924,7 +934,8 @@
 							language: ttsConfig.language,
 							cfgWeight: ttsConfig.cfgWeight,
 							temperature: ttsConfig.temperature,
-							omnivoiceNumStep: ttsConfig.omnivoiceNumStep
+							omnivoiceNumStep: ttsConfig.omnivoiceNumStep,
+							altLanguage: isOmniVoice ? ttsConfig.omnivoiceAltLanguage : undefined
 						}
 					: null;
 

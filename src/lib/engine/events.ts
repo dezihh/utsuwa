@@ -155,23 +155,23 @@ export const eventsApi = {
 		choiceIndex?: number,
 		outcome?: string
 	): Promise<CompletedEventRecord> {
-		const now = new Date();
 		const id = await eventsStorage.saveCompletedEvent({
 			eventId: event.id,
 			eventType: event.type,
 			choiceIndex,
 			outcome,
 			stateChanges: event.stateChanges,
-			completedAt: now
+			completedAt: new Date()
 		});
-		return {
+		const saved = await eventsStorage.getCompletedEventById(id);
+		return saved ?? {
 			id,
 			eventId: event.id,
 			eventType: event.type,
 			choiceIndex,
 			outcome,
 			stateChanges: event.stateChanges,
-			completedAt: now
+			completedAt: new Date()
 		};
 	}
 };

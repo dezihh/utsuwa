@@ -2,152 +2,65 @@ import type { CharacterState, StateUpdates, Emotion } from '$lib/types/character
 import type { MessageAnalysis, TopicDepth } from '$lib/types/memory';
 import { calculateMessageImpact } from './state-updates';
 
-// Sentiment keywords for analysis
-const POSITIVE_KEYWORDS = [
-	'happy',
-	'glad',
-	'love',
-	'great',
-	'awesome',
-	'amazing',
-	'wonderful',
-	'thank',
-	'thanks',
-	'appreciate',
-	'enjoy',
-	'fun',
-	'excited',
-	'nice',
-	'good',
-	'best',
-	'beautiful',
-	'cute',
-	'sweet',
-	'kind',
-	'funny',
-	'haha',
-	'lol',
-	'lmao',
-	':)',
-	':D',
-	'<3',
-	'❤',
-	'😊',
-	'😄',
-	'🥰',
-	'💕'
+// Word-level sentiment keywords (matched with word boundary)
+const POSITIVE_WORDS = [
+	'happy', 'glad', 'love', 'great', 'awesome', 'amazing', 'wonderful',
+	'thank', 'thanks', 'appreciate', 'enjoy', 'fun', 'excited', 'nice',
+	'good', 'best', 'beautiful', 'cute', 'sweet', 'kind', 'funny',
+	'haha', 'lol', 'lmao'
 ];
 
-const NEGATIVE_KEYWORDS = [
-	'sad',
-	'sorry',
-	'hate',
-	'bad',
-	'awful',
-	'terrible',
-	'angry',
-	'upset',
-	'annoyed',
-	'frustrated',
-	'disappointed',
-	'worry',
-	'worried',
-	'scared',
-	'afraid',
-	'hurt',
-	'pain',
-	'lonely',
-	'alone',
-	'cry',
-	'crying',
-	':(',
-	'😢',
-	'😔',
-	'😞'
+const NEGATIVE_WORDS = [
+	'sad', 'sorry', 'hate', 'bad', 'awful', 'terrible', 'angry',
+	'upset', 'annoyed', 'frustrated', 'disappointed', 'worry', 'worried',
+	'scared', 'afraid', 'hurt', 'pain', 'lonely', 'alone', 'cry', 'crying'
 ];
+
+// Symbol/emoji keywords that don't appear as tokens in word-split text
+const POSITIVE_SYMBOLS = [':)', ':D', '<3', '❤', '😊', '😄', '🥰', '💕'];
+const NEGATIVE_SYMBOLS = [':(', '😢', '😔', '😞'];
+
+// Combine all for building regexes
+const ALL_POSITIVE = [...POSITIVE_WORDS, ...POSITIVE_SYMBOLS];
+const ALL_NEGATIVE = [...NEGATIVE_WORDS, ...NEGATIVE_SYMBOLS];
+
+// Build word-boundary regex from word lists
+const POSITIVE_WORD_RE = new RegExp('\\b(' + POSITIVE_WORDS.join('|') + ')\\b', 'gi');
+const NEGATIVE_WORD_RE = new RegExp('\\b(' + NEGATIVE_WORDS.join('|') + ')\\b', 'gi');
 
 // Deep conversation markers
 const DEPTH_MARKERS = [
-	'feel',
-	'feeling',
-	'feelings',
-	'think',
-	'believe',
-	'hope',
-	'dream',
-	'wish',
-	'fear',
-	'scared',
-	'worry',
-	'love',
-	'hate',
-	'care',
-	'mean',
-	'matter',
-	'important',
-	'understand',
-	'remember',
-	'miss',
-	'future',
-	'past',
-	'life',
-	'death',
-	'relationship',
-	'family',
-	'friend',
-	'trust',
-	'honest',
-	'truth',
-	'secret'
+	'feel', 'feeling', 'feelings', 'think', 'believe', 'hope', 'dream',
+	'wish', 'fear', 'scared', 'worry', 'love', 'hate', 'care', 'mean',
+	'matter', 'important', 'understand', 'remember', 'miss', 'future',
+	'past', 'life', 'death', 'relationship', 'family', 'friend',
+	'trust', 'honest', 'truth', 'secret'
 ];
 
 // Emotional content markers
 const EMOTIONAL_MARKERS = [
-	'feel',
-	'feeling',
-	'emotion',
-	'emotional',
-	'heart',
-	'soul',
-	'cry',
-	'tears',
-	'happy',
-	'sad',
-	'angry',
-	'scared',
-	'love',
-	'hate',
-	'miss',
-	'hurt',
-	'pain',
-	'joy',
-	'excited',
-	'nervous',
-	'anxious',
-	'worried'
+	'feel', 'feeling', 'emotion', 'emotional', 'heart', 'soul', 'cry',
+	'tears', 'happy', 'sad', 'angry', 'scared', 'love', 'hate', 'miss',
+	'hurt', 'pain', 'joy', 'excited', 'nervous', 'anxious', 'worried'
 ];
 
 // Analyze a message for sentiment, depth, and other characteristics
 export function analyzeMessage(content: string): MessageAnalysis {
 	const lowerContent = content.toLowerCase();
-	const words = lowerContent.split(/\s+/);
 
-	// Calculate sentiment
-	let positiveCount = 0;
-	let negativeCount = 0;
+	// Calculate sentiment using word-boundary regex for proper matching
+	const positiveMatches = lowerContent.match(POSITIVE_WORD_RE) || [];
+	const negativeMatches = lowerContent.match(NEGATIVE_WORD_RE) || [];
 
-	for (const word of words) {
-		if (POSITIVE_KEYWORDS.some((kw) => word.includes(kw))) positiveCount++;
-		if (NEGATIVE_KEYWORDS.some((kw) => word.includes(kw))) negativeCount++;
+	let positiveCount = positiveMatches.length;
+	let negativeCount = negativeMatches.length;
+
+	// Check for emoticon/emoji symbols (these don't match word boundary patterns)
+	for (const sym of POSITIVE_SYMBOLS) {
+		if (lowerContent.includes(sym)) positiveCount++;
 	}
-
-	// Also check for emoticons/emoji in full content (non-word characters only,
-	// so regular keywords aren't counted twice)
-	for (const kw of POSITIVE_KEYWORDS) {
-		if (/[^a-z0-9]/.test(kw) && lowerContent.includes(kw)) positiveCount++;
-	}
-	for (const kw of NEGATIVE_KEYWORDS) {
-		if (/[^a-z0-9]/.test(kw) && lowerContent.includes(kw)) negativeCount++;
+	for (const sym of NEGATIVE_SYMBOLS) {
+		if (lowerContent.includes(sym)) negativeCount++;
 	}
 
 	const totalSentiment = positiveCount + negativeCount;
@@ -181,14 +94,14 @@ export function analyzeMessage(content: string): MessageAnalysis {
 	// Extract potential facts (very basic)
 	const extractedFacts: string[] = [];
 
-	// Look for "I am/I'm" statements
-	const iAmMatches = content.match(/\b(i'?m|i am|my name is)\s+(\w+)/gi);
+	// Look for "I am/I'm" statements — capture multi-word facts
+	const iAmMatches = content.match(/\b(i'?m|i am|my name is)\s+(?:a |an )?([^.!?,\n]+)/gi);
 	if (iAmMatches) {
 		extractedFacts.push(...iAmMatches.map((m) => `User said: ${m}`));
 	}
 
 	// Look for "I like/love/hate" statements
-	const preferenceMatches = content.match(/\b(i (?:really )?(like|love|hate|enjoy|prefer))\s+([^.!?]+)/gi);
+	const preferenceMatches = content.match(/\b(i (?:really )?(like|love|hate|enjoy|prefer))\s+([^.!?,\n]+)/gi);
 	if (preferenceMatches) {
 		extractedFacts.push(...preferenceMatches.map((m) => `User preference: ${m}`));
 	}
@@ -203,6 +116,7 @@ export function analyzeMessage(content: string): MessageAnalysis {
 		detectedEmotion = 'curious';
 	}
 
+	const words = lowerContent.split(/\s+/);
 	return {
 		sentiment,
 		topicDepth,
@@ -218,7 +132,6 @@ export function analyzeMessage(content: string): MessageAnalysis {
 export function calculateBaselineUpdates(content: string, state: CharacterState): StateUpdates {
 	const analysis = analyzeMessage(content);
 
-	// Get impact calculations
 	const impact = calculateMessageImpact(
 		analysis.sentiment,
 		analysis.topicDepth,
@@ -227,7 +140,6 @@ export function calculateBaselineUpdates(content: string, state: CharacterState)
 		state
 	);
 
-	// Build state updates
 	const updates: StateUpdates = {
 		energyDelta: impact.energyDelta,
 		affectionDelta: impact.affectionDelta,
@@ -237,7 +149,6 @@ export function calculateBaselineUpdates(content: string, state: CharacterState)
 		respectDelta: impact.respectDelta
 	};
 
-	// Mood influence based on sentiment
 	if (Math.abs(analysis.sentiment) > 0.3) {
 		let emotion: Emotion = 'neutral';
 		if (analysis.sentiment > 0.5) {
@@ -257,11 +168,9 @@ export function calculateBaselineUpdates(content: string, state: CharacterState)
 		};
 	}
 
-	// Extract facts as potential memories
 	if (analysis.extractedFacts.length > 0) {
-		updates.newMemory = analysis.extractedFacts[0]; // Just take first for now
+		updates.newMemory = analysis.extractedFacts[0];
 	}
 
 	return updates;
 }
-

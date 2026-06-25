@@ -357,10 +357,13 @@ class VadService {
 			this.stream = null;
 		}
 		if (this.audioContext) {
-			this.audioContext.close();
+			const ctx = this.audioContext;
 			this.audioContext = null;
+			this.analyser = null;
+			ctx.close().catch(() => {});
+		} else {
+			this.analyser = null;
 		}
-		this.analyser = null;
 	}
 }
 

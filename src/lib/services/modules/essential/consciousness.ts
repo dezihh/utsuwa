@@ -1,12 +1,4 @@
 import type { ModuleDefinition } from '$lib/types/module';
-import { LLM_PROVIDERS } from '$lib/services/providers/registry';
-
-// Get model options for a provider
-function getModelsForProvider(providerId: string): { value: string; label: string }[] {
-	const provider = LLM_PROVIDERS.find((p) => p.id === providerId);
-	if (!provider?.models) return [];
-	return provider.models.map((m) => ({ value: m.id, label: m.name }));
-}
 
 export const consciousnessModule: ModuleDefinition = {
 	metadata: {
@@ -55,6 +47,12 @@ export const consciousnessModule: ModuleDefinition = {
 				label: 'Context Window (tokens)',
 				description: 'Maximum context size of the selected model. Used to scale memory injection. Check your model\'s documentation.',
 				defaultValue: 32768
+			},
+			{
+				key: 'nsfwMode',
+				type: 'boolean',
+				label: 'Unfiltered Mode (NSFW)',
+				description: 'Injects a german NSFW preamble that instructs the LLM to write uncensored, immersive prose without moralizing or content filtering. Use only with local or uncensored models.'
 			}
 		]
 	},

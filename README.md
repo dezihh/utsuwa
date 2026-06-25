@@ -222,19 +222,34 @@ A dedicated system for language learning, separate from the general Fact Library
 - **CSV Import**: Upload vocabulary lists via drag & drop or paste. Format:
   ```csv
   sourceWord,targetWord,context,category,level,tags
-  Hola,Hola,"¡Hola! ¿Qué tal?",Begrüßung,A1,grußformel
-  Casa,Casa,"Mi casa es grande",Wohnen,A1,noun
-  Comer,Comer,"Yo como una manzana",Verben,A1,verb
+  Hola,Hallo,"¡Hola! ¿Qué tal?",Begrüßung,A1,grußformel
+  Gracias,Danke,"Muchas gracias por tu ayuda",Höflichkeit,A1,dank
+  Bonita,Schön,"Qué bonita es esta flor",Adjektive,A1,beschreibung
   ```
+  `sourceWord` is the word in the language you want to learn. `targetWord` is the translation in your native language.
 - **Tag-Based Retrieval**: The companion never sees all vocabulary at once. Instead, it uses tags to request subsets:
+  - `[vocab:random:5]` — 5 random words
+  - `[vocab:review:5]` — 5 words with lowest familiarity (weakest first)
   - `[vocab:category:Begrüßung:10]` — 10 words from a category
   - `[vocab:level:A1:20]` — 20 words at a specific level
-  - `[vocab:review:5]` — 5 words with lowest familiarity (weakest first)
-  - `[vocab:new:10]` — 10 unfamiliar words (familiarity < 0.3)
-  - `[vocab:random:15]` — 15 random words
 - **Familiarity Tracking**: Each word has a familiarity score (0.0–1.0) that updates as the user practices
 - **Prompt-Safe**: Only the requested subset is injected into the prompt (~150 tokens for 20 words), never the full list
 - **Enable/Disable**: Toggle vocabulary training in Settings > Data
+
+#### How to Practice Vocabulary
+
+The vocabulary system works in two turns. Here's the workflow:
+
+| Step | What you say | What happens |
+|---|---|---|
+| 1. Load words | *"Gib mir neue Vokabeln"* / *"Give me new vocabulary"* | The companion outputs a hidden `[vocab:random:5]` tag. The requested words are fetched from IndexedDB and injected into the next prompt's conversation context. |
+| 2. Use the words | *"Welche Wörter haben wir heute gelernt?"* / *"What words did we learn today?"* | The companion sees the loaded words in context and lists them. For OmniVoice with dual-voice configured, Spanish words are spoken by the alternative voice with correct pronunciation. |
+| 3. Quiz mode | *"Frag mich die Vokabeln ab"* / *"Quiz me on the words"* | The companion asks word by word — you translate back. |
+| 4. Practice weak words | *"Üben wir die schwierigen"* / *"Let's practice the hard ones"* | Companion outputs `[vocab:review:5]` to load the weakest words. |
+
+**Key principle:** After step 1, do NOT say "read the words aloud" — that triggers another tag. Instead, ask conversationally: "What words did I learn?", "Quiz me!", or "Explain the first one." The words are already in context; the companion just needs a natural prompt to engage with them.
+
+**OmniVoice dual-voice integration:** When Spanish vocabulary is loaded and the companion outputs words with `[lang:es]` tags, OmniVoice switches to the alternative voice with Spanish pronunciation automatically. Configure this under **Settings > AI Services > OmniVoice** (enable alternative voice and set alternative language to `es`).
 
 ### Desktop Application (Beta)
 
@@ -272,17 +287,48 @@ Custom Endpoint uses a built-in template selector so common local and cloud Open
 OmniVoice is a local diffusion-based TTS engine with 600+ language support and real-time factor ~0.5. Configure it under **Settings > AI Services > Speech TTS**.
 
 - Set the **API base URL** to your local OmniVoice container, for example `http://localhost:8766/`
+- Choose **Primary Language** — the default language for all speech (e.g. "de" for German). OmniVoice auto-detects this language via its multilingual engine.
 - Choose **Diffusion steps**: 16 (fast) or 32 (higher quality)
 - **Default Voice** profile — two modes:
   - *Synthetic*: design a voice by selecting gender, age group, and pitch
   - *Voice Clone*: select a voice sample loaded from the OmniVoice server
   - Adjust per-voice **speed** (0.25–4.0×)
-- **Alternative Voice** profile (enable via checkbox) — same fields as Default, activated by `[voice:alt]` tags in responses
-  - When the LLM outputs `[voice:alt]`, OmniVoice switches to the alt profile for that block
-  - `[voice:default]` switches back to the main voice
-- Language tags `[lang:xx]` are forwarded to OmniVoice so the correct phoneme set is used per segment
+- **Alternative Voice** profile (enable via checkbox) — same fields as Default:
+  - Choose **Alternative Language** (e.g. "es" for Spanish). Only text tagged with `[lang:es]` triggers this voice. All other languages use the default voice.
+  - When the LLM outputs `[lang:es]`, OmniVoice switches to the alt voice with Spanish pronunciation for that word or phrase.
+  - `[lang:default]` switches back to the default voice. The LLM is prompted to use these tags automatically.
+  - Adjust per-voice **Alternative Speed** independently of the default voice.
 
-OmniVoice passes through the same action and emotion control tags as other providers; see the Chatterbox section for the full tag reference.
+**How language switching works:**
+
+1. The LLM receives language tag instructions in its system prompt (e.g. "place `[lang:es]` before Spanish words").
+2. During text streaming, `[lang:es]` tags are detected and the TTS pipeline assigns the alt voice to those segments.
+3. Each language-tagged word is sent as a separate request to OmniVoice with the correct voice profile and language parameter.
+4. `[lang:default]` returns to the default voice immediately.
+
+Example LLM output with German as primary and Spanish as alt:
+```
+"[lang:es]corazón[lang:default] means heart."
+```
+→ "corazón" is spoken by the alt voice with Spanish pronunciation, the rest by the default voice.
+
+The **Spanischlehrer** personality preset (Settings > Character > Personality) ships with a pre-configured dual-voice setup demonstrating this feature.
+
+#### TTS Provider Comparison (Voice Switching & Streaming)
+
+Only **OmniVoice** currently supports per-word dual-voice switching with language tags. Here is the current state and extension potential for each provider:
+
+| Provider | Dual-Voice | `[lang:xx]` | Chunked TTS | Extensible? |
+|---|---|---|---|---|
+| **OmniVoice** | ✓ Per-word | ✓ `[lang:es]`→alt voice | ✓ Each word = own request | Fully supported |
+| **Chatterbox** | ✗ | ✗¹ | ✓ Continuous stream | **Yes** — `streaming: true` buffers all segments via `playAllAsOneStream` using only `firstSeg.language`. Fix options: (a) set `streaming: false` (loses gapless audio), or (b) split the combined stream at `[voice:alt]` boundaries into separate requests. |
+| **ElevenLabs** | ✗ | ✗ | ✗² | **In theory** — Cloud API supports multiple voice IDs and `language` parameter. No streaming path in the code (uses `speak()`). Could be extended via `fetchAudioBuffer`. |
+| **OpenAI TTS** | ✗ | ✗ | ✗² | **In theory** — same as ElevenLabs: voice ID + language parameter per request possible. Same limitations. |
+| **AllTalk** | ✗ | ✗ | ✗² | **Unlikely** — Single voice, language derived from voice model. No per-request voice/language parameters. |
+
+¹ Chatterbox has `multilingual: true` and processes `[lang:xx]`/`[voice:alt]` tags via `splitIntoSegments`, but `streaming: true` buffers all segments into one combined stream — voice switching is lost (same bug OmniVoice had before the fix).
+
+² These providers use the legacy path (`speak()` instead of the pipeline), with no segment-based chunk processing. They would need to be migrated to `fetchAudioBuffer` with pipeline support.
 
 #### AllTalk TTS
 
@@ -380,7 +426,7 @@ Save and switch between multiple system prompt configurations under **Settings >
 - **Rename** a preset by double-clicking its tab; **add** with `+`; **delete** with the trash icon
 - Two built-in presets ship with Utsuwa:
   - *Standard* — blank template, seeded from your current system prompt on first load
-  - *Spanischlehrer* — example dual-voice Spanish teacher preset demonstrating `[voice:default]` / `[voice:alt]` and `[lang:es]` / `[lang:de]` tag usage
+  - *Spanischlehrer* — example dual-voice Spanish teacher preset demonstrating `[lang:es]` / `[lang:default]` tag usage with OmniVoice alt voice switching
 - Presets are available during the **onboarding** CharacterStep as one-click chips
 - All presets are persisted in localStorage and included in save/export files automatically
 
@@ -521,7 +567,24 @@ Utsuwa uses that URL directly for model discovery and chat requests. If the serv
 
 **Context size**
 
-The **context size** slider (1,000–128,000 tokens) controls how much working memory, facts, session summaries, and fact library entries are injected into each prompt. Match it to the context window of the model you are using.
+The **context size** slider (1,000–128,000 tokens) controls two things:
+
+**1. Memory injection budget** — How many memories, working memory turns, session summaries, and fact library entries are injected:
+
+| Context Size | Working Memory Turns | Relevant Facts | Recent Sessions | Fact Library Entries |
+|---|---|---|---|---|
+| ≤ 4,096 | 10 | 3 | 1 | 0 |
+| ≤ 8,192 | 15 | 5 | 2 | 5 |
+| > 8,192 | 20 | 10 | 3 | 15 |
+
+**2. Prompt overflow prevention** — After the full prompt is assembled (system prompt + conversation history + user message), the total is estimated via `chars ÷ 4 ≈ tokens`. If it exceeds the configured context window:
+
+- The system prompt and the current user message are always kept in full.
+- 500 tokens are reserved for the model's response.
+- The remaining budget is filled from the **most recent** conversation turns backwards.
+- Older turns that don't fit are dropped silently.
+
+This prevents silent API errors when long soul prompts or many active features (voice tags, image search, MCP tools) push the prompt beyond the model's context limit.
 
 #### Loading a VRM Model
 

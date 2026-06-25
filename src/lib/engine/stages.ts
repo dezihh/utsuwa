@@ -1,6 +1,9 @@
 import type { RelationshipStage, CharacterState } from '$lib/types/character';
+import { EVENT_IDS } from '$lib/data/events/constants';
 
-// Stage order for comparison
+// 'companion' is NOT included here because it's a locked mode, not a progression stage.
+// It is set/unset exclusively via app mode switching (characterStore.setAppMode)
+// and is never reached through normal stage calculation.
 const STAGE_ORDER: RelationshipStage[] = [
 	'stranger',
 	'acquaintance',
@@ -33,10 +36,10 @@ const STAGE_REQUIREMENTS: Record<RelationshipStage, {
 	acquaintance: { minAffection: 50, minTrust: 20, minInteractions: 3 },
 	friend: { minAffection: 150, minTrust: 50, minDaysKnown: 3, minInteractions: 10 },
 	close_friend: { minAffection: 300, minTrust: 70, minComfort: 50, minDaysKnown: 7, minInteractions: 25 },
-	romantic_interest: { minAffection: 450, minTrust: 75, minIntimacy: 30, minDaysKnown: 10, requiredEvents: ['first_deep_conversation', 'shared_vulnerability'] },
-	dating: { minAffection: 600, minTrust: 85, minIntimacy: 50, minDaysKnown: 14, requiredEvents: ['confession_accepted'] },
-	committed: { minAffection: 800, minTrust: 95, minIntimacy: 75, minComfort: 80, minDaysKnown: 30, requiredEvents: ['commitment_discussion'] },
-	soulmate: { minAffection: 950, minTrust: 100, minIntimacy: 90, minComfort: 95, minRespect: 90, minDaysKnown: 60, requiredEvents: ['deep_bond_moment'] }
+	romantic_interest: { minAffection: 450, minTrust: 75, minIntimacy: 30, minDaysKnown: 10, requiredEvents: [EVENT_IDS.FIRST_DEEP_CONVERSATION, EVENT_IDS.SHARED_VULNERABILITY] },
+	dating: { minAffection: 600, minTrust: 85, minIntimacy: 50, minDaysKnown: 14, requiredEvents: [EVENT_IDS.CONFESSION_ACCEPTED] },
+	committed: { minAffection: 800, minTrust: 95, minIntimacy: 75, minComfort: 80, minDaysKnown: 30, requiredEvents: [EVENT_IDS.COMMITMENT_DISCUSSION] },
+	soulmate: { minAffection: 950, minTrust: 100, minIntimacy: 90, minComfort: 95, minRespect: 90, minDaysKnown: 60, requiredEvents: [EVENT_IDS.DEEP_BOND_MOMENT] }
 };
 
 // Check if state meets stage requirements

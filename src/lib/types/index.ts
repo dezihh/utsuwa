@@ -137,6 +137,8 @@ export interface ProviderConfig {
 	omnivoiceAltSpeed?: number;
 	/** OmniVoice alternative clone voice — sample name */
 	omnivoiceAltCloneId?: string;
+	/** OmniVoice: ISO 639-1 code for the alternative language. Only this language triggers the alt voice. */
+	omnivoiceAltLanguage?: string;
 }
 
 // VRM types

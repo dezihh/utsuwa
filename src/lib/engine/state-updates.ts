@@ -94,10 +94,9 @@ export function applyTimeDecay(state: CharacterState, hoursSinceLastInteraction:
 		if (hoursSinceLastInteraction >= 6) {
 			updates.energyDelta = 100 - state.energy;
 		} else {
-			// Partial recovery - use Math.ceil to ensure at least 1 energy recovered
-			const recoveryRate = Math.min(1, hoursSinceLastInteraction / 6);
-			const recovery = Math.ceil((100 - state.energy) * recoveryRate);
-			updates.energyDelta = Math.max(1, recovery); // Always recover at least 1
+			const recoveryRate = hoursSinceLastInteraction / 6;
+			const recovery = Math.floor((100 - state.energy) * recoveryRate);
+			updates.energyDelta = Math.max(1, recovery);
 		}
 	}
 
@@ -265,6 +264,10 @@ export function mergeUpdates(baseline: StateUpdates, llmSuggestion: Partial<Stat
 
 	if (llmSuggestion.triggeredEvent) {
 		merged.triggeredEvent = llmSuggestion.triggeredEvent;
+	}
+
+	if (llmSuggestion.structuredFactSeen) {
+		merged.structuredFactSeen = llmSuggestion.structuredFactSeen;
 	}
 
 	return merged;

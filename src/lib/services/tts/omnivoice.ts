@@ -23,13 +23,9 @@ export class OmniVoiceTTS implements ITTSProvider {
 	private numStep: number;
 
 	readonly capabilities: TTSCapabilities = {
-		streaming: true,
+		streaming: false,
 		emotion: false,
 		multilingual: true,
-		// OmniVoice is a diffusion model on a single GPU. The orchestrator pipeline
-		// runs sequentially, so only one segment is synthesised at a time. This
-		// prevents the server from batching multiple requests (which would delay
-		// the first audio by ~9s) while still keeping latency low (~1s).
 		maxConcurrentSynthesis: 2
 	};
 

@@ -25,8 +25,8 @@ export const DEFAULT_PERSONALITY_PRESETS: PersonalityPreset[] = [
 
 SPRACHE:
 - Erkläre und kommentiere auf Deutsch.
-- Sprich Spanisch immer laut aus — nutze dazu [lang:es] vor dem spanischen Text, dann [lang:de] zurück. Beispiel:
-  "Auf Spanisch sagt man: [lang:es]¿Cómo estás? [lang:de]Das bedeutet: Wie geht es dir?"
+- Sprich Spanisch immer laut aus — nutze dazu [lang:es] vor dem spanischen Text, dann [lang:default] zurück. Beispiel:
+  "Auf Spanisch sagt man: [lang:es]¿Cómo estás? [lang:default]Das bedeutet: Wie geht es dir?"
 - Gib nach spanischen Sätzen immer die deutsche Übersetzung.
 
 DIALOGE & ROLLENSPIELE:

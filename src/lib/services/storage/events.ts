@@ -47,6 +47,12 @@ export async function isEventCompleted(eventId: string): Promise<boolean> {
 	return count > 0;
 }
 
+export async function getCompletedEventById(id: number): Promise<CompletedEventRecord | null> {
+	const event = await db.completedEvents.get(id);
+	if (!event) return null;
+	return deserializeEvent(event);
+}
+
 export async function deleteAllEvents(): Promise<void> {
 	await db.completedEvents.clear();
 }

@@ -212,17 +212,65 @@ function clampDelta(value: number | undefined, min: number, max: number): number
 	return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+// Application control tags that must be stripped from visible chat text
+// AFTER the calling code has extracted them. Tags like [search_image:...],
+// [reminder:...], and [vocab:...] are handled by extractImageSearchTags,
+// extractReminderTags, and extractVocabTags respectively — they are NOT
+// stripped here because those extractors run on the dialogue output and
+// return their own cleanedText.
+//
+// Only tags consumed during streaming (TTS, voice, actions) or purely
+// cosmetic tags ([emote:...]) are stripped here.
+const APP_TAG_PATTERNS: RegExp[] = [
+	/\[lang:(?:default|[a-z]{2,3})\]/gi,
+	/\[voice:(?:default|alt)\]/gi,
+	/\[action:[^\]]+\]/gi,
+	/\[emote:[^\]]+\]/gi,
+	/\[laugh\]/gi,
+	/\[giggle\]/gi,
+	/\[chuckle\]/gi,
+	/\[sigh\]/gi,
+	/\[excited\]/gi,
+	/\[sad\]/gi,
+	/\[calm\]/gi,
+	/\[whisper\]/gi,
+	/\[dramatic\]/gi,
+	/\[surprised\]/gi,
+	/\[shocked\]/gi,
+	/\[confused\]/gi,
+	/\[nervous\]/gi,
+	/\[shy\]/gi,
+	/\[annoyed\]/gi,
+	/\[frustrated\]/gi,
+	/\[cry\]/gi,
+	/\[yawn\]/gi,
+	/\[slow\]/gi,
+	/\[fast\]/gi,
+	/\[laughter\]/gi,
+	/\[surprise-oh\]/gi,
+	/\[surprise-ah\]/gi,
+	/\[dissatisfaction-hnn\]/gi,
+	/\[confirmation-en\]/gi
+];
+
+function stripAllTags(text: string): string {
+	let result = text;
+	for (const pattern of APP_TAG_PATTERNS) {
+		result = result.replace(pattern, '');
+	}
+	return result;
+}
+
 // Clean up dialogue text
 function cleanDialogue(text: string): string {
 	let cleaned = text;
 
+	// Remove all application control tags from visible chat
+	cleaned = stripAllTags(cleaned);
+
 	// Remove any leftover JSON-like content
 	cleaned = cleaned.replace(/\{[^}]*"(?:mood|delta|emotion)[^}]*\}/gi, '');
 	cleaned = cleaned.replace(/\{[^{}]*"(?:new_memory|structured_fact_seen|triggered_event|mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta)[^{}]*\}/gi, '');
-
-	// Remove [emote:...] action tags. The prompt instructs the model to use these
-	// instead of asterisks for physical/emotional actions.
-	cleaned = cleaned.replace(/\[emote:[^\]]+\]/gi, '');
 
 	// Keep asterisks and parentheses in the dialogue — the model should not use
 	// them for actions, and stripping them risks removing meaningful emphasis
@@ -237,7 +285,7 @@ function cleanDialogue(text: string): string {
 
 	// If we stripped everything, return a fallback
 	if (!cleaned) {
-		cleaned = 'Hmm... *thinking*';
+		cleaned = 'Hmm...';
 	}
 
 	return cleaned;

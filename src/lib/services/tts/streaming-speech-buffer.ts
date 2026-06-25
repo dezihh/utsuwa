@@ -18,6 +18,8 @@ export class StreamingSpeechBuffer {
 	// a leading [lang:es] would be discarded and the following text would be
 	// synthesised with the wrong language.
 	private pendingStatePrefix = '';
+	private flushTimer: ReturnType<typeof setTimeout> | null = null;
+	private readonly FLUSH_TIMEOUT_MS = 1500;
 	private readonly options: StreamingSpeechBufferOptions;
 
 	constructor(options: StreamingSpeechBufferOptions) {
@@ -33,6 +35,7 @@ export class StreamingSpeechBuffer {
 		}
 		this.buffer += chunk;
 		this.tryEmit();
+		this.armFlushTimer();
 	}
 
 	flush(): void {
@@ -64,6 +67,8 @@ export class StreamingSpeechBuffer {
 	}
 
 	private tryEmit(): void {
+		this.clearFlushTimer();
+
 		// Loop so that when multiple complete sentences are buffered (e.g. fast LLM),
 		// each is emitted individually in sequence rather than as one big block.
 		let unprocessed = this.buffer.slice(this.emittedLength);
@@ -72,6 +77,28 @@ export class StreamingSpeechBuffer {
 			this.tryEmitBlock(unprocessed);
 			if (this.emittedLength === before) break; // no sentence boundary found
 			unprocessed = this.buffer.slice(this.emittedLength);
+		}
+
+		// Re-arm the flush timer if there is un-emitted text remaining.
+		// This ensures trailing text without a sentence terminator is eventually
+		// emitted rather than waiting indefinitely for more streaming chunks.
+		if (this.emittedLength < this.buffer.length) {
+			this.armFlushTimer();
+		}
+	}
+
+	private armFlushTimer(): void {
+		if (this.flushTimer) return;
+		this.flushTimer = setTimeout(() => {
+			this.flushTimer = null;
+			this.flush();
+		}, this.FLUSH_TIMEOUT_MS);
+	}
+
+	private clearFlushTimer(): void {
+		if (this.flushTimer) {
+			clearTimeout(this.flushTimer);
+			this.flushTimer = null;
 		}
 	}
 
@@ -97,7 +124,7 @@ export class StreamingSpeechBuffer {
 			text = cleaned;
 		}
 
-		const TAG_RE = /\[lang:[a-z]{2,3}\]|\[voice:(?:default|alt)\]/gi;
+		const TAG_RE = /\[lang:(?:default|[a-z]{2,3})\]|\[voice:(?:default|alt)\]/gi;
 
 		// When a control tag sits at position 0, accumulate it in pendingStatePrefix
 		// instead of discarding it — it will be prepended to the next text block so
@@ -128,6 +155,19 @@ export class StreamingSpeechBuffer {
 			if (block.trim()) {
 				this.emit(block);
 				this.emittedLength += paraBreak + 2;
+			}
+			return;
+		}
+
+		// Emit on a single newline as well so streamed responses that use \n
+		// as a natural break (e.g. lists, multi-sentence paragraphs) are split
+		// into smaller chunks for TTS without waiting for a full sentence end.
+		const singleBreak = text.indexOf('\n');
+		if (singleBreak > 0) {
+			const block = text.slice(0, singleBreak);
+			if (block.trim()) {
+				this.emit(block);
+				this.emittedLength += singleBreak + 1;
 			}
 			return;
 		}

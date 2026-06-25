@@ -24,6 +24,8 @@ export interface TTSOptions {
 	omnivoiceNumStep?: number;
 	/** Base speed for [voice:alt] segments (falls back to speed when unset) */
 	alternativeSpeed?: number;
+	/** ISO 639-1 code for the alternative language. Only this language triggers the alt voice. */
+	altLanguage?: string;
 }
 
 // Result from TTS speak method

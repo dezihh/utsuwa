@@ -90,7 +90,8 @@ export function clearWorkingMemory(): void {
 	workingMemory = {
 		turns: [],
 		sessionStartedAt: new Date(),
-		messageCount: 0
+		messageCount: 0,
+		currentSessionId: undefined
 	};
 }
 

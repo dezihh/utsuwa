@@ -161,6 +161,8 @@ export class VoiceOrchestrator {
 	private pipelineAbort: AbortController | null = null;
 	private sessionOptions: TTSOptions | null = null;
 	private pipelineIndex = 0;
+	private inferredPrimaryLang: string | undefined = undefined;
+	private lastSegmentLang: string | undefined = undefined;
 	// Inferred alt language: set to the first explicitly-tagged language seen when
 	// sessionOptions.language (primary language) is not configured. Lets us distinguish
 	// "Spanish = alt" from "German = default" even without explicit primary language config.
@@ -210,6 +212,8 @@ export class VoiceOrchestrator {
 		this.sessionOptions = options;
 		this.pipelineAbort = new AbortController();
 		this.pipelineIndex = 0;
+		this.inferredPrimaryLang = undefined;
+		this.lastSegmentLang = undefined;
 		this.inferredAltLanguage = undefined;
 		this.bufferedStreamingSegments = [];
 		this.channel = new PipelineQueue();
@@ -245,13 +249,22 @@ export class VoiceOrchestrator {
 		if (!textContent.trim()) return;
 
 		// Auto-assign alt voice when language differs from the configured primary language.
-		// Requires sessionOptions.language to be set — without a known primary language we
-		// cannot reliably distinguish "alt language" from "primary language explicitly tagged".
-		if (!segment.voiceId && this.sessionOptions.alternativeVoiceId && segment.language && this.sessionOptions.language) {
-			if (segment.language !== this.sessionOptions.language) {
+		// Requires sessionOptions.language or at least one segment to provide a language hint.
+		if (!segment.voiceId && this.sessionOptions.alternativeVoiceId && segment.language) {
+			if (this.inferredPrimaryLang === undefined) {
+				this.inferredPrimaryLang = segment.language;
+				this.lastSegmentLang = segment.language;
+			}
+			const primaryLang = this.sessionOptions.language || this.inferredPrimaryLang;
+			const altLang = this.sessionOptions.altLanguage;
+			const shouldUseAlt = altLang
+				? segment.language === altLang
+				: segment.language !== primaryLang;
+			if (shouldUseAlt) {
 				segment = { ...segment, voiceId: 'alt' };
 			}
 		}
+		this.lastSegmentLang = segment.language !== undefined ? segment.language : this.lastSegmentLang;
 
 		const provider = getTTSProvider(this.sessionOptions);
 		const abort = this.pipelineAbort;

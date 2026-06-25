@@ -304,7 +304,7 @@ export function splitIntoSentences(text: string): string[] {
 
 export function stripLangTags(text: string): string {
 	return text
-		.replace(/\[lang:[a-z]{2,3}\]/gi, '')
+		.replace(/\[lang:(?:default|[a-z]{2,3})\]/gi, '')
 		.replace(/\[voice:(?:default|alt)\]/gi, '')
 		.replace(/  +/g, ' ')
 		.trim();
@@ -338,7 +338,8 @@ export function stripActionTags(text: string): string {
 }
 
 export function stripAllTags(text: string): string {
-	return replaceEmotionTagsForDisplay(stripActionTags(stripLangTags(text)));
+	return replaceEmotionTagsForDisplay(stripActionTags(stripLangTags(text)))
+		.replace(/\[vocab:[^\]]+\]/gi, '');
 }
 
 /**
@@ -427,9 +428,10 @@ export function splitIntoSegments(
 	ACTION_TAG_REGEX.lastIndex = 0;
 	const cleanText = text.replace(ACTION_TAG_REGEX, '');
 
-	// Tokenize [lang:xx] and [voice:xxx] tags together. Both are persistent-scope
-	// markers that apply to all following segments until the next tag of the same type.
-	const tagRegex = /\[lang:([a-z]{2,3})\]|\[voice:(default|alt)\]/gi;
+	// Tokenize [lang:xx], [lang:default], and [voice:xxx] tags together.
+	// Both [lang:xx] and [lang:default] are persistent-scope markers.
+	// [lang:default] resets to the session's default language.
+	const tagRegex = /\[lang:(default|[a-z]{2,3})\]|\[voice:(default|alt)\]/gi;
 	const tokens: Array<{ type: 'text' | 'lang' | 'voice'; value: string }> = [];
 	let lastIdx = 0;
 	let tm: RegExpExecArray | null;
@@ -447,7 +449,7 @@ export function splitIntoSegments(
 
 	for (const token of tokens) {
 		if (token.type === 'lang') {
-			currentLang = token.value;
+			currentLang = token.value === 'default' ? (defaultLanguage || undefined) : token.value;
 		} else if (token.type === 'voice') {
 			currentVoiceId = token.value === 'default' ? undefined : token.value;
 		} else {
@@ -472,7 +474,7 @@ export function splitIntoSegments(
 	// checking emptiness. Emotion tags with empty ttsText produce no speech on their own.
 	// Passthrough tags ([laughter] etc.) are intentional text for the TTS engine and kept.
 	const fallbackText = cleanText
-		.replace(/\[lang:[a-z]{2,3}\]/gi, '')
+		.replace(/\[lang:(?:default|[a-z]{2,3})\]/gi, '')
 		.replace(/\[voice:(?:default|alt)\]/gi, '')
 		.replace(/\[(\w+)\]/g, (_m, tag) => (EMOTION_TAGS[tag.toLowerCase()] ? '' : `[${tag}]`))
 		.replace(/  +/g, ' ')

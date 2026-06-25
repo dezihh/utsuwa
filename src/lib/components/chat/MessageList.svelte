@@ -27,7 +27,7 @@
 			<span>Type a message to chat with Utsuwa</span>
 		</div>
 	{:else}
-		{#each chatStore.messages as message (message.id)}
+		{#each chatStore.messages.filter(m => m.role !== 'system') as message (message.id)}
 			<MessageBubble {message} />
 		{/each}
 	{/if}

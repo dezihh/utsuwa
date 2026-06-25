@@ -2,6 +2,7 @@ import type { LLMProvider } from '$lib/types';
 import { getChatBaseUrl, getLocalProviderConnectionHint } from '$lib/services/providers/local-endpoints';
 import { normalizeChatBaseURL } from './base-url';
 import { PROVIDER_BASE_URLS } from '$lib/services/providers/base-urls';
+import { parseSSEStream } from './stream-parser';
 
 interface ChatMessage {
 	role: 'system' | 'user' | 'assistant';
@@ -169,40 +170,12 @@ export async function streamChatDirect(
 			return;
 		}
 
-		const decoder = new TextDecoder();
-		let buffer = '';
-
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-
-			buffer += decoder.decode(value, { stream: true });
-			const lines = buffer.split('\n');
-			buffer = lines.pop() || '';
-
-			for (const line of lines) {
-				const trimmed = line.trim();
-				if (!trimmed || trimmed === 'data: [DONE]') continue;
-				if (!trimmed.startsWith('data: ')) continue;
-
-				try {
-					const json = JSON.parse(trimmed.slice(6));
-
-					// OpenAI-compatible format
-					if (json.choices?.[0]?.delta?.content) {
-						onChunk(json.choices[0].delta.content);
-					}
-					// Anthropic format
-					else if (json.type === 'content_block_delta' && json.delta?.text) {
-						onChunk(json.delta.text);
-					}
-				} catch {
-					// Skip malformed JSON lines
-				}
-			}
-		}
-
-		onDone();
+		await parseSSEStream(reader, {
+			onChunk,
+			onDone,
+			onError,
+			format: provider === 'anthropic' ? 'anthropic' : 'openai'
+		});
 	} catch (err) {
 		if (err instanceof Error && err.name === 'AbortError') {
 			// Stream was cancelled by the caller — don't report as error

@@ -290,13 +290,16 @@
 			systemTime: new Date(),
 			ttsProvider: activeTTSProvider,
 			ttsLanguage: ttsConfig?.language || undefined,
+			ttsAltLanguage: activeTTSProvider === 'omnivoice' ? ttsConfig?.omnivoiceAltLanguage : undefined,
 			availableExpressions: vrmStore.availableExpressions,
 			availableActions: vrmStore.llmActions,
 			emotionMappings,
 			pendingReminders,
 			factLibraryEnabled: true,
 			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
-			memoryBudget
+			memoryBudget,
+contextSize,
+			nsfwMode: !!consciousnessSettings.nsfwMode
 		};
 
 		return buildSystemPrompt(context);
