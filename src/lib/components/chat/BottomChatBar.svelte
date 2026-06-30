@@ -127,7 +127,7 @@
 	</div>
 {/if}
 
-<div class="bottom-chat-bar" class:panel-open={debugStore.panelVisible}>
+<div class="bottom-chat-bar">
 	<form class="chat-form" onsubmit={handleSubmit}>
 		<div
 			class="input-wrapper"
@@ -260,10 +260,6 @@
 		max-width: 600px;
 		padding: 0 1rem;
 		z-index: 40;
-	}
-
-	.bottom-chat-bar.panel-open {
-		bottom: calc(var(--debug-panel-height, 0px) + 1rem);
 	}
 
 	.stt-error {

@@ -106,7 +106,7 @@
 	.sidebar {
 		position: fixed;
 		top: 0;
-		bottom: var(--debug-panel-height, 0px);
+		bottom: 0;
 		width: 320px;
 		max-width: 85vw;
 		display: flex;

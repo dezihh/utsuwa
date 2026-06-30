@@ -7,8 +7,10 @@
 	const navItems = [
 		{ href: '/app/settings/persona', label: 'Character', icon: 'persona' },
 		{ href: '/app/settings/display', label: 'Display', icon: 'monitor' },
+		{ href: '/app/settings/llm', label: 'LLM Model', icon: 'brain' },
 		{ href: '/app/settings/tts', label: 'TTS', icon: 'mic' },
 		{ href: '/app/settings/tts-emotions', label: 'TTS Emotions', icon: 'mic' },
+		{ href: '/app/settings/stt', label: 'STT', icon: 'mic' },
 		{ href: '/app/settings/avatar/animations', label: 'Animations', icon: 'layers' },
 
 		{ href: '/app/settings/data', label: 'Data', icon: 'database' },

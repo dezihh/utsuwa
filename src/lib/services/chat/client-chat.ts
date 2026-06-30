@@ -155,7 +155,7 @@ export async function streamChatDirect(
 
 			// Surface deprecated/unavailable models as an actionable user message.
 			if (/no longer available|has been deprecated|has been shut down|is not available/i.test(msg)) {
-				msg = `The selected model is no longer available. Please choose a different model in Settings > Character > AI Services. (${msg})`;
+				msg = `The selected model is no longer available. Please choose a different model in Settings > LLM Model. (${msg})`;
 			} else if (isCustomEndpoint && response.status === 404) {
 				msg = `${msg}. Pull or select an installed model.`;
 			}

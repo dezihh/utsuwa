@@ -310,7 +310,7 @@ contextSize,
 
 		// Check if chat is enabled
 		if (!modulesStore.isModuleEnabled('consciousness')) {
-			chatStore.setError('Chat is disabled. Enable it in Settings > Character > AI Services.');
+			chatStore.setError('Chat is disabled. Enable it in Settings > LLM Model.');
 			return;
 		}
 

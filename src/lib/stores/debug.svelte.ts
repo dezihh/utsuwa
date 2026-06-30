@@ -3,8 +3,6 @@ import { browser } from '$app/environment';
 export interface DebugSettings {
 	/** Log system prompts before every LLM call */
 	logSystemPrompts: boolean;
-	/** Show debug panel overlay */
-	showDebugPanel: boolean;
 	/** Log memory retrieval details */
 	logMemoryRetrieval: boolean;
 	/** Log session lifecycle events */
@@ -15,36 +13,21 @@ export interface DebugSettings {
 	logSpeechArtifacts: boolean;
 	/** Log each TTS segment with language and assigned voice */
 	logTtsSegments: boolean;
-	/** Maximum number of log entries to keep in memory */
-	maxLogEntries: number;
-}
-
-export interface LogEntry {
-	id: number;
-	timestamp: Date;
-	category: 'prompt' | 'memory' | 'session' | 'fact' | 'evolution' | 'speech' | 'general';
-	title: string;
-	content: string;
 }
 
 const STORAGE_KEY = 'utsuwa-debug-settings';
 
 const DEFAULT_SETTINGS: DebugSettings = {
 	logSystemPrompts: true,
-	showDebugPanel: false,
 	logMemoryRetrieval: true,
 	logSessionLifecycle: true,
 	logFactLibrary: true,
 	logSpeechArtifacts: true,
-	logTtsSegments: true,
-	maxLogEntries: 100
+	logTtsSegments: true
 };
 
 function createDebugStore() {
 	let settings = $state<DebugSettings>({ ...DEFAULT_SETTINGS });
-	let logEntries = $state<LogEntry[]>([]);
-	let panelVisible = $state(false);
-	let nextLogId = 0;
 
 	// Load from localStorage
 	if (browser) {
@@ -68,25 +51,13 @@ function createDebugStore() {
 	function updateSetting<K extends keyof DebugSettings>(key: K, value: DebugSettings[K]) {
 		settings = { ...settings, [key]: value };
 		persist();
-		if (key === 'showDebugPanel') {
-			panelVisible = value as boolean;
-		}
 	}
 
-	function togglePanel() {
-		panelVisible = !panelVisible;
-	}
-
-	function addLog(entry: Omit<LogEntry, 'id' | 'timestamp'>) {
+	function addLog(entry: { category: string; title: string; content: string }) {
 		if (!browser) return;
-		const fullEntry: LogEntry = { ...entry, id: nextLogId++, timestamp: new Date() };
-		logEntries = [fullEntry, ...logEntries].slice(0, settings.maxLogEntries);
-		// Also log to console for convenience
+		// All debug output goes to the browser console (F12).
+		// eslint-disable-next-line no-console
 		console.log(`[${entry.category.toUpperCase()}] ${entry.title}`, entry.content);
-	}
-
-	function clearLogs() {
-		logEntries = [];
 	}
 
 	function logPrompt(systemPrompt: string, userMessage: string) {
@@ -163,16 +134,8 @@ function createDebugStore() {
 		get settings() { return settings; },
 		updateSetting,
 
-		// Panel
-		get panelVisible() { return panelVisible; },
-		togglePanel,
-
-		// Logs
-		get logEntries() { return logEntries; },
-		addLog,
-		clearLogs,
-
 		// Convenience loggers
+		addLog,
 		logPrompt,
 		logMemory,
 		logSession,

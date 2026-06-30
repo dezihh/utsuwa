@@ -699,7 +699,7 @@
 			<!-- Debug Logging -->
 			<section class="section">
 				<h3>Debug Logging</h3>
-				<p class="hint">Toggle logging categories. Open the debug panel to view logs in real-time.</p>
+				<p class="hint">Toggle logging categories. Logs are written to the browser console (F12 → Console).</p>
 				<div class="debug-toggles">
 					<label class="debug-toggle">
 						<input
@@ -755,16 +755,6 @@
 						<span class="debug-toggle-label">Log TTS Segments</span>
 						<span class="debug-toggle-desc">Each segment with language and assigned voice</span>
 					</label>
-				</div>
-				<div class="debug-panel-toggle">
-					<button
-						class="action-btn"
-						class:active={debugStore.panelVisible}
-						onclick={() => debugStore.togglePanel()}
-					>
-						<Icon name="terminal" size={14} />
-						{debugStore.panelVisible ? 'Hide Debug Panel' : 'Show Debug Panel'}
-					</button>
 				</div>
 			</section>
 
@@ -1712,7 +1702,4 @@
 		margin-top: 0.1rem;
 	}
 
-	.debug-panel-toggle {
-		margin-top: 0.5rem;
-	}
 </style>

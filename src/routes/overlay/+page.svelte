@@ -258,7 +258,7 @@
 		if (!content.trim() || chatStore.isLoading) return;
 
 		if (!modulesStore.isModuleEnabled('consciousness')) {
-			chatStore.setError('Chat is disabled. Enable it in Settings > Character > AI Services.');
+			chatStore.setError('Chat is disabled. Enable it in Settings > LLM Model.');
 			return;
 		}
 

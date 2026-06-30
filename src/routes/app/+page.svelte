@@ -6,7 +6,6 @@
 	import BottomChatBar from '$lib/components/chat/BottomChatBar.svelte';
 	import SpeechBubble from '$lib/components/chat/SpeechBubble.svelte';
 	import ChatSidebar from '$lib/components/chat/ChatSidebar.svelte';
-	import DebugPanel from '$lib/components/debug/DebugPanel.svelte';
 	import { EventScene } from '$lib/components/events';
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import MemoryGraphModal from '$lib/components/memory/MemoryGraphModal.svelte';
@@ -800,7 +799,7 @@
 		}
 
 		if (!modulesStore.isModuleEnabled('consciousness')) {
-			chatStore.setError('Chat is disabled. Enable it in Settings > Character > AI Services.');
+			chatStore.setError('Chat is disabled. Enable it in Settings > LLM Model.');
 			return;
 		}
 
@@ -1257,7 +1256,7 @@
 	}
 </script>
 
-<div class="app-container" style:--debug-panel-height={debugStore.panelVisible ? '30vh' : '0px'}>
+<div class="app-container">
 	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} onOpenFactLibrary={() => showFactLibrary = true} onOpenVocabulary={() => showVocabulary = true} onOpenMemoryInspector={() => showMemoryInspector = true} {leftOffset} />
 	<TopRightButtons
 		onInfoClick={() => showInfoModal = true}
@@ -1380,9 +1379,6 @@
 			/>
 		{/if}
 	</main>
-
-	<!-- Debug Panel (docked below main content when visible) -->
-	<DebugPanel />
 
 	<!-- Onboarding Modal (first-run) -->
 	{#if showOnboarding}

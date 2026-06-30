@@ -80,7 +80,7 @@ async function streamOpenAICompatibleChat(
 
 		// Surface deprecated/unavailable models as an actionable user message.
 		if (/no longer available|has been deprecated|has been shut down|is not available/i.test(msg)) {
-			msg = `The selected model is no longer available. Please choose a different model in Settings > Character > AI Services. (${msg})`;
+			msg = `The selected model is no longer available. Please choose a different model in Settings > LLM Model. (${msg})`;
 		}
 
 		return new Response(JSON.stringify({ error: msg }), {
