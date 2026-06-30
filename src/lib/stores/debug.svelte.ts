@@ -13,6 +13,8 @@ export interface DebugSettings {
 	logFactLibrary: boolean;
 	/** Log TTS artifacts filtered from speech */
 	logSpeechArtifacts: boolean;
+	/** Log each TTS segment with language and assigned voice */
+	logTtsSegments: boolean;
 	/** Maximum number of log entries to keep in memory */
 	maxLogEntries: number;
 }
@@ -34,6 +36,7 @@ const DEFAULT_SETTINGS: DebugSettings = {
 	logSessionLifecycle: true,
 	logFactLibrary: true,
 	logSpeechArtifacts: true,
+	logTtsSegments: true,
 	maxLogEntries: 100
 };
 
@@ -137,6 +140,24 @@ function createDebugStore() {
 		});
 	}
 
+	function logTTSSegment(segment: { text: string; language?: string; voiceId?: string }, resolvedVoiceId?: string) {
+		if (!settings.logTtsSegments) return;
+		addLog({
+			category: 'speech',
+			title: `TTS Segment (${segment.language || 'auto'})`,
+			content: `text: "${segment.text}"\nlanguage: ${segment.language || '-'}\nvoiceId tag: ${segment.voiceId || '-'}\nresolved voice: ${resolvedVoiceId || '-'}`
+		});
+	}
+
+	function logTTSRequest(provider: string, body: Record<string, unknown>) {
+		if (!settings.logTtsSegments) return;
+		addLog({
+			category: 'speech',
+			title: `TTS Request (${provider})`,
+			content: JSON.stringify(body, null, 2)
+		});
+	}
+
 	return {
 		// Settings
 		get settings() { return settings; },
@@ -156,7 +177,9 @@ function createDebugStore() {
 		logMemory,
 		logSession,
 		logFact,
-		logSpeechArtifact
+		logSpeechArtifact,
+		logTTSSegment,
+		logTTSRequest
 	};
 }
 

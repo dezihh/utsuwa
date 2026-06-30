@@ -249,7 +249,7 @@ The vocabulary system works in two turns. Here's the workflow:
 
 **Key principle:** After step 1, do NOT say "read the words aloud" — that triggers another tag. Instead, ask conversationally: "What words did I learn?", "Quiz me!", or "Explain the first one." The words are already in context; the companion just needs a natural prompt to engage with them.
 
-**OmniVoice dual-voice integration:** When Spanish vocabulary is loaded and the companion outputs words with `[lang:es]` tags, OmniVoice switches to the alternative voice with Spanish pronunciation automatically. Configure this under **Settings > AI Services > OmniVoice** (enable alternative voice and set alternative language to `es`).
+**OmniVoice dual-voice integration:** When Spanish vocabulary is loaded and the companion outputs words with `[lang:es]` tags, OmniVoice switches to the alternative voice with Spanish pronunciation automatically. Configure this under **Settings > TTS > OmniVoice** (enable alternative voice and set alternative language to `es`).
 
 ### Desktop Application (Beta)
 
@@ -284,7 +284,7 @@ Custom Endpoint uses a built-in template selector so common local and cloud Open
 
 #### OmniVoice TTS
 
-OmniVoice is a local diffusion-based TTS engine with 600+ language support and real-time factor ~0.5. Configure it under **Settings > AI Services > Speech TTS**.
+OmniVoice is a local diffusion-based TTS engine with 600+ language support and real-time factor ~0.5. Configure it under **Settings > TTS**.
 
 - Set the **API base URL** to your local OmniVoice container, for example `http://localhost:8766/`
 - Choose **Primary Language** — the default language for all speech (e.g. "de" for German). OmniVoice auto-detects this language via its multilingual engine.
@@ -292,12 +292,29 @@ OmniVoice is a local diffusion-based TTS engine with 600+ language support and r
 - **Default Voice** profile — two modes:
   - *Synthetic*: design a voice by selecting gender, age group, and pitch
   - *Voice Clone*: select a voice sample loaded from the OmniVoice server
-  - Adjust per-voice **speed** (0.25–4.0×)
 - **Alternative Voice** profile (enable via checkbox) — same fields as Default:
   - Choose **Alternative Language** (e.g. "es" for Spanish). Only text tagged with `[lang:es]` triggers this voice. All other languages use the default voice.
   - When the LLM outputs `[lang:es]`, OmniVoice switches to the alt voice with Spanish pronunciation for that word or phrase.
   - `[lang:default]` switches back to the default voice. The LLM is prompted to use these tags automatically.
-  - Adjust per-voice **Alternative Speed** independently of the default voice.
+
+##### Voice modes: Synthetic vs. Voice Clone
+
+Both the default and alternative profiles can use either a **Synthetic** (designed) voice or a **Voice Clone** (sample-based) voice. They behave very differently, so pick the mode that fits your use case.
+
+| | Synthetic voice design | Voice Clone sample |
+|---|---|---|
+| **How it works** | Sends a text description such as `female, young adult, moderate pitch` to OmniVoice's `instruct` parameter. | Sends a clone/sample voice ID such as `lidl`, `female3`, or `female3_spain` to OmniVoice's `voice` parameter. |
+| **Pros** | Full control over gender, age, and pitch. No need to prepare or upload audio samples. | The same voice is generated for every request, so timbre and character stay consistent across sentences and sessions. More robust for very short words and language switching. |
+| **Cons** | Each request synthesises a *new* voice from the description, so timbre can vary noticeably between sentences and even between words. Short phrases or single words can sound noisy or clipped. Speed has little effect and may degrade quality. | You are limited to the clone samples available on your OmniVoice server. You cannot fine-tune age/gender/pitch independently of the sample. |
+| **Best for** | Prototyping, one-off lines, or when no suitable clone is available. | Conversational use, dual-language switching, and any scenario where a stable voice matters. |
+
+**Recommendation:** Use **Voice Clone** for both the default and alternative profiles when you want reliable, consistent speech — especially for language switching. A typical German/Spanish setup is:
+
+- Default voice clone: `lidl` or `female3`
+- Alternative voice clone: `female3_spain`
+- Alternative language: `es`
+
+If you use a **Synthetic** alt voice, you may hear inconsistent accents or degraded quality on short `[lang:es]` words. If a synthetic default and a clone alt are mixed, the contrast can be jarring.
 
 **How language switching works:**
 
@@ -332,7 +349,7 @@ Only **OmniVoice** currently supports per-word dual-voice switching with languag
 
 #### AllTalk TTS
 
-AllTalk is configured under **Settings > TTS Providers** and connects to your existing AllTalk instance instead of starting a second one.
+AllTalk is configured under **Settings > TTS** and connects to your existing AllTalk instance instead of starting a second one.
 
 - Set the **API base URL** to your local AllTalk server, for example `http://localhost:7851/api/`
 - Pick a **voice** from the voice dropdown
@@ -343,7 +360,7 @@ AllTalk determines the spoken language from the selected voice, so no separate l
 
 #### Chatterbox TTS
 
-Chatterbox is configured under **Settings > TTS Providers** and connects to your existing Chatterbox instance (no second service started by Utsuwa).
+Chatterbox is configured under **Settings > TTS** and connects to your existing Chatterbox instance (no second service started by Utsuwa).
 
 - Set the **API base URL** to your local Chatterbox server, for example `http://localhost:8300/`
 - Pick a **voice** from the dropdown (loaded from the server's predefined voices)

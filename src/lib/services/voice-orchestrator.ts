@@ -6,6 +6,7 @@ import {
 	type ITTSProvider
 } from '$lib/services/tts';
 import { applyEmotionToSegment, type AudioEffects } from '$lib/services/tts/emotion-applier';
+import { debugStore } from '$lib/stores/debug.svelte';
 
 /**
  * Metadata attached to each speech segment by the response parser.
@@ -265,6 +266,9 @@ export class VoiceOrchestrator {
 			}
 		}
 		this.lastSegmentLang = segment.language !== undefined ? segment.language : this.lastSegmentLang;
+
+		const resolvedVoiceId = this.resolveVoiceId(segment.voiceId);
+		debugStore.logTTSSegment(segment, resolvedVoiceId);
 
 		const provider = getTTSProvider(this.sessionOptions);
 		const abort = this.pipelineAbort;

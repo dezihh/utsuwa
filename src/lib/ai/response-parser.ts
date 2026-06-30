@@ -189,10 +189,17 @@ function convertLLMOutput(output: LLMStateOutput): Partial<StateUpdates> {
 		updates.triggeredEvent = output.triggered_event.trim();
 	}
 
-	// Structured fact for fact library
+	// Structured fact for fact library.
+	// Vocabulary words are handled by the vocabulary system and must NOT create
+	// duplicate structured facts, even if the model emits them.
 	if (output.structured_fact_seen && typeof output.structured_fact_seen === 'object') {
 		const fact = output.structured_fact_seen;
-		if (typeof fact.key === 'string' && typeof fact.value === 'string' && typeof fact.type === 'string') {
+		if (
+			typeof fact.key === 'string' &&
+			typeof fact.value === 'string' &&
+			typeof fact.type === 'string' &&
+			fact.type.toLowerCase() !== 'vocab'
+		) {
 			updates.structuredFactSeen = {
 				type: fact.type,
 				key: fact.key.trim(),
@@ -222,8 +229,8 @@ function clampDelta(value: number | undefined, min: number, max: number): number
 // Only tags consumed during streaming (TTS, voice, actions) or purely
 // cosmetic tags ([emote:...]) are stripped here.
 const APP_TAG_PATTERNS: RegExp[] = [
-	/\[lang:(?:default|[a-z]{2,3})\]/gi,
-	/\[voice:(?:default|alt)\]/gi,
+	/\[lang:\s*(?:default|[a-z]{2,3})\s*\]/gi,
+	/\[voice:\s*(?:default|alt)\s*\]/gi,
 	/\[action:[^\]]+\]/gi,
 	/\[emote:[^\]]+\]/gi,
 	/\[laugh\]/gi,
@@ -268,13 +275,14 @@ function cleanDialogue(text: string): string {
 	// Remove all application control tags from visible chat
 	cleaned = stripAllTags(cleaned);
 
-	// Remove any leftover JSON-like content
+	// Remove any leftover JSON-like content (valid or broken fragments)
 	cleaned = cleaned.replace(/\{[^}]*"(?:mood|delta|emotion)[^}]*\}/gi, '');
 	cleaned = cleaned.replace(/\{[^{}]*"(?:new_memory|structured_fact_seen|triggered_event|mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta)[^{}]*\}/gi, '');
+	// Broken fragments without opening braces (model sometimes emits these at the end)
+	cleaned = cleaned.replace(/\s*"?(new_memory|structured_fact_seen|mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|energy_delta|triggered_event)"?\s*[:=].*$/gis, '');
+	cleaned = cleaned.replace(/\s*"?(value|category|type|key)"?\s*[:=]\s*("[\s\S]*?"|\{[\s\S]*?\}).*$/gis, '');
 
-	// Keep asterisks and parentheses in the dialogue — the model should not use
-	// them for actions, and stripping them risks removing meaningful emphasis
-	// or parenthetical narration.
+
 
 	// Remove character name prefixes (e.g., "Character: ")
 	cleaned = cleaned.replace(/^[A-Za-z]+:\s*/gm, '');

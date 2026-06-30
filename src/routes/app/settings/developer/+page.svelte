@@ -746,6 +746,15 @@
 						<span class="debug-toggle-label">Log Speech Artifacts</span>
 						<span class="debug-toggle-desc">Tags and JSON blocks filtered from TTS</span>
 					</label>
+					<label class="debug-toggle">
+						<input
+							type="checkbox"
+							checked={debugStore.settings.logTtsSegments}
+							onchange={(e) => debugStore.updateSetting('logTtsSegments', e.currentTarget.checked)}
+						/>
+						<span class="debug-toggle-label">Log TTS Segments</span>
+						<span class="debug-toggle-desc">Each segment with language and assigned voice</span>
+					</label>
 				</div>
 				<div class="debug-panel-toggle">
 					<button

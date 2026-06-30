@@ -7,6 +7,7 @@ import {
 	type StreamOptions,
 	type AudioChunk
 } from './index';
+import { debugStore } from '$lib/stores/debug.svelte';
 
 /**
  * OmniVoiceTTS — server-proxied streaming TTS provider for OmniVoice.
@@ -114,19 +115,22 @@ export class OmniVoiceTTS implements ITTSProvider {
 		const isInstruct = rawVoice?.startsWith('instruct:');
 		const voiceValue = isInstruct ? rawVoice.slice('instruct:'.length) : rawVoice;
 
+		const body: Record<string, unknown> = {
+			text,
+			...(isInstruct ? { instruct: voiceValue } : { voice: voiceValue }),
+			numStep: this.numStep,
+			baseUrl: this.baseUrl,
+			language: options?.language,
+			...(options?.speed !== undefined ? { speed: options.speed } : {}),
+			...(options?.pitch !== undefined ? { pitch: options.pitch } : {}),
+			...(options?.volume !== undefined ? { volume: options.volume } : {})
+		};
+		debugStore.logTTSRequest('omnivoice', body);
+
 		return fetch('/api/tts/omnivoice/stream', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				text,
-				...(isInstruct ? { instruct: voiceValue } : { voice: voiceValue }),
-				numStep: this.numStep,
-				baseUrl: this.baseUrl,
-				language: options?.language,
-				...(options?.speed !== undefined ? { speed: options.speed } : {}),
-				...(options?.pitch !== undefined ? { pitch: options.pitch } : {}),
-				...(options?.volume !== undefined ? { volume: options.volume } : {})
-			}),
+			body: JSON.stringify(body),
 			signal: options?.signal
 		});
 	}

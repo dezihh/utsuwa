@@ -7,6 +7,7 @@
 	const navItems = [
 		{ href: '/app/settings/persona', label: 'Character', icon: 'persona' },
 		{ href: '/app/settings/display', label: 'Display', icon: 'monitor' },
+		{ href: '/app/settings/tts', label: 'TTS', icon: 'mic' },
 		{ href: '/app/settings/tts-emotions', label: 'TTS Emotions', icon: 'mic' },
 		{ href: '/app/settings/avatar/animations', label: 'Animations', icon: 'layers' },
 

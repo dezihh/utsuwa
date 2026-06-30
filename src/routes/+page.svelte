@@ -118,6 +118,18 @@
 				>
 					Docs
 				</a>
+				<a
+					href="/app/workbench"
+					class="skeu-btn-glass-outline text-sm font-medium px-6 py-3 rounded-full transition-all"
+				>
+					Prompt Workbench
+				</a>
+				<a
+					href="/app/speech-workbench"
+					class="skeu-btn-glass-outline text-sm font-medium px-6 py-3 rounded-full transition-all"
+				>
+					Speech Workbench
+				</a>
 			</div>
 
 			<!-- Screenshot card -->

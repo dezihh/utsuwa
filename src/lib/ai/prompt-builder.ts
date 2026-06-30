@@ -8,6 +8,40 @@ import { getEmotionVrmExpression, getKnownActionTags } from '$lib/utils/sentence
 import { ttsEmotionsStore } from '$lib/stores/tts-emotions.svelte';
 import type { TTSEmotionConfig } from '$lib/types/tts-emotion';
 
+const LANGUAGE_NAMES: Record<string, string> = {
+	de: 'German',
+	es: 'Spanish',
+	en: 'English',
+	fr: 'French',
+	it: 'Italian',
+	pt: 'Portuguese',
+	ja: 'Japanese',
+	zh: 'Chinese',
+	ko: 'Korean',
+	ru: 'Russian',
+	ar: 'Arabic',
+	nl: 'Dutch',
+	pl: 'Polish',
+	tr: 'Turkish',
+	cs: 'Czech',
+	hu: 'Hungarian',
+	ro: 'Romanian',
+	el: 'Greek',
+	hi: 'Hindi',
+	vi: 'Vietnamese',
+	th: 'Thai',
+	sv: 'Swedish',
+	da: 'Danish',
+	fi: 'Finnish',
+	no: 'Norwegian',
+	he: 'Hebrew'
+};
+
+function getLanguageName(code: string | undefined): string {
+	if (!code) return 'the secondary';
+	return LANGUAGE_NAMES[code.toLowerCase()] ?? code.toUpperCase();
+}
+
 function buildTimeSense(ctx: PromptContext): string {
 	const parts: string[] = [];
 	if (ctx.sessionStartedAt) {
@@ -114,6 +148,10 @@ export function buildSystemPrompt(context: PromptContext): string {
 
 	if (context.nsfwMode) {
 		layers.push(NSFW_PREAMBLE);
+		// Critical language-tag rule sits ABOVE the character/role binding so it
+		// cannot be overridden by immersion or roleplay instructions.
+		const hardLangRule = buildHardLanguageRuleLayer(context);
+		if (hardLangRule) layers.push(hardLangRule);
 	}
 
 	layers.push(buildCharacterLayer(context));
@@ -126,6 +164,11 @@ export function buildSystemPrompt(context: PromptContext): string {
 	if (factLayer) layers.push(factLayer);
 
 	layers.push(buildInstructionLayer(context));
+
+	// Place the language rule right after the core instructions so it stays
+	// prominent and is not buried behind optional layers.
+	const langRule = buildLanguageRuleLayer(context);
+	if (langRule) layers.push(langRule);
 
 	for (const layer of assembleOptionalLayers(context)) {
 		layers.push(layer);
@@ -178,8 +221,6 @@ RULES:
 - Use as much detail as the user's request needs
 - Short replies are fine for casual chat, but do not truncate stories, explanations, or multi-step answers
 - Remember context from recent conversations
-${ctx.ttsAltLanguage ? `
-- LANGUAGE TAGS: When writing ANY word or phrase in ${ctx.ttsAltLanguage}, you MUST place [lang:${ctx.ttsAltLanguage}] directly before the first ${ctx.ttsAltLanguage} word. Return with [lang:default]. Example: "[lang:es]corazón [lang:default]means heart." Never skip this — pronunciation will be wrong without it.` : ''}
 </system>`);
 
 	if (ctx.nsfwMode) {
@@ -238,10 +279,8 @@ Energy: ${energyDesc} (${ctx.state.energy}/100)
 	// Simple instructions (no relationship mechanics)
 	parts.push(`<instructions>
 Respond naturally as ${ctx.persona.name}. Be helpful and engaging.
-${ctx.ttsAltLanguage ? `
-- When writing ${ctx.ttsAltLanguage} words, you MUST place [lang:${ctx.ttsAltLanguage}] before the first ${ctx.ttsAltLanguage} character and [lang:default] after. Example: "[lang:${ctx.ttsAltLanguage}]corazón[lang:default] means heart." No spaces between tags and words.
-- Never use ** or any Markdown formatting — it will be read aloud as "asterisk asterisk" and sound terrible.
-- The TTS will pronounce [lang:${ctx.ttsAltLanguage}] words correctly in ${ctx.ttsAltLanguage}. Do NOT add "(ausgesprochen: ...)" or "(pronounced: ...)" — it is redundant and sounds cluttered.` : ''}
+- Never use * or ** or any Markdown formatting — it will be read aloud as "asterisk" and sounds terrible.
+- The TTS will pronounce ${getLanguageName(ctx.ttsAltLanguage)} phrases correctly when properly tagged (see language rule below). Do NOT add "(ausgesprochen: ...)" or "(pronounced: ...)" — it is redundant and sounds cluttered.
 
 After your response, you may optionally output state changes as JSON:
 \`\`\`json
@@ -253,11 +292,19 @@ After your response, you may optionally output state changes as JSON:
 }
 \`\`\`
 
+CRITICAL: The JSON block above contains INTERNAL system commands. The keys "new_memory" and "structured_fact_seen" must NEVER appear in your spoken dialogue. NEVER say phrases like "new memory", "structured fact seen", "JSON", "state update", or "I will save this" out loud.
+- NEVER use Markdown (*, **) or arrow symbols (→) in your response — they are read aloud or clutter the chat.
+
 ${buildMemoryTagInstructions()}
 
 NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affection, trust, intimacy, comfort, or respect changes - these relationship stats are disabled.${ctx.vocabularyEnabled ? `
-- VOCABULARY: If you see "Vocabulary for the next exercise" in the conversation, the words are already loaded. Preserve any [lang:XX] tags wrapped around source words so they keep the correct pronunciation. Do NOT output another [vocab:...] tag — just use the words naturally in your response.` : ''}
+- VOCABULARY: If you see "Vocabulary for the next exercise" in the conversation, the words are already loaded. Preserve any <lang code="XX"> tags wrapped around source words so they keep the correct pronunciation. Do NOT output another [vocab:...] tag — just use the words naturally in your response.` : ''}
 </instructions>`);
+
+	// Place the language rule RIGHT AFTER instructions so it is fresh and not
+	// diluted by later optional layers (vocabulary, image search, reminders, etc.).
+	const langRule = buildLanguageRuleLayer(ctx);
+	if (langRule) parts.push(langRule);
 
 	for (const layer of assembleOptionalLayers(ctx)) {
 		parts.push(layer);
@@ -281,7 +328,7 @@ CRITICAL RULES:
 - Never break the fourth wall unless the character would
 - Be consistent with established memories and facts
 - Express emotions through dialogue, not stage directions
-- NEVER use asterisks (*) for actions, emphasis, or stage directions
+- NEVER use asterisks (*), Markdown, or arrow symbols (→) for actions, emphasis, or stage directions — asterisks are read aloud as "asterisk" and arrows as text
 - Use [emote:brief description] for physical/emotional actions if needed (e.g. [emote:sighs deeply]). These tags are removed from the visible chat.
 - Match the response length to the task
 - Keep casual dialogue compact, but expand naturally when the user asks for a story, explanation, or detailed answer
@@ -445,14 +492,20 @@ function buildFactLibraryLayer(ctx: PromptContext): string | null {
 Semantically relevant facts and vocabulary for this conversation:
 ${lines.join('\n')}
 
-If the user struggles with any of these or shows understanding, include "structured_fact_seen" in your JSON update.
+If the user learns or struggles with a general concept or fact from this list, set the JSON key structured_fact_seen in your state-update JSON block.
+Do NOT use structured_fact_seen for vocabulary words — those are already handled by the vocabulary system.
 </fact_library>`;
 }
 
 // Shared memory-tagging instructions for both app modes
 function buildMemoryTagInstructions(): string {
-	return `MEMORY GUIDELINES:
-You can persist facts about the user by including "new_memory" in the JSON block.
+	return `MEMORY GUIDELINES — INTERNAL COMMANDS, NEVER SPOKEN ALOUD:
+- Use the JSON key new_memory to persist facts about the user.
+- Use the JSON key structured_fact_seen ONLY when the user learns a concrete, discrete fact (e.g. "The capital of Spain is Madrid" or "The user prefers tea over coffee"). Do NOT use it for grammar explanations, vocabulary words, or general language lessons.
+- These keys are INTERNAL system commands. They must ONLY appear inside the JSON block after your dialogue.
+- NEVER say "new memory", "structured fact seen", "JSON", "state update", "memory", or "storage" in your spoken dialogue.
+- NEVER explain that you are saving or updating anything.
+
 Only save facts that deepen the understanding of the user's personality, emotional needs, values, boundaries, recurring satisfaction patterns, or lasting preferences.
 Do NOT save:
 - temporary states ("I am tired today")
@@ -460,15 +513,21 @@ Do NOT save:
 - trivia that will not matter in future conversations
 - anything the user has not actually communicated or strongly implied
 
-Output the JSON block AFTER your dialogue response, separated by a blank line. Do not mix JSON keys such as "new_memory" into the spoken dialogue, and do not mention memory, JSON, or storage in your response.
+Output the JSON block AFTER your dialogue response, separated by a blank line. Do not mix JSON keys into the spoken dialogue.
 
 If a fact is already listed in the memory/context shown above, do NOT output it again as new_memory.
 
-Use "structured_fact_seen" ONLY when the user learns a new vocabulary word, concept, or structured fact. Use:
-- type: the kind of fact (e.g. "vocab", "concept", "exam_fact")
+When using structured_fact_seen, provide:
+- type: the kind of fact (e.g. "concept", "exam_fact")
 - key: the term or concept
 - value: the meaning or explanation
-- category: optional topic (e.g. "business", "travel", "science")`;
+- category: optional topic (e.g. "business", "travel", "science")
+
+BAD EXAMPLE (do NOT do this):
+{
+  "structured_fact_seen": { "type": "vocab", "key": "amigo", "value": "Freund" }
+}
+Vocabulary words must NEVER use structured_fact_seen.`;
 }
 
 // Instruction layer - how to respond
@@ -582,21 +641,23 @@ function buildVoiceTagLayer(ctx: PromptContext): string | null {
 	const exampleAction = ctx.availableActions?.[0]?.id ?? '';
 
 	if (ctx.ttsProvider === 'chatterbox') {
+		const mainLang = ctx.ttsLanguage || 'de';
+		const altLang = ctx.ttsAltLanguage || 'es';
 		const langHint = ctx.ttsLanguage
-			? `The default spoken language is **${ctx.ttsLanguage}**. Use [lang:${ctx.ttsLanguage}] to return to it after switching.`
-			: 'Use [lang:xx] tags to switch the spoken language per sentence.';
+			? `The default spoken language is ${mainLang}. Use <lang code="${mainLang}">text</lang> to return to it after switching.`
+			: 'Use <lang code="xx">text</lang> tags to switch the spoken language per sentence.';
 
 		const example = exampleAction
-			? `"[action:${exampleAction}][excited]Oh wow, that is impressive! [lang:es]¡Muy bien hecho! [lang:de][chuckle]Du machst das wirklich gut. [slow]Ich überlege kurz."`
-			: `"[excited]Oh wow, that is impressive! [lang:es]¡Muy bien hecho! [lang:de][chuckle]Du machst das wirklich gut. [slow]Ich überlege kurz."`;
+			? `"[action:${exampleAction}][excited]Oh wow, that is impressive! <lang code="${altLang}">text in second language</lang> <lang code="${mainLang}">[chuckle]Du machst das wirklich gut.</lang> [slow]Ich überlege kurz."`
+			: `"[excited]Oh wow, that is impressive! <lang code="${altLang}">text in second language</lang> <lang code="${mainLang}">[chuckle]Du machst das wirklich gut.</lang> [slow]Ich überlege kurz."`;
 
 		return `<voice_tags>
 You are connected to a text-to-speech engine (Chatterbox) that understands special inline tags.
 Embed them directly in your response text – they are invisible to the user but control voice and emotion.
 
 LANGUAGE SWITCHING (pronunciation changes per sentence):
-  [lang:de]  German   [lang:es]  Spanish   [lang:en]  English   [lang:fr]  French
-  [lang:it]  Italian  [lang:pt]  Portuguese  [lang:ja]  Japanese  [lang:zh]  Chinese
+  <lang code="de">German</lang>   <lang code="es">Spanish</lang>   <lang code="en">English</lang>   <lang code="fr">French</lang>
+  <lang code="it">Italian</lang>  <lang code="pt">Portuguese</lang>  <lang code="ja">Japanese</lang>  <lang code="zh">Chinese</lang>
 ${langHint}
 
 EMOTION / SOUND EFFECTS (influence voice expressiveness):
@@ -611,8 +672,8 @@ ${actionBlock ? actionBlock + '\n\n' : ''}SPEED TAGS:
   [fast]  — speak quickly or excitedly
 
 RULES:
-- Place tags immediately before the affected word or sentence (no space after the tag).
-- Language tags apply to all following sentences until the next [lang:xx] tag.
+- Place emotion tags immediately before the affected word or sentence (no space after the tag).
+- Language tags wrap the affected text: <lang code="xx">text</lang>.
 - Emotion tags apply to the sentence or phrase they precede.
 - Never explain the tags to the user; never output them as visible text.
 - Use them naturally to make the conversation more expressive and realistic.
@@ -656,7 +717,7 @@ NATIVE SOUND TAGS (OmniVoice produces these as authentic audio — use additiona
   [confirmation-en]     — confirming "mhm"`;
 
 		// No alt language configured → emit voice_tags WITHOUT the LANGUAGE TAGS section.
-		// This prevents the LLM from hallucinating [lang:es] tags when no alt voice exists.
+		// This prevents the LLM from hallucinating language tags when no alt voice exists.
 		if (!ctx.ttsAltLanguage) {
 			return `<voice_tags>
 You are connected to a text-to-speech engine (OmniVoice) that understands special inline tags.
@@ -676,40 +737,86 @@ ${monoExample ? `EXAMPLE:
   ${monoExample}\n` : ''}</voice_tags>`;
 		}
 
-		// Alt language IS configured → full dual-voice block
-		const altLangCode = ctx.ttsAltLanguage;
-
+		// Alt language IS configured → emotion/speed tags only; language rule lives in a separate layer.
 		return `<voice_tags>
 You are connected to a text-to-speech engine (OmniVoice) that understands special inline tags.
 Embed them directly in your response text — they control voice, emotion, and avatar animations.
 
 ${emotionBlock}
 
-${actionBlock ? actionBlock + '\n\n' : ''}LANGUAGE TAGS — You have two voices:
-  - Default voice (no tag): speaks any language naturally. OmniVoice auto-detects.
-  - Alternative voice: ONLY activated by [lang:${altLangCode}]. Switch back with [lang:default].
-
-  [lang:${altLangCode}] — alt voice + ${altLangCode} pronunciation (persistent)
-  [lang:default] — return to default voice
-
-  IMPORTANT: Do NOT use [lang:${altLangCode}] for any other language. Default voice handles all other languages automatically.
-
-  EXAMPLE: "Das Wort [lang:${altLangCode}]biblioteca [lang:default]bedeutet Bibliothek."
-  → "Das Wort" = default voice, "biblioteca" = alt voice, "bedeutet Bibliothek." = default voice
-
-SPEED TAGS:
+${actionBlock ? actionBlock + '\n\n' : ''}SPEED TAGS:
   [slow]  — speak slowly and thoughtfully
   [fast]  — speak quickly or excitedly
 
 RULES:
-- Place emotion and language tags immediately before the affected text, with no space.
+- Place emotion tags immediately before the affected text, with no space.
 - Never explain the tags to the user; they are invisible in chat.
-- Use [lang:${altLangCode}] ONLY for ${altLangCode} words. Return to default with [lang:default].
+- Do NOT use Markdown (*, **) or bullet lists — they are read aloud and sound terrible.
 
-${monoExample ? `MONOLINGUAL (no language switch needed):\n  ${monoExample}\n` : ''}</voice_tags>`;
+${monoExample ? `MONOLINGUAL EXAMPLE (no language switch needed):\n  ${monoExample}\n` : ''}</voice_tags>`;
 	}
 
 	return null;
+}
+
+// Language rule layer — explicit two-step reasoning for language switching.
+// Placed near the END of the prompt so it is the freshest instruction.
+function buildLanguageRuleLayer(ctx: PromptContext): string | null {
+	if (!ctx.ttsAltLanguage) return null;
+	const altLangCode = ctx.ttsAltLanguage;
+	const mainLangName = getLanguageName(ctx.ttsLanguage);
+	const altLangName = getLanguageName(altLangCode);
+
+	return `##############################################
+# WICHTIGSTE REGEL — SPRACHWECHSEL (NIE VERGESSEN)
+##############################################
+<lang_rule>
+Du hast zwei Stimmen: die Standardstimme (${mainLangName}) und eine zweite Stimme für ${altLangName} (${altLangCode.toUpperCase()}).
+Die zweite Stimme wird AUSSCHLIESSLICH durch <lang code="${altLangCode}">...</lang> aktiviert.
+
+SCHRITT 1 — IMMER ZUERST:
+Bevor du antwortest, liste alle ${altLangCode}-Phrasen auf, die du in deiner Antwort verwenden wirst:
+${altLangCode.toUpperCase()}: <phrase1>, <phrase2>
+Falls keine ${altLangCode}-Phrasen vorkommen, schreibe: ${altLangCode.toUpperCase()}: keine
+
+SCHRITT 2 — DANN deine eigentliche Antwort:
+Wrappe JEDE ${altLangName}-Phrase aus Schritt 1 in <lang code="${altLangCode}">...</lang>.
+Die TTS-Pipeline entscheidet automatisch anhand der Wortanzahl und Zeichenlänge,
+ob die Phrase mit der Zweitstimme (längere Phrasen) oder der Hauptstimme (kurze Einzelwörter)
+gesprochen wird — du musst diese Unterscheidung NICHT treffen.
+
+BEISPIELE:
+  "wort"                       → <lang code="${altLangCode}">wort</lang>
+  "zwei wörter"                → <lang code="${altLangCode}">zwei wörter</lang>
+  "ein kurzer satz"            → <lang code="${altLangCode}">ein kurzer satz</lang>
+
+RICHTIG:
+"Zuerst sagte sie <lang code="${altLangCode}">hallo</lang>, dann fragte sie <lang code="${altLangCode}">wie geht es dir?</lang> und lachte."
+
+AUSNAHMEN — NIEMALS taggen:
+Eigennamen (Städte, Personen) und im ${mainLangName} eingebürgerte Lehnwörter
+zählen NICHT als ${altLangName}-Tag-Kandidaten.
+
+WICHTIG: Verwende <lang code="${altLangCode}"> NUR für ${altLangName} (${altLangCode.toUpperCase()}). Alle anderen Sprachen
+werden automatisch von der Standardstimme korrekt ausgesprochen — kein Tag nötig.
+</lang_rule>
+##############################################`;
+}
+
+// Hard language-tag rule placed ABOVE the character/role binding (right after the
+// NSFW preamble). Formulated as an unconditional system rule so it cannot be
+// overridden by immersion or roleplay instructions.
+function buildHardLanguageRuleLayer(ctx: PromptContext): string | null {
+	if (!ctx.ttsAltLanguage) return null;
+	const altLangCode = ctx.ttsAltLanguage;
+	const altLangName = getLanguageName(altLangCode);
+
+	return `<lang_rule_critical>
+KRITISCHE STIMM-REGEL — Diese Regel gilt IMMER, auch während du voll im Charakter bleibst.
+Jede ${altLangName}-Phrase (${altLangCode.toUpperCase()}) muss in <lang code="${altLangCode}">...</lang> eingeschlossen werden.
+Sie ist keine Unterbrechung der Rolle, sondern Teil deiner Stimme.
+Wenn du ${altLangName} schreibst, tagge es. Keine Ausnahmen.
+</lang_rule_critical>`;
 }
 
 // TTS emotions layer — informs the LLM which emotion tags are enabled for the active provider
@@ -958,7 +1065,7 @@ When the user wants to practice vocabulary or learn new words, use ONE of these 
   [vocab:category:${exampleCategory}:10] — 10 words from a specific category
   [vocab:level:${exampleLevel}:20] — 20 words at a specific level
 
-The tag is hidden from the user. The words will appear as "Vocabulary for the next exercise" in your next prompt. Source words may already be wrapped in [lang:XX] tags (e.g. [lang:es]casa[lang:default]) — preserve those tags when you repeat the words so pronunciation stays correct.
+The tag is hidden from the user. The words will appear as "Vocabulary for the next exercise" in your next prompt. Source words may already be wrapped in <lang code="XX"> tags (e.g. <lang code="es">casa</lang>) — preserve those tags when you repeat the words so pronunciation stays correct.
 
 When you see the vocabulary, simply use it conversationally — quiz, translate, or explain it.
 

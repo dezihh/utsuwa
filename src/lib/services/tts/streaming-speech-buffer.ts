@@ -124,7 +124,7 @@ export class StreamingSpeechBuffer {
 			text = cleaned;
 		}
 
-		const TAG_RE = /\[lang:(?:default|[a-z]{2,3})\]|\[voice:(?:default|alt)\]/gi;
+		const TAG_RE = /\[lang:\s*(?:default|[a-z]{2,3})\s*\]|\[voice:\s*(?:default|alt)\s*\]/gi;
 
 		// When a control tag sits at position 0, accumulate it in pendingStatePrefix
 		// instead of discarding it — it will be prepended to the next text block so

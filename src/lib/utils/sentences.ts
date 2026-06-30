@@ -302,8 +302,34 @@ export function splitIntoSentences(text: string): string[] {
 	return parts.length > 0 ? parts : [text.trim()];
 }
 
+/**
+ * Normalizes both XML-style `<lang code="xx">...</lang>` tags and legacy
+ * bracket-style `[lang:xx]...[/lang]` tags into the internal `[lang:xx]` /
+ * `[lang:default]` representation used by the rest of the TTS pipeline.
+ *
+ * This lets us expose the much more LLM-friendly XML syntax in prompts while
+ * keeping the parser simple and backward-compatible with any `[lang:xx]` the
+ * model may still emit from conversation history.
+ */
+export function normalizeLangTags(text: string): string {
+	return (
+		text
+			// Defensive: tolerate spaces inside legacy bracket tags so models that emit
+			// [lang: es] or [voice: alt] are still parsed correctly.
+			.replace(/\[lang:\s*(default|[a-z]{2,3})\s*\]/gi, '[lang:$1]')
+			.replace(/\[voice:\s*(default|alt)\s*\]/gi, '[voice:$1]')
+			// XML-style opening tags: <lang code="es"> → [lang:es]
+			.replace(/<lang\s+code\s*=\s*["']?\s*(default|[a-z]{2,3})\s*["']?\s*>/gi, '[lang:$1]')
+			// XML-style closing tags: </lang> → [lang:default]
+			.replace(/<\/lang>/gi, '[lang:default]')
+			// Legacy closing tags
+			.replace(/\[\/lang\]/gi, '[lang:default]')
+			.replace(/\[\/lang:([a-z]{2,3})\]/gi, '[lang:default]')
+	);
+}
+
 export function stripLangTags(text: string): string {
-	return text
+	return normalizeLangTags(text)
 		.replace(/\[lang:(?:default|[a-z]{2,3})\]/gi, '')
 		.replace(/\[voice:(?:default|alt)\]/gi, '')
 		.replace(/  +/g, ' ')
@@ -337,9 +363,45 @@ export function stripActionTags(text: string): string {
 	return text.replace(ACTION_TAG_REGEX, '').replace(/  +/g, ' ').trim();
 }
 
+/**
+ * Remove instruction-leak phrases that the LLM sometimes speaks aloud when it
+ * confuses internal JSON keys with dialogue. These strings are never part of
+ * the intended user-facing response.
+ */
+export function stripInternalLeakPhrases(text: string): string {
+	return (
+		text
+			// Underscored JSON keys as emitted by some models
+			.replace(/\b(new_memory|structured_fact_seen|mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|energy_delta|triggered_event)\b/gi, '')
+			// Spaced-out variants the model actually speaks
+			.replace(/\b(new memory|structured fact seen|json update|state update|memory update|fact update)\b/gi, '')
+			// Punctuation-normalised whitespace
+			.replace(/  +/g, ' ')
+			.trim()
+	);
+}
+
+/**
+ * Remove trailing JSON-fragment leaks that models sometimes emit without a valid
+ * opening brace or with broken nesting. These fragments always appear at the end
+ * of the response, so removing from the first broken key to the end of the text
+ * is safe.
+ */
+function stripBrokenJsonFragments(text: string): string {
+	return text
+		.replace(/\s*"?(new_memory|structured_fact_seen|mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|energy_delta|triggered_event)"?\s*[:=].*$/gis, '')
+		.replace(/\s*"?(value|category|type|key)"?\s*[:=]\s*("[\s\S]*?"|\{[\s\S]*?\}).*$/gis, '')
+		.replace(/  +/g, ' ')
+		.trim();
+}
+
 export function stripAllTags(text: string): string {
-	return replaceEmotionTagsForDisplay(stripActionTags(stripLangTags(text)))
-		.replace(/\[vocab:[^\]]+\]/gi, '');
+	return stripBrokenJsonFragments(
+		stripInternalLeakPhrases(
+			replaceEmotionTagsForDisplay(stripActionTags(stripLangTags(text)))
+				.replace(/\[vocab:[^\]]+\]/gi, '')
+		)
+	);
 }
 
 /**
@@ -348,7 +410,7 @@ export function stripAllTags(text: string): string {
  * for tags like [giggle]. Useful for UI previews (e.g. speech bubble).
  */
 export function stripTagsForBubble(text: string): string {
-	let cleaned = text
+	let cleaned = normalizeLangTags(text)
 		.replace(/\[reminder:[^\]]*\][\s\S]*?\[\/reminder\]/gi, '')
 		.replace(/\[[^\]]+\]/g, '')
 		.trim();
@@ -372,6 +434,84 @@ export interface SpeechArtifacts {
 	removed: string[];
 }
 
+const STATE_UPDATE_KEYS = [
+	'mood_change',
+	'affection_delta',
+	'trust_delta',
+	'intimacy_delta',
+	'comfort_delta',
+	'respect_delta',
+	'energy_delta',
+	'new_memory',
+	'triggered_event',
+	'structured_fact_seen'
+];
+
+/**
+ * Remove JSON state-update blocks from text, correctly handling nested braces.
+ * Returns the cleaned text and appends removed blocks to the provided array.
+ */
+function stripStateUpdateBlocks(text: string, removed: string[]): string {
+	const keyPattern = new RegExp(`"(?:${STATE_UPDATE_KEYS.join('|')})"`);
+	let result = '';
+	let i = 0;
+
+	while (i < text.length) {
+		const ch = text[i];
+		if (ch !== '{') {
+			result += ch;
+			i++;
+			continue;
+		}
+
+		// Look ahead to see if this brace starts a state-update block.
+		const rest = text.slice(i);
+		const keyMatch = keyPattern.exec(rest);
+		if (!keyMatch || keyMatch.index > 200) {
+			// Not a state-update block (or key too far inside to be the first key).
+			result += ch;
+			i++;
+			continue;
+		}
+
+		// Find the matching closing brace, respecting string literals and nesting.
+		let depth = 1;
+		let inString = false;
+		let escape = false;
+		let j = i + 1;
+		for (; j < text.length && depth > 0; j++) {
+			const c = text[j];
+			if (escape) {
+				escape = false;
+				continue;
+			}
+			if (c === '\\') {
+				escape = true;
+				continue;
+			}
+			if (c === '"') {
+				inString = !inString;
+				continue;
+			}
+			if (inString) continue;
+			if (c === '{') depth++;
+			else if (c === '}') depth--;
+		}
+
+		if (depth === 0) {
+			const block = text.slice(i, j);
+			removed.push(block.slice(0, 500));
+			i = j;
+		} else {
+			// Unclosed block — keep the brace and continue.
+			result += ch;
+			i++;
+		}
+	}
+
+	return result;
+}
+
 /**
  * Strip everything that should never be spoken by TTS:
  * JSON state-update blocks, image-search tags, vocabulary tags, action tags.
@@ -389,14 +529,8 @@ export function stripForSpeech(text: string): SpeechArtifacts {
 		return '';
 	});
 
-	// Remove inline JSON state-update blocks
-	cleaned = cleaned.replace(
-		/\{\s*"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|energy_delta|new_memory|triggered_event|structured_fact_seen)"[\s\S]*?\}/gi,
-		(match) => {
-			removed.push(match.slice(0, 200));
-			return '';
-		}
-	);
+	// Remove inline JSON state-update blocks with correct brace balancing.
+	cleaned = stripStateUpdateBlocks(cleaned, removed);
 
 	// Remove application command tags (single tags and paired reminder blocks)
 	cleaned = cleaned.replace(
@@ -406,6 +540,27 @@ export function stripForSpeech(text: string): SpeechArtifacts {
 			return '';
 		}
 	);
+
+	// Remove Markdown formatting characters that TTS would read aloud as "asterisk".
+	cleaned = cleaned.replace(/\*+/g, ' ');
+
+	// Normalize XML-style language tags to the internal bracket representation so
+	// splitIntoSegments can consume them without knowing about XML syntax.
+	cleaned = normalizeLangTags(cleaned);
+
+	// Defensive: remove instruction-leak phrases that the model sometimes speaks
+	// even though they are internal JSON/state-update commands.
+	cleaned = stripInternalLeakPhrases(cleaned);
+
+	// Remove broken JSON fragments the model sometimes appends without braces.
+	cleaned = stripBrokenJsonFragments(cleaned);
+
+	// Remove arrows and other symbols that TTS engines read aloud as text.
+	cleaned = cleaned.replace(/[→←↑↓⇒⇐⇑⇓]/g, ' ');
+
+	// Ensure a space after sentence/clause punctuation when followed by a letter.
+	// This fixes LLM output like "...Ende.Das..." which TTS reads as one word.
+	cleaned = cleaned.replace(/([.,;:!?])([a-zA-ZäöüÄÖÜß])/g, '$1 $2');
 
 	// Clean up whitespace
 	cleaned = cleaned.replace(/  +/g, ' ').trim();
@@ -420,13 +575,17 @@ export function splitIntoSegments(
 ): SpeechSegment[] {
 	if (!text.trim()) return [];
 
+	// Normalize XML-style language tags and legacy closing tags so the rest of
+	// the tokenizer only has to deal with the internal bracket representation.
+	const normalizedText = normalizeLangTags(text);
+
 	let action: string | undefined;
-	const actionMatch = ACTION_TAG_REGEX.exec(text);
+	const actionMatch = ACTION_TAG_REGEX.exec(normalizedText);
 	if (actionMatch && ACTION_TAGS.has(actionMatch[1].toLowerCase())) {
 		action = actionMatch[1].toLowerCase();
 	}
 	ACTION_TAG_REGEX.lastIndex = 0;
-	const cleanText = text.replace(ACTION_TAG_REGEX, '');
+	const cleanText = normalizedText.replace(ACTION_TAG_REGEX, '');
 
 	// Tokenize [lang:xx], [lang:default], and [voice:xxx] tags together.
 	// Both [lang:xx] and [lang:default] are persistent-scope markers.
@@ -443,7 +602,7 @@ export function splitIntoSegments(
 	}
 	if (lastIdx < cleanText.length) tokens.push({ type: 'text', value: cleanText.slice(lastIdx) });
 
-	const segments: SpeechSegment[] = [];
+	let segments: SpeechSegment[] = [];
 	let currentLang: string | undefined = defaultLanguage || undefined;
 	let currentVoiceId: string | undefined = undefined;
 
@@ -465,6 +624,23 @@ export function splitIntoSegments(
 			}
 		}
 	}
+
+	// OmniVoice (and similar diffusion TTS engines) often fail to synthesize
+	// single-character or very short segments (e.g. "un", "una"). Pad such
+	// segments with a trailing ellipsis pattern so the engine receives enough
+	// text to produce valid audio while keeping the segment in its own language.
+	// Using '...' instead of ', ...' avoids a hard prosodic break that can clip
+	// the final syllable of short words (e.g. 'Nunca' sounding like 'Nunc').
+	const TARGET_SEGMENT_CHARS = 10;
+	const SHORT_SEGMENT_PAD = '...';
+	segments = segments.map((seg) => {
+		let text = seg.text.trimEnd();
+		const needed = TARGET_SEGMENT_CHARS - text.trim().length;
+		if (needed > 0) {
+			text += SHORT_SEGMENT_PAD.slice(0, needed);
+		}
+		return { ...seg, text };
+	});
 
 	if (action && segments.length > 0) {
 		segments[0] = { ...segments[0], action };

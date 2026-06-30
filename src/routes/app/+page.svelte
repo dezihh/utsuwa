@@ -83,10 +83,10 @@
 		// undefined happens when the user never explicitly touched the Voice Type dropdown
 		// but the UI shows "Synthetic" as default via ?? 'internal'.
 		if (type === 'internal' || type === undefined) {
-			const gender = isAlt ? cfg.omnivoiceAltGender : cfg.omnivoiceDefaultGender;
-			const age    = isAlt ? cfg.omnivoiceAltAge    : cfg.omnivoiceDefaultAge;
-			const pitch  = isAlt ? cfg.omnivoiceAltPitch  : cfg.omnivoiceDefaultPitch;
-			const parts  = [gender, age, pitch].filter(Boolean);
+			const gender = (isAlt ? cfg.omnivoiceAltGender : cfg.omnivoiceDefaultGender) || (isAlt ? 'male' : 'female');
+			const age = (isAlt ? cfg.omnivoiceAltAge : cfg.omnivoiceDefaultAge) || 'young adult';
+			const pitch = (isAlt ? cfg.omnivoiceAltPitch : cfg.omnivoiceDefaultPitch) || 'moderate pitch';
+			const parts = [gender, age, pitch].filter(Boolean);
 			const desc = parts.length > 0 ? parts.join(', ') : 'female';
 			// Prefix "instruct:" signals OmniVoice design mode (text descriptor → instruct param)
 			// vs clone mode (voice ID lookup). Detected in OmniVoiceTTS.requestStream.
@@ -137,7 +137,7 @@
 	let loadedVocabulary = $state<VocabularyEntry[]>([]);
 	let llmAbortController: AbortController | null = null;
 
-	// Ensure vocabulary source words are wrapped in [lang:XX] tags before TTS,
+	// Ensure vocabulary source words are wrapped in <lang code="XX"> tags before TTS,
 	// regardless of whether the LLM remembered to preserve them in its response.
 	function injectVocabLangTags(text: string): string {
 		if (loadedVocabulary.length === 0) return text;
@@ -147,10 +147,10 @@
 			const escaped = entry.sourceWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 			// Only wrap bare occurrences — skip text already inside a lang tag.
 			const regex = new RegExp(
-				`(?<!\\[lang:[a-z]{2,3}\\])\\b(${escaped})\\b(?!\\[lang:default\\])`,
+				`(?<!<lang\\s+code=["']?[a-z]{2,3}["']?>)\\b(${escaped})\\b(?!</lang>)`,
 				'giu'
 			);
-			result = result.replace(regex, `[lang:${entry.sourceLang}]$1[lang:default]`);
+			result = result.replace(regex, `<lang code="${entry.sourceLang}">$1</lang>`);
 		}
 		return result;
 	}
@@ -450,11 +450,11 @@
 					if (entries.length > 0) {
 						newEntries.push(...entries);
 						entries.forEach((e) => {
-							// For OmniVoice dual-voice setups, wrap the source word in [lang:xx]
+							// For OmniVoice dual-voice setups, wrap the source word in <lang code="xx">
 							// so the LLM is likely to preserve the tag when it repeats the word.
 							const source =
 								omniAltEnabled && e.sourceLang
-									? `[lang:${e.sourceLang}]${e.sourceWord}[lang:default]`
+									? `<lang code="${e.sourceLang}">${e.sourceWord}</lang>`
 									: e.sourceWord;
 							vocabWords.push(`${source} = ${e.targetWord}`);
 						});
