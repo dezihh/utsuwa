@@ -193,7 +193,7 @@
 						promptVision();
 						return;
 					}
-					const { readFile } = await import('@tauri-apps/plugin-fs');
+					const { readFile } = await import(/* @vite-ignore */ '@tauri-apps/plugin-fs');
 					const files: File[] = [];
 					for (const path of imagePaths) {
 						try {

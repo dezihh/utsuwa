@@ -68,7 +68,7 @@
 	function handleDocsClick(e: MouseEvent) {
 		if (isTauri()) {
 			e.preventDefault();
-			import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(DOCS_URL));
+			import(/* @vite-ignore */ '@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(DOCS_URL));
 		}
 	}
 </script>

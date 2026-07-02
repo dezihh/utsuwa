@@ -32,7 +32,7 @@
 					const vrmPath = event.payload.paths.find((p) => p.endsWith('.vrm'));
 					if (!vrmPath) return;
 
-					const { readFile } = await import('@tauri-apps/plugin-fs');
+					const { readFile } = await import(/* @vite-ignore */ '@tauri-apps/plugin-fs');
 					const contents = await readFile(vrmPath);
 					const fileName = vrmPath.split(/[/\\]/).pop() || 'model.vrm';
 					const file = new File([contents], fileName, { type: 'application/octet-stream' });

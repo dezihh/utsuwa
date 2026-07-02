@@ -43,7 +43,7 @@
 			if (href && isWebOnly(href)) {
 				e.preventDefault();
 				e.stopPropagation();
-				import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
+				import(/* @vite-ignore */ '@tauri-apps/plugin-opener').then(({ openUrl }) => {
 					openUrl(`${SITE_URL}${href}`);
 				});
 			}

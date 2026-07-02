@@ -33,7 +33,7 @@ export async function registerHotkey(
 	if (!isTauri()) return false;
 
 	try {
-		const { register } = await import('@tauri-apps/plugin-global-shortcut');
+		const { register } = await import(/* @vite-ignore */ '@tauri-apps/plugin-global-shortcut');
 
 		// Unregister existing shortcut for this action if any
 		await unregisterHotkey(action);
@@ -68,7 +68,7 @@ export async function unregisterHotkey(action: HotkeyAction): Promise<void> {
 	if (!handler) return;
 
 	try {
-		const { unregister } = await import('@tauri-apps/plugin-global-shortcut');
+		const { unregister } = await import(/* @vite-ignore */ '@tauri-apps/plugin-global-shortcut');
 
 		for (const shortcut of registeredShortcuts) {
 			try {
@@ -92,7 +92,7 @@ export async function unregisterAllHotkeys(): Promise<void> {
 	if (!isTauri()) return;
 
 	try {
-		const { unregisterAll } = await import('@tauri-apps/plugin-global-shortcut');
+		const { unregisterAll } = await import(/* @vite-ignore */ '@tauri-apps/plugin-global-shortcut');
 		await unregisterAll();
 		handlers.clear();
 		registeredShortcuts.clear();

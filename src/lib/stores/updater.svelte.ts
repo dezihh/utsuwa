@@ -44,7 +44,7 @@ function createUpdaterStore() {
 		errorMessage = null;
 
 		try {
-			const { check } = await import('@tauri-apps/plugin-updater');
+			const { check } = await import(/* @vite-ignore */ '@tauri-apps/plugin-updater');
 			const update = (await check()) as TauriUpdate | null;
 
 			if (update) {
@@ -90,7 +90,7 @@ function createUpdaterStore() {
 			});
 
 			status = 'ready';
-			const { relaunch } = await import('@tauri-apps/plugin-process');
+			const { relaunch } = await import(/* @vite-ignore */ '@tauri-apps/plugin-process');
 			await relaunch();
 		} catch (e) {
 			errorMessage = e instanceof Error ? e.message : String(e);
