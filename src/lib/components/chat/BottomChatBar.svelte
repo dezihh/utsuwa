@@ -9,6 +9,7 @@
 	interface Props {
 		onSend: (content: string) => void;
 		disabled?: boolean;
+		overlay?: boolean;
 		isDuplexActive?: boolean;
 		duplexPhase?: DuplexPhase;
 		duplexAudioLevel?: number;
@@ -21,6 +22,7 @@
 	let {
 		onSend,
 		disabled = false,
+		overlay = false,
 		isDuplexActive = false,
 		duplexPhase = 'idle',
 		duplexAudioLevel = 0,

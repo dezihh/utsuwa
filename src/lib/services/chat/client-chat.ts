@@ -194,3 +194,62 @@ export async function streamChatDirect(
 		}
 	}
 }
+
+interface ExtractStateUpdatesOptions {
+	provider: LLMProvider;
+	model: string;
+	apiKey?: string;
+	baseURL?: string;
+	system: string;
+	userMessage: string;
+	reply: string;
+	llmTemperature?: number;
+	llmTopP?: number;
+	llmMaxTokens?: number;
+}
+
+/**
+ * Dedicated forced-JSON extraction call for mood and memory updates.
+ * Used when the main chat model did not emit a usable state block inline.
+ */
+export async function extractStateUpdates(
+	options: ExtractStateUpdatesOptions,
+	signal?: AbortSignal
+): Promise<string | null> {
+	const { provider, model, apiKey, baseURL, system, userMessage, reply } = options;
+
+	return new Promise((resolve, reject) => {
+		let fullText = '';
+		let settled = false;
+
+		streamChatDirect(
+			{
+				messages: [
+					{ role: 'user', content: `USER: ${userMessage}\n\nASSISTANT: ${reply}` }
+				],
+				provider,
+				model,
+				apiKey,
+				baseURL,
+				systemPrompt: system,
+				llmTemperature: options.llmTemperature ?? 0.3,
+				llmTopP: options.llmTopP ?? 0.9,
+				llmMaxTokens: options.llmMaxTokens ?? 512
+			},
+			(text) => {
+				fullText += text;
+			},
+			(error) => {
+				if (settled) return;
+				settled = true;
+				reject(new Error(error));
+			},
+			() => {
+				if (settled) return;
+				settled = true;
+				resolve(fullText.trim() || null);
+			},
+			signal
+		);
+	});
+}
