@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { unlockAudioContext } from '$lib/services/tts';
+	import UpdateBanner from '$lib/components/updater/UpdateBanner.svelte';
 
 	let { children } = $props();
 
@@ -26,6 +27,7 @@
 
 <div class="app">
 	{@render children()}
+	<UpdateBanner />
 </div>
 
 <style>

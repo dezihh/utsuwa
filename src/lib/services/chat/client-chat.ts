@@ -1,12 +1,16 @@
 import type { LLMProvider } from '$lib/types';
-import { getChatBaseUrl, getLocalProviderConnectionHint } from '$lib/services/providers/local-endpoints';
+import {
+	getChatBaseUrl,
+	getLocalProviderConnectionHint
+} from '$lib/services/providers/local-endpoints';
 import { normalizeChatBaseURL } from './base-url';
 import { PROVIDER_BASE_URLS } from '$lib/services/providers/base-urls';
 import { parseSSEStream } from './stream-parser';
+import { type MessageContent, contentToText, toAnthropicContent, toOpenAIContent } from './content';
 
 interface ChatMessage {
 	role: 'system' | 'user' | 'assistant';
-	content: string;
+	content: MessageContent;
 }
 
 interface ChatOptions {
@@ -100,7 +104,7 @@ export async function streamChatDirect(
 
 	const extraSystem = messages
 		.filter((m) => m.role === 'system')
-		.map((m) => m.content)
+		.map((m) => contentToText(m.content))
 		.join('\n\n');
 	const combinedSystem = extraSystem ? `${systemPrompt}\n\n${extraSystem}` : systemPrompt;
 
@@ -111,33 +115,34 @@ export async function streamChatDirect(
 
 	const headers = buildHeaders(provider, apiKey);
 
-	// Build request body with optional sampling parameters.
-	const anthropicBody: Record<string, unknown> = {
-		model,
-		max_tokens: llmMaxTokens ?? 4096,
-		system: combinedSystem,
-		messages: messages.filter((m) => m.role !== 'system'),
-		stream: true
-	};
-	if (llmTemperature !== undefined) anthropicBody.temperature = llmTemperature;
-	if (llmTopP !== undefined) anthropicBody.top_p = llmTopP;
-
-	const openAICompatibleBody: Record<string, unknown> = {
-		model,
-		messages: messagesWithSystem,
-		stream: true
-	};
-	if (llmTemperature !== undefined) openAICompatibleBody.temperature = llmTemperature;
-	if (llmTopP !== undefined) openAICompatibleBody.top_p = llmTopP;
-	if (llmMaxTokens !== undefined) openAICompatibleBody.max_tokens = llmMaxTokens;
-	if (llmPresencePenalty !== undefined) openAICompatibleBody.presence_penalty = llmPresencePenalty;
-	if (llmFrequencyPenalty !== undefined) openAICompatibleBody.frequency_penalty = llmFrequencyPenalty;
-
-	// Anthropic uses a different request format
+	// Anthropic uses a different request format, and each provider wants images
+	// wrapped its own way (image_url data URLs vs base64 source blocks).
 	const body =
 		provider === 'anthropic'
-			? JSON.stringify(anthropicBody)
-			: JSON.stringify(openAICompatibleBody);
+			? JSON.stringify({
+					model,
+					max_tokens: llmMaxTokens ?? 4096,
+					system: combinedSystem,
+					messages: messages
+						.filter((m) => m.role !== 'system')
+						.map((m) => ({ role: m.role, content: toAnthropicContent(m.content) })),
+					stream: true,
+					...(llmTemperature !== undefined ? { temperature: llmTemperature } : {}),
+					...(llmTopP !== undefined ? { top_p: llmTopP } : {})
+				})
+			: JSON.stringify({
+					model,
+					messages: messagesWithSystem.map((m) => ({
+						role: m.role,
+						content: toOpenAIContent(m.content)
+					})),
+					stream: true,
+					...(llmTemperature !== undefined ? { temperature: llmTemperature } : {}),
+					...(llmTopP !== undefined ? { top_p: llmTopP } : {}),
+					...(llmMaxTokens !== undefined ? { max_tokens: llmMaxTokens } : {}),
+					...(llmPresencePenalty !== undefined ? { presence_penalty: llmPresencePenalty } : {}),
+					...(llmFrequencyPenalty !== undefined ? { frequency_penalty: llmFrequencyPenalty } : {})
+				});
 
 	const url =
 		provider === 'anthropic'

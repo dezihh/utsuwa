@@ -5,13 +5,14 @@
 	import { EMOTION_TAGS } from '$lib/utils/sentences';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 
-	const providers: TTSEmotionProvider[] = ['chatterbox', 'omnivoice', 'alltalk', 'elevenlabs', 'openai-tts'];
+	const providers: TTSEmotionProvider[] = ['chatterbox', 'omnivoice', 'alltalk', 'elevenlabs', 'openai-tts', 'local-tts'];
 	const providerLabels: Record<TTSEmotionProvider, string> = {
 		chatterbox: 'Chatterbox',
 		omnivoice: 'OmniVoice',
 		alltalk: 'AllTalk',
 		elevenlabs: 'ElevenLabs',
-		'openai-tts': 'OpenAI TTS'
+		'openai-tts': 'OpenAI TTS',
+		'local-tts': 'Local TTS'
 	};
 
 	let activeProvider = $state<TTSEmotionProvider>('chatterbox');

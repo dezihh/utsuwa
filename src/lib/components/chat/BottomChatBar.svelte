@@ -1,15 +1,22 @@
 <script lang="ts">
 	import { Icon } from '$lib/components/ui';
+	import { browser } from '$app/environment';
+	import { isTauri } from '$lib/services/platform/platform';
 	import { sttStore } from '$lib/stores/stt.svelte';
-	import { debugStore } from '$lib/stores/debug.svelte';
+	import { prepareImage, UnsupportedImageError, type PreparedImage } from '$lib/services/storage/keepsakes';
 	import { unlockAudioContext } from '$lib/services/tts/index';
 	import AudioVisualizer from './AudioVisualizer.svelte';
 	import type { DuplexPhase } from '$lib/stores/duplex.svelte';
 
 	interface Props {
-		onSend: (content: string) => void;
+		onSend: (content: string, images?: PreparedImage[]) => void;
 		disabled?: boolean;
+		visionCapable?: boolean;
+		providerLabel?: string;
+		providerIsLocal?: boolean;
+		/** Overlay window: image-showing is disabled (no native file dialog / drop). */
 		overlay?: boolean;
+		/** Duplex / VOX mode controls */
 		isDuplexActive?: boolean;
 		duplexPhase?: DuplexPhase;
 		duplexAudioLevel?: number;
@@ -22,6 +29,9 @@
 	let {
 		onSend,
 		disabled = false,
+		visionCapable = true,
+		providerLabel = 'your AI provider',
+		providerIsLocal = false,
 		overlay = false,
 		isDuplexActive = false,
 		duplexPhase = 'idle',
@@ -31,8 +41,84 @@
 		onToggleDuplex,
 		onAdjustSensitivity
 	}: Props = $props();
+	// Brief toast for image issues (blind model, unsupported format).
+	let hint = $state<string | null>(null);
+	let hintTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function showHint(message: string) {
+		hint = message;
+		if (hintTimer) clearTimeout(hintTimer);
+		hintTimer = setTimeout(() => (hint = null), 6000);
+	}
+
+	function promptVision() {
+		showHint(
+			"This model can't see images. Pick a vision model (GPT-4o, Claude, Gemini, or a local one like llava) in Settings."
+		);
+	}
+
+	// One-time "where do photos go" disclosure, shown the first time an image is
+	// attached and then remembered so it never nags again.
+	const PRIVACY_ACK_KEY = 'utsuwa-image-privacy-ack';
+	let showPrivacy = $state(false);
+
+	function maybeShowPrivacyNotice() {
+		if (!browser || localStorage.getItem(PRIVACY_ACK_KEY) === '1') return;
+		showPrivacy = true;
+	}
+	function ackPrivacy() {
+		if (browser) localStorage.setItem(PRIVACY_ACK_KEY, '1');
+		showPrivacy = false;
+	}
+
+	function openPicker() {
+		if (overlay) return;
+		if (!visionCapable) {
+			promptVision();
+			return;
+		}
+		fileInput?.click();
+	}
+
 	let inputValue = $state('');
-	let textareaRef = $state<HTMLTextAreaElement | undefined>(undefined);
+	let textareaRef: HTMLTextAreaElement;
+	let fileInput: HTMLInputElement;
+	// Images queued to show her, each with a preview URL for the chip.
+	let pending = $state<{ image: PreparedImage; url: string }[]>([]);
+	// Drag-to-show: the whole window is a drop target; the bar morphs into one.
+	let dragActive = $state(false);
+	let dragDepth = 0;
+
+	function dragHasFiles(e: DragEvent): boolean {
+		return !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+	}
+
+	function handleDragEnter(e: DragEvent) {
+		if (overlay || !dragHasFiles(e)) return;
+		dragDepth++;
+		dragActive = true;
+	}
+
+	function handleDragOver(e: DragEvent) {
+		if (dragHasFiles(e)) e.preventDefault();
+	}
+
+	function handleDragLeave(e: DragEvent) {
+		if (!dragHasFiles(e)) return;
+		dragDepth--;
+		if (dragDepth <= 0) {
+			dragDepth = 0;
+			dragActive = false;
+		}
+	}
+
+	function handleDrop(e: DragEvent) {
+		if (!dragHasFiles(e)) return;
+		e.preventDefault();
+		dragDepth = 0;
+		dragActive = false;
+		handleFiles(e.dataTransfer?.files ?? null);
+	}
 
 	const isListening = $derived(sttStore.isListening);
 	const isTranscribing = $derived(sttStore.isTranscribing);
@@ -41,31 +127,122 @@
 	const sttError = $derived(sttStore.error);
 
 	// Track if there's content to send
-	const hasContent = $derived(inputValue.trim().length > 0 || displayTranscript.trim().length > 0);
+	const hasContent = $derived(
+		inputValue.trim().length > 0 || displayTranscript.trim().length > 0 || pending.length > 0
+	);
+
+	async function handleFiles(files: FileList | File[] | null) {
+		if (overlay || !files) return;
+		if (!visionCapable) {
+			promptVision();
+			return;
+		}
+		for (const file of Array.from(files)) {
+			if (!file.type.startsWith('image/')) continue;
+			try {
+				const image = await prepareImage(file);
+				pending = [...pending, { image, url: URL.createObjectURL(file) }];
+				maybeShowPrivacyNotice();
+			} catch (e) {
+				showHint(
+					e instanceof UnsupportedImageError
+						? "That image format isn't supported. Try a JPEG, PNG, GIF or WebP (iPhone HEIC photos won't work)."
+						: "Couldn't read that image. Try a different one."
+				);
+			}
+		}
+		if (fileInput) fileInput.value = '';
+	}
+
+	// On desktop, Tauri's webview intercepts drag-and-drop so dataTransfer.files
+	// is empty (native drag-drop stays on for VRM upload). Read dropped image
+	// files via Tauri's own event + the fs plugin, mirroring VrmUploader.
+	const IMAGE_MIME: Record<string, string> = {
+		png: 'image/png',
+		jpg: 'image/jpeg',
+		jpeg: 'image/jpeg',
+		gif: 'image/gif',
+		webp: 'image/webp',
+		heic: 'image/heic',
+		heif: 'image/heif',
+		bmp: 'image/bmp'
+	};
+	function imageMimeFromPath(path: string): string | null {
+		return IMAGE_MIME[path.split('.').pop()?.toLowerCase() ?? ''] ?? null;
+	}
+
+	$effect(() => {
+		if (!isTauri() || overlay) return;
+		let cancelled = false;
+		let unlisten: (() => void) | undefined;
+		(async () => {
+			const { getCurrentWindow } = await import('@tauri-apps/api/window');
+			if (cancelled) return;
+			unlisten = await getCurrentWindow().onDragDropEvent(async (event) => {
+				if (event.payload.type === 'over') {
+					dragActive = true;
+				} else if (event.payload.type === 'leave') {
+					dragActive = false;
+					dragDepth = 0;
+				} else if (event.payload.type === 'drop') {
+					dragActive = false;
+					dragDepth = 0;
+					const imagePaths = event.payload.paths.filter((p) => imageMimeFromPath(p));
+					if (imagePaths.length === 0) return; // not images (VrmUploader etc. handle those)
+					if (!visionCapable) {
+						promptVision();
+						return;
+					}
+					const { readFile } = await import('@tauri-apps/plugin-fs');
+					const files: File[] = [];
+					for (const path of imagePaths) {
+						try {
+							const contents = await readFile(path);
+							const name = path.split(/[/\\]/).pop() || 'image';
+							files.push(new File([contents], name, { type: imageMimeFromPath(path)! }));
+						} catch {
+							showHint("Couldn't read that image. Try a different one.");
+						}
+					}
+					if (files.length) await handleFiles(files);
+				}
+			});
+		})();
+		return () => {
+			cancelled = true;
+			unlisten?.();
+		};
+	});
+
+	function removePending(id: string) {
+		pending = pending.filter((p) => {
+			if (p.image.id === id) URL.revokeObjectURL(p.url);
+			return p.image.id !== id;
+		});
+	}
+
+	// Single send path: text plus any queued images.
+	function doSend(text: string) {
+		if (disabled) return;
+		unlockAudioContext();
+		const images = pending.map((p) => p.image);
+		if (!text && images.length === 0) return;
+		onSend(text, images);
+		pending.forEach((p) => URL.revokeObjectURL(p.url));
+		pending = [];
+		inputValue = '';
+		if (textareaRef) textareaRef.style.height = 'auto';
+	}
 
 	function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
-		unlockAudioContext();
-		if (inputValue.trim() && !disabled) {
-			onSend(inputValue.trim());
-			inputValue = '';
-			if (textareaRef) {
-				textareaRef.style.height = 'auto';
-			}
-		}
+		doSend(inputValue.trim());
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
-			unlockAudioContext();
-			if (inputValue.trim() && !disabled) {
-				onSend(inputValue.trim());
-				inputValue = '';
-				if (textareaRef) {
-					textareaRef.style.height = 'auto';
-				}
-			}
+			doSend(inputValue.trim());
 		}
 	}
 
@@ -77,6 +254,7 @@
 	}
 
 	function handleMicClick() {
+		unlockAudioContext();
 		if (!sttStore.isSupported()) {
 			sttStore.showUnsupportedError();
 			return;
@@ -95,32 +273,18 @@
 	}
 
 	function handleSendClick() {
-		unlockAudioContext();
 		if (isListening && displayTranscript.trim()) {
 			const text = displayTranscript.trim();
 			sttStore.cancel();
 			onSend(text);
-		} else if (inputValue.trim() && !disabled) {
-			onSend(inputValue.trim());
-			inputValue = '';
-			if (textareaRef) {
-				textareaRef.style.height = 'auto';
-			}
+		} else {
+			doSend(inputValue.trim());
 		}
 	}
-
-	const duplexPhaseLabel: Record<DuplexPhase, string> = {
-		idle: '',
-		listening: 'Listening...',
-		recording: 'Recording...',
-		transcribing: 'Transcribing...',
-		thinking: 'Thinking...',
-		speaking: 'Speaking...'
-	};
 </script>
 
 {#if sttError}
-	<div class="stt-error" onclick={() => sttStore.clearError()} role="button" tabindex="0" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sttStore.clearError(); } }}>
+	<div class="stt-error" onclick={() => sttStore.clearError()}>
 		<Icon name="alert" size={16} />
 		<span>{sttError}</span>
 		<button type="button" class="dismiss-btn" aria-label="Dismiss">
@@ -129,65 +293,73 @@
 	</div>
 {/if}
 
-<div class="bottom-chat-bar">
+{#if hint}
+	<div class="vision-hint">
+		<Icon name="camera" size={16} />
+		<span>{hint}</span>
+	</div>
+{/if}
+
+{#if showPrivacy}
+	<div class="privacy-notice" role="dialog" aria-label="Photo privacy">
+		<Icon name="camera" size={16} />
+		<span>
+			{#if providerIsLocal}
+				Photos you show her stay on your machine — they never leave this device.
+			{:else}
+				Photos you show her are sent to {providerLabel} so she can see them. They're also
+				saved on this device; delete them anytime from the board.
+			{/if}
+		</span>
+		<button type="button" class="privacy-ack" onclick={ackPrivacy}>Got it</button>
+	</div>
+{/if}
+
+<svelte:window
+	ondragenter={handleDragEnter}
+	ondragover={handleDragOver}
+	ondragleave={handleDragLeave}
+	ondrop={handleDrop}
+/>
+
+<div class="bottom-chat-bar" class:dragging={dragActive}>
+	{#if dragActive}
+		<div class="drop-zone">
+			<Icon name="camera" size={22} />
+			<span>Drop a photo to show her</span>
+		</div>
+	{/if}
+	{#if pending.length > 0}
+		<div class="pending-row">
+			{#each pending as p (p.image.id)}
+				<div class="pending-chip">
+					<img src={p.url} alt="To show her" />
+					<button type="button" class="remove-chip" aria-label="Remove image" onclick={() => removePending(p.image.id)}>
+						<Icon name="x" size={12} />
+					</button>
+				</div>
+			{/each}
+		</div>
+	{/if}
 	<form class="chat-form" onsubmit={handleSubmit}>
-		<div
-			class="input-wrapper"
-			class:recording={isListening || duplexPhase === 'recording'}
-			class:transcribing={isTranscribing || duplexPhase === 'transcribing'}
-			class:duplex-active={isDuplexActive}
-			class:focused={hasContent && !isDuplexActive}
-		>
-			{#if isDuplexActive}
-				<!-- Duplex mode: show phase status -->
+		{#if !overlay}
+			<input
+				bind:this={fileInput}
+				type="file"
+				accept="image/*"
+				multiple
+				style="display:none"
+				onchange={(e) => handleFiles(e.currentTarget.files)}
+			/>
+		{/if}
+		<div class="input-wrapper" class:recording={isListening} class:transcribing={isTranscribing} class:focused={hasContent}>
+			{#if isTranscribing}
 				<button
 					type="button"
-					class="mic-btn duplex-btn"
-					class:duplex-listening={duplexPhase === 'listening'}
-					class:duplex-recording={duplexPhase === 'recording'}
-					class:duplex-speaking={duplexPhase === 'speaking'}
-					onclick={onToggleDuplex}
-					aria-label="Stop duplex mode"
-					title="Stop voice conversation"
+					class="mic-btn recording"
+					disabled
+					aria-label="Transcribing"
 				>
-					<Icon name="headset" size={18} />
-				</button>
-				{#if duplexPhase === 'recording'}
-					<AudioVisualizer audioLevel={duplexAudioLevel} transcript="" />
-				{:else}
-					<div class="duplex-status">
-						<span class="duplex-phase-dot" class:pulse={duplexPhase === 'listening' || duplexPhase === 'thinking' || duplexPhase === 'speaking'}></span>
-						{#if duplexNoiseDetected}
-							<span class="duplex-noise-toast">🔊 Background noise</span>
-						{:else}
-							<span class="duplex-phase-label">{duplexPhaseLabel[duplexPhase]}</span>
-						{/if}
-					</div>
-				{/if}
-				<!-- Sensitivity controls: always visible in duplex mode -->
-				{#if onAdjustSensitivity && duplexPhase !== 'recording'}
-					<div class="sensitivity-controls">
-						<button
-							type="button"
-							class="sens-btn"
-							onclick={() => onAdjustSensitivity(-1)}
-							title="Less sensitive (ignore background noise)"
-							aria-label="Decrease sensitivity"
-						>−</button>
-						<span class="sens-label" title="Sensitivity: {duplexSensitivity}/10">
-							{duplexSensitivity}
-						</span>
-						<button
-							type="button"
-							class="sens-btn"
-							onclick={() => onAdjustSensitivity(1)}
-							title="More sensitive (detect quieter speech)"
-							aria-label="Increase sensitivity"
-						>+</button>
-					</div>
-				{/if}
-			{:else if isTranscribing}
-				<button type="button" class="mic-btn recording" disabled aria-label="Transcribing">
 					<Icon name="loader" size={20} />
 				</button>
 				<div class="transcribing-label">Transcribing...</div>
@@ -212,6 +384,30 @@
 				>
 					<Icon name="mic" size={20} />
 				</button>
+				{#if !overlay}
+					<button
+						type="button"
+						class="mic-btn"
+						class:vision-off={!visionCapable}
+						onclick={openPicker}
+						aria-label="Show her an image"
+						title={visionCapable ? 'Show her an image' : 'This model cannot see images'}
+					>
+						<Icon name="camera" size={20} />
+					</button>
+				{/if}
+				{#if onToggleDuplex}
+					<button
+						type="button"
+						class="mic-btn duplex-toggle"
+						class:duplex-active={isDuplexActive}
+						onclick={onToggleDuplex}
+						aria-label={isDuplexActive ? 'Stop voice conversation' : 'Start voice conversation'}
+						title={isDuplexActive ? 'Stop voice conversation' : 'Start voice conversation'}
+					>
+						<Icon name="phone" size={20} />
+					</button>
+				{/if}
 				<textarea
 					bind:this={textareaRef}
 					bind:value={inputValue}
@@ -235,24 +431,238 @@
 				</span>
 				<span class="btn-shine"></span>
 			</button>
-			<!-- Duplex toggle button (always visible when STT provider is whisper-local) -->
-			{#if onToggleDuplex}
-				<button
-					type="button"
-					class="duplex-toggle-btn"
-					class:active={isDuplexActive}
-					onclick={onToggleDuplex}
-					aria-label={isDuplexActive ? 'Stop voice conversation' : 'Start voice conversation (duplex)'}
-					title={isDuplexActive ? 'Stop voice conversation' : 'Voice conversation mode'}
-				>
-					<Icon name="headset" size={16} />
-				</button>
-			{/if}
 		</div>
 	</form>
+	{#if isDuplexActive}
+		<div class="duplex-status">
+			<span class="duplex-dot" class:pulse={duplexPhase !== 'idle'}></span>
+			<span class="duplex-phase">{duplexPhase}</span>
+			{#if duplexNoiseDetected}
+				<span class="duplex-noise">🔊 Background noise</span>
+			{/if}
+			{#if onAdjustSensitivity && duplexPhase !== 'recording'}
+				<div class="duplex-sens">
+					<button type="button" onclick={() => onAdjustSensitivity(-1)} aria-label="Decrease sensitivity">−</button>
+					<span title="Sensitivity: {duplexSensitivity}/10">{duplexSensitivity}</span>
+					<button type="button" onclick={() => onAdjustSensitivity(1)} aria-label="Increase sensitivity">+</button>
+				</div>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
+	.mic-btn.vision-off { opacity: 0.45; }
+	.mic-btn.duplex-active { color: #22c55e; }
+	.duplex-status {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.6rem;
+		margin-top: 0.4rem;
+		font-size: 0.75rem;
+		color: rgba(255, 255, 255, 0.85);
+	}
+	.duplex-dot {
+		width: 0.5rem;
+		height: 0.5rem;
+		border-radius: 50%;
+		background: #22c55e;
+	}
+	.duplex-dot.pulse {
+		animation: pulse 1.2s infinite;
+	}
+	.duplex-sens {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+	}
+	.duplex-sens button {
+		background: rgba(255, 255, 255, 0.15);
+		border: none;
+		border-radius: 4px;
+		color: inherit;
+		cursor: pointer;
+		padding: 0 0.35rem;
+	}
+	.vision-hint {
+		position: fixed;
+		top: calc(1.25rem + env(safe-area-inset-top, 0));
+		left: 50%;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.7rem 1rem;
+		max-width: min(420px, 90vw);
+		background: linear-gradient(180deg, #5fd6ff 0%, #01B2FF 100%);
+		color: white;
+		border-radius: 16px;
+		font-size: 0.82rem;
+		font-weight: 600;
+		line-height: 1.35;
+		z-index: 50;
+		box-shadow:
+			0 8px 24px rgba(1, 178, 255, 0.45),
+			inset 0 1px 0 rgba(255, 255, 255, 0.4);
+		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+		animation: hintDrop 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+	}
+	.vision-hint :global(svg) { flex-shrink: 0; }
+	@keyframes hintDrop {
+		from { transform: translate(-50%, -16px) scale(0.96); opacity: 0; }
+		to { transform: translate(-50%, 0) scale(1); opacity: 1; }
+	}
+	/* One-time photo-privacy disclosure (dismissable, light informational card). */
+	.privacy-notice {
+		position: fixed;
+		top: calc(1.25rem + env(safe-area-inset-top, 0));
+		left: 50%;
+		transform: translateX(-50%);
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.7rem 0.75rem 0.7rem 1rem;
+		max-width: min(460px, 92vw);
+		background: linear-gradient(180deg, #ffffff 0%, #f4f6f8 100%);
+		color: #1a2733;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 16px;
+		font-size: 0.8rem;
+		font-weight: 500;
+		line-height: 1.35;
+		z-index: 60;
+		box-shadow:
+			0 8px 28px rgba(0, 0, 0, 0.14),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9);
+		animation: hintDrop 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+	}
+	:global(.dark) .privacy-notice {
+		background: linear-gradient(180deg, #2a2a2e 0%, #202024 100%);
+		color: #e8ebef;
+		border-color: rgba(255, 255, 255, 0.1);
+		box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+	}
+	.privacy-notice :global(svg) { flex-shrink: 0; opacity: 0.65; }
+	.privacy-ack {
+		flex-shrink: 0;
+		border: none;
+		border-radius: 10px;
+		padding: 0.35rem 0.7rem;
+		font-size: 0.78rem;
+		font-weight: 700;
+		color: white;
+		background: linear-gradient(180deg, #5fd6ff 0%, #01b2ff 100%);
+		cursor: pointer;
+		box-shadow: 0 2px 6px rgba(1, 178, 255, 0.4);
+		transition: filter 0.15s ease;
+	}
+	.privacy-ack:hover { filter: brightness(1.05); }
+	.drop-zone {
+		position: absolute;
+		left: 1rem;
+		right: 1rem;
+		top: 0;
+		bottom: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.55rem;
+		min-height: 52px;
+		border-radius: 1.5rem;
+		background: linear-gradient(180deg, #5fd6ff 0%, #01B2FF 55%, #0094d6 100%);
+		border: 1px solid rgba(255, 255, 255, 0.4);
+		color: white;
+		font-size: 0.95rem;
+		font-weight: 700;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+		box-shadow:
+			0 10px 26px rgba(1, 178, 255, 0.5),
+			0 2px 6px rgba(0, 0, 0, 0.15),
+			inset 0 2px 0 rgba(255, 255, 255, 0.55),
+			inset 0 -3px 6px rgba(0, 0, 0, 0.12);
+		z-index: 5;
+		pointer-events: none;
+		overflow: hidden;
+		animation: dropPop 0.34s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+	}
+	/* glossy shine across the top, like the app's buttons */
+	.drop-zone::before {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 52%;
+		background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.06) 100%);
+		border-radius: 1.5rem 1.5rem 50% 50%;
+		pointer-events: none;
+	}
+	.drop-zone :global(svg) {
+		animation: dropIcon 0.9s ease-in-out infinite;
+		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+	}
+	@keyframes dropPop {
+		0% { transform: scale(0.8); opacity: 0; }
+		100% { transform: scale(1); opacity: 1; }
+	}
+	@keyframes dropIcon {
+		0%, 100% { transform: translateY(0) rotate(0deg); }
+		50% { transform: translateY(-4px) rotate(-6deg); }
+	}
+	.pending-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem; padding: 0 0.5rem; }
+	.pending-chip {
+		position: relative;
+		width: 56px;
+		height: 56px;
+		cursor: pointer;
+		transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+	}
+	.pending-chip:hover {
+		transform: scale(1.12) translateY(-3px) rotate(-3deg);
+		z-index: 2;
+	}
+	.pending-chip img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		border-radius: 0.875rem;
+		border: 2px solid rgba(255, 255, 255, 0.9);
+		box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+		transition: box-shadow 0.2s ease, border-color 0.2s ease;
+	}
+	.pending-chip:hover img {
+		border-color: #01B2FF;
+		box-shadow:
+			0 10px 22px rgba(1, 178, 255, 0.45),
+			0 4px 8px rgba(0, 0, 0, 0.18);
+	}
+	.remove-chip {
+		position: absolute;
+		top: -5px;
+		right: -5px;
+		width: 19px;
+		height: 19px;
+		border: 2px solid white;
+		border-radius: 50%;
+		background: #ff5a5a;
+		color: white;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		padding: 0;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
+		opacity: 0;
+		transform: scale(0.4);
+		transition: opacity 0.16s ease, transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+	}
+	.pending-chip:hover .remove-chip {
+		opacity: 1;
+		transform: scale(1);
+	}
+	.remove-chip:hover {
+		transform: scale(1.2);
+	}
 	.bottom-chat-bar {
 		position: fixed;
 		bottom: 2.5rem;
@@ -702,6 +1112,11 @@
 		cursor: not-allowed;
 	}
 
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.4; }
+	}
+
 	@media (max-width: 640px) {
 		.bottom-chat-bar {
 			bottom: 1rem;
@@ -713,192 +1128,5 @@
 			width: fit-content;
 			max-width: calc(100vw - 1.5rem);
 		}
-	}
-
-	/* ── Duplex mode styles ─────────────────────────────────────────────────── */
-
-	.input-wrapper.duplex-active {
-		border-color: rgba(16, 185, 129, 0.4);
-		box-shadow:
-			0 0 0 1px rgba(16, 185, 129, 0.2),
-			0 0 0 4px rgba(16, 185, 129, 0.08),
-			0 4px 20px rgba(0, 0, 0, 0.08),
-			0 0 30px rgba(16, 185, 129, 0.12),
-			inset 0 1px 0 rgba(255, 255, 255, 1);
-	}
-
-	:global(.dark) .input-wrapper.duplex-active {
-		box-shadow:
-			0 0 0 1px rgba(16, 185, 129, 0.3),
-			0 0 0 4px rgba(16, 185, 129, 0.1),
-			0 4px 20px rgba(0, 0, 0, 0.3),
-			0 0 30px rgba(16, 185, 129, 0.15),
-			inset 0 1px 0 rgba(255, 255, 255, 0.08);
-	}
-
-	.mic-btn.duplex-btn {
-		background: linear-gradient(180deg, #6ee7b7 0%, #34d399 40%, #10b981 100%);
-		color: white;
-		border-color: rgba(0, 0, 0, 0.1);
-		box-shadow:
-			0 4px 12px rgba(16, 185, 129, 0.4),
-			inset 0 1px 0 rgba(255, 255, 255, 0.35);
-	}
-
-	.mic-btn.duplex-btn.duplex-listening {
-		animation: duplex-breathe 2.5s ease-in-out infinite;
-	}
-
-	.mic-btn.duplex-btn.duplex-recording {
-		background: linear-gradient(180deg, #66d9ff 0%, #01B2FF 70%, #0099dd 100%);
-		box-shadow:
-			0 4px 16px rgba(1, 178, 255, 0.5),
-			inset 0 1px 0 rgba(255, 255, 255, 0.4);
-		animation: recording-pulse 1.5s ease-in-out infinite;
-	}
-
-	.mic-btn.duplex-btn.duplex-speaking {
-		background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
-		box-shadow:
-			0 4px 12px rgba(245, 158, 11, 0.45),
-			inset 0 1px 0 rgba(255, 255, 255, 0.35);
-		animation: duplex-breathe 1s ease-in-out infinite;
-	}
-
-	@keyframes duplex-breathe {
-		0%, 100% { opacity: 1; transform: scale(1); }
-		50% { opacity: 0.85; transform: scale(0.97); }
-	}
-
-	.duplex-status {
-		flex: 1;
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0 0.25rem;
-	}
-
-	.duplex-phase-dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: #10b981;
-		flex-shrink: 0;
-	}
-
-	.duplex-phase-dot.pulse {
-		animation: dot-pulse 1.5s ease-in-out infinite;
-	}
-
-	@keyframes dot-pulse {
-		0%, 100% { opacity: 1; transform: scale(1); }
-		50% { opacity: 0.5; transform: scale(0.75); }
-	}
-
-	.duplex-phase-label {
-		font-size: 0.875rem;
-		color: var(--text-secondary);
-		font-style: italic;
-	}
-
-	.duplex-noise-toast {
-		font-size: 0.8rem;
-		color: #f59e0b;
-		font-style: italic;
-		animation: noise-fade 2s ease forwards;
-	}
-
-	@keyframes noise-fade {
-		0% { opacity: 1; }
-		70% { opacity: 1; }
-		100% { opacity: 0; }
-	}
-
-	/* Sensitivity controls */
-	.sensitivity-controls {
-		display: flex;
-		align-items: center;
-		gap: 3px;
-		flex-shrink: 0;
-		margin-left: auto;
-		padding-right: 0.15rem;
-	}
-
-	.sens-btn {
-		width: 20px;
-		height: 20px;
-		border-radius: 50%;
-		border: 1px solid rgba(0,0,0,0.12);
-		background: rgba(255,255,255,0.6);
-		color: var(--text-secondary);
-		font-size: 0.85rem;
-		line-height: 1;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0;
-		transition: background 0.15s, color 0.15s;
-	}
-
-	:global(.dark) .sens-btn {
-		background: rgba(255,255,255,0.08);
-		border-color: rgba(255,255,255,0.12);
-	}
-
-	.sens-btn:hover {
-		background: #10b981;
-		color: white;
-		border-color: transparent;
-	}
-
-	.sens-label {
-		font-size: 0.65rem;
-		color: var(--text-tertiary);
-		min-width: 28px;
-		text-align: center;
-		cursor: default;
-	}
-
-	/* Small headset toggle button next to send */
-	.duplex-toggle-btn {
-		width: 32px;
-		height: 32px;
-		border: none;
-		border-radius: 50%;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: all 0.2s ease;
-		flex-shrink: 0;
-		background: linear-gradient(180deg, #f0f0f2 0%, #e4e4e6 100%);
-		color: var(--text-tertiary);
-		border: 1px solid rgba(0, 0, 0, 0.07);
-		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
-	}
-
-	:global(.dark) .duplex-toggle-btn {
-		background: linear-gradient(180deg, #2e2e32 0%, #262628 100%);
-		border-color: rgba(255, 255, 255, 0.08);
-		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-	}
-
-	.duplex-toggle-btn:hover {
-		color: #10b981;
-		transform: translateY(-1px);
-		box-shadow: 0 3px 8px rgba(16, 185, 129, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.8);
-	}
-
-	.duplex-toggle-btn.active {
-		background: linear-gradient(180deg, #6ee7b7 0%, #34d399 40%, #10b981 100%);
-		color: white;
-		border-color: rgba(0, 0, 0, 0.1);
-		box-shadow: 0 3px 10px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
-	}
-
-	.duplex-toggle-btn.active:hover {
-		background: linear-gradient(180deg, #86efac 0%, #4ade80 40%, #22c55e 100%);
-		transform: translateY(-1px);
 	}
 </style>

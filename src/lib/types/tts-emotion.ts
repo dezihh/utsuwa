@@ -1,4 +1,4 @@
-export type TTSEmotionProvider = 'elevenlabs' | 'openai-tts' | 'alltalk' | 'chatterbox' | 'omnivoice';
+export type TTSEmotionProvider = 'elevenlabs' | 'openai-tts' | 'alltalk' | 'chatterbox' | 'omnivoice' | 'local-tts';
 
 export interface TTSProviderEmotionCapabilities {
 	supportsSpeed: boolean;

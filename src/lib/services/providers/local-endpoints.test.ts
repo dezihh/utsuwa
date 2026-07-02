@@ -5,13 +5,17 @@ import {
 	getChatBaseUrl,
 	getModelsBaseUrl,
 	isLocalLLMProvider,
-	getLocalProviderConnectionHint
+	getLocalProviderConnectionHint,
+	isLocalTTSProvider,
+	getTTSBaseUrl,
+	getLocalTTSConnectionHint
 } from './local-endpoints.ts';
 
-test('identifies custom endpoint as the local-compatible provider', () => {
-	assert.equal(isLocalLLMProvider('custom-endpoint'), true);
+test('identifies local LLM providers', () => {
+	assert.equal(isLocalLLMProvider('ollama'), true);
+	assert.equal(isLocalLLMProvider('lmstudio'), true);
+	assert.equal(isLocalLLMProvider('custom-endpoint'), false);
 	assert.equal(isLocalLLMProvider('openai'), false);
-	assert.equal(isLocalLLMProvider('ollama'), false);
 });
 
 test('custom endpoint returns the provided base URL', () => {
@@ -19,8 +23,8 @@ test('custom endpoint returns the provided base URL', () => {
 	assert.equal(getModelsBaseUrl('custom-endpoint', 'http://localhost:11434'), 'http://localhost:11434');
 });
 
-test('legacy local providers are no longer supported', () => {
-	assert.match(getLocalProviderConnectionHint('ollama'), /no longer supported/);
+test('custom endpoint is treated as a local OpenAI-compatible provider', () => {
+	assert.match(getLocalProviderConnectionHint('custom-endpoint', 'http://localhost:11434'), /ollama serve/);
 });
 
 test('provides local endpoint troubleshooting hints for custom endpoint', () => {
@@ -39,4 +43,29 @@ test('provides local endpoint troubleshooting hints for custom endpoint', () => 
 	);
 	assert.match(getLocalProviderConnectionHint('custom-endpoint', 'http://localhost:1234/v1'), /Start Server/);
 	assert.match(getLocalProviderConnectionHint('custom-endpoint', 'http://localhost:8080/v1'), /llama-server/);
+});
+
+test('identifies local TTS providers', () => {
+	assert.equal(isLocalTTSProvider('local-tts'), true);
+	assert.equal(isLocalTTSProvider('openai-tts'), false);
+	assert.equal(isLocalTTSProvider('elevenlabs'), false);
+});
+
+test('normalizes local TTS base URL to a trailing-slash /v1 path', () => {
+	// OpenAI-compatible clients append "audio/speech", so the base must end in /v1/
+	assert.equal(getTTSBaseUrl('local-tts', 'http://localhost:8880'), 'http://localhost:8880/v1/');
+	assert.equal(getTTSBaseUrl('local-tts', 'http://localhost:8880/'), 'http://localhost:8880/v1/');
+	assert.equal(getTTSBaseUrl('local-tts', 'http://localhost:8880/v1'), 'http://localhost:8880/v1/');
+	assert.equal(getTTSBaseUrl('local-tts', 'http://localhost:8880/v1/'), 'http://localhost:8880/v1/');
+	assert.equal(getTTSBaseUrl('local-tts'), 'http://localhost:8880/v1/');
+});
+
+test('provides local TTS troubleshooting hint with CORS guidance', () => {
+	const hint = getLocalTTSConnectionHint('http://localhost:8880');
+	assert.match(hint, /audio\/speech/);
+	assert.match(hint, /CORS/);
+	assert.match(
+		getLocalTTSConnectionHint('http://localhost:8880', 'https://utsuwa.app'),
+		/https:\/\/utsuwa\.app/
+	);
 });

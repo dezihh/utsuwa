@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { Icon } from '$lib/components/ui';
+	import { localPath } from '$lib/config/links';
 	import { isTauri } from '$lib/services/platform';
 	import { onMount } from 'svelte';
 	import type { Reminder } from '$lib/types/memory';
@@ -10,12 +11,22 @@
 		sidebarOpen?: boolean;
 		onToggleSidebar?: () => void;
 		showSidebarBtn?: boolean;
+		onBoardClick?: () => void;
 		rightOffset?: number;
 		upcomingReminders?: Reminder[];
 		onDeleteReminder?: (id: number) => void;
 	}
 
-	let { onInfoClick, sidebarOpen = false, onToggleSidebar, showSidebarBtn = false, rightOffset = 0, upcomingReminders = [], onDeleteReminder }: Props = $props();
+	let {
+		onInfoClick,
+		sidebarOpen = false,
+		onToggleSidebar,
+		showSidebarBtn = false,
+		onBoardClick,
+		rightOffset = 0,
+		upcomingReminders = [],
+		onDeleteReminder
+	}: Props = $props();
 	let showOverlayBtn = $state(false);
 	let remindersOpen = $state(false);
 
@@ -111,10 +122,15 @@
 			<Icon name="message-square" size={20} />
 		</button>
 	{/if}
+	{#if onBoardClick}
+		<button class="icon-btn" onclick={onBoardClick} aria-label="Photoboard" title="Things you've shown her">
+			<Icon name="image" size={20} />
+		</button>
+	{/if}
 	<button class="icon-btn" onclick={onInfoClick} aria-label="App info">
 		<Icon name="info" size={20} />
 	</button>
-	<button class="icon-btn" onclick={() => goto('/app/settings')} aria-label="Settings">
+	<button class="icon-btn" onclick={() => goto(localPath('app', '/settings'))} aria-label="Settings">
 		<Icon name="settings" size={20} />
 	</button>
 </div>

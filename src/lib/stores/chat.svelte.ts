@@ -1,3 +1,9 @@
+/** An image the user showed her, for display in the message (object URL + keepsake id). */
+export interface ShownImage {
+	id: string;
+	url: string;
+}
+
 export interface Message {
 	id: string;
 	role: 'user' | 'assistant' | 'system';
@@ -6,6 +12,7 @@ export interface Message {
 	 *  so the LLM sees its own tag usage and continues the pattern correctly. */
 	apiContent?: string;
 	timestamp: Date;
+	images?: ShownImage[];
 }
 
 function createChatStore() {
@@ -14,12 +21,13 @@ function createChatStore() {
 	let error = $state<string | null>(null);
 	let streamingContent = $state('');
 
-	function addMessage(role: 'user' | 'assistant' | 'system', content: string) {
+	function addMessage(role: 'user' | 'assistant' | 'system', content: string, images?: ShownImage[]) {
 		const message: Message = {
 			id: crypto.randomUUID(),
 			role,
 			content,
-			timestamp: new Date()
+			timestamp: new Date(),
+			...(images?.length ? { images } : {})
 		};
 		messages = [...messages, message];
 		return message;

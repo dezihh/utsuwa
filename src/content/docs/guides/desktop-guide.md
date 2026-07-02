@@ -7,15 +7,28 @@ description: How to install and use the Utsuwa desktop application with overlay 
 
 Utsuwa Desktop is an application that brings your AI companion to your desktop with a transparent overlay mode. Your companion can float over other applications, always visible while you work.
 
-Currently available for **macOS** only. Windows and Linux support is planned.
+Available for **macOS**, **Windows**, and **Linux**.
 
 ## Installation
 
 ### Download
 
-Head to the [GitHub Releases](https://github.com/The-Lab-by-Ordinary-Company/utsuwa/releases) page and download the `.dmg` disk image for macOS.
+Head to the [GitHub Releases](https://github.com/The-Lab-by-Ordinary-Company/utsuwa/releases) page and grab the build for your platform:
 
-Open the `.dmg`, drag Utsuwa to your Applications folder, and you're good to go.
+| Platform | File | Install |
+|----------|------|---------|
+| **macOS** | `.dmg` (universal) | Open the disk image and drag Utsuwa to your Applications folder |
+| **Windows** | `.exe` | Run the installer |
+| **Linux** | `.AppImage` | `chmod +x` the file and run it |
+| **Linux** | `.deb` / `.rpm` | Install with your package manager |
+
+#### Opening an unsigned build
+
+The desktop app is in beta and currently **unsigned**, so your OS will warn you the first time you open it. This is expected.
+
+- **macOS:** right-click the app → **Open** → **Open**. Or run `xattr -dr com.apple.quarantine /Applications/Utsuwa.app` once.
+- **Windows:** on the SmartScreen prompt, click **More info** → **Run anyway**.
+- **Linux:** AppImages just need the executable bit (`chmod +x Utsuwa.AppImage`).
 
 ### Building from Source
 
@@ -43,6 +56,14 @@ pnpm tauri build
 ```
 
 The dev command launches both a development server and the desktop window. The build command produces an installer for your current platform in `src-tauri/target/release/bundle/`.
+
+## Updating
+
+The desktop app keeps itself up to date. On launch it quietly checks for a new release, and when one is available a small banner appears offering to **Install & Restart** — click it and the app downloads the update, installs it, and relaunches.
+
+You can also check manually any time from the **About** dialog (the info button in the app) via **Check for updates**.
+
+> Auto-updates work for the macOS `.dmg`, the Windows `.exe`, and the Linux `.AppImage`. If you installed via `.deb` or `.rpm`, update through your package manager instead.
 
 ## Features
 
@@ -95,10 +116,11 @@ Some features are still being worked on:
 | Feature | Status |
 |---------|--------|
 | macOS support | ✅ Available |
-| Windows support | ⏳ Planned |
-| Linux support | ⏳ Planned |
+| Windows support | ✅ Available |
+| Linux support | ✅ Available |
 | Click-through transparency | ❌ Disabled (blocks UI) |
 | Global hotkeys | ✅ Available |
+| In-app auto-updates | ✅ Available |
 | Position persistence | ⏳ Planned |
 | System tray | ⏳ Planned |
 

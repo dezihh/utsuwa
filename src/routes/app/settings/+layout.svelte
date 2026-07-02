@@ -1,22 +1,22 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { Icon } from '$lib/components/ui';
+	import { localPath } from '$lib/config/links';
 
 	let { children } = $props();
 
-	const navItems = [
-		{ href: '/app/settings/persona', label: 'Character', icon: 'persona' },
-		{ href: '/app/settings/display', label: 'Display', icon: 'monitor' },
-		{ href: '/app/settings/llm', label: 'LLM Model', icon: 'brain' },
-		{ href: '/app/settings/tts', label: 'TTS', icon: 'mic' },
-		{ href: '/app/settings/tts-emotions', label: 'TTS Emotions', icon: 'mic' },
-		{ href: '/app/settings/stt', label: 'STT', icon: 'mic' },
-		{ href: '/app/settings/avatar/animations', label: 'Animations', icon: 'layers' },
-
-		{ href: '/app/settings/data', label: 'Data', icon: 'database' },
-		{ href: '/app/settings/developer', label: 'Developer', icon: 'code' },
-		{ href: '/app/settings/mcp', label: 'MCP Tools', icon: 'tool' }
-	];
+	const navItems = $derived([
+		{ href: localPath('app', '/settings/persona'), label: 'Character', icon: 'persona' },
+		{ href: localPath('app', '/settings/display'), label: 'Display', icon: 'monitor' },
+		{ href: localPath('app', '/settings/llm'), label: 'LLM Model', icon: 'brain' },
+		{ href: localPath('app', '/settings/tts'), label: 'TTS', icon: 'mic' },
+		{ href: localPath('app', '/settings/tts-emotions'), label: 'TTS Emotions', icon: 'mic' },
+		{ href: localPath('app', '/settings/stt'), label: 'STT', icon: 'mic' },
+		{ href: localPath('app', '/settings/avatar/animations'), label: 'Animations', icon: 'layers' },
+		{ href: localPath('app', '/settings/data'), label: 'Data', icon: 'database' },
+		{ href: localPath('app', '/settings/developer'), label: 'Developer', icon: 'code' },
+		{ href: localPath('app', '/settings/mcp'), label: 'MCP Tools', icon: 'tool' }
+	]);
 
 	const currentIcon = $derived(
 		navItems.find((item) => $page.url.pathname === item.href)?.icon || 'settings'
@@ -27,7 +27,7 @@
 	<!-- Sidebar -->
 	<aside class="sidebar">
 		<div class="sidebar-header">
-			<a href="/app" class="back-button">
+			<a href={localPath('app')} class="back-button">
 				<Icon name="chevron-left" size={20} />
 				<span>Back</span>
 			</a>

@@ -10,6 +10,10 @@ export interface ProviderMetadata {
 	requiresApiKey: boolean;
 	defaultBaseUrl?: string;
 	isLocal?: boolean;
+	// Whether this provider's models are broadly vision-capable. Coarse, cloud
+	// only. Local providers (Ollama/LM Studio) leave this unset and rely on a
+	// per-model heuristic, since vision depends on the installed model.
+	supportsVision?: boolean;
 	models?: Array<{ id: string; name: string }>;
 	voices?: Array<{ id: string; name: string }>;
 	/** Quick presets for the custom-endpoint provider */
@@ -28,6 +32,7 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 		category: 'llm',
 		icon: '🤖',
 		requiresApiKey: true,
+		supportsVision: true,
 		defaultBaseUrl: 'https://api.openai.com/v1/'
 	},
 	{
@@ -37,6 +42,7 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 		category: 'llm',
 		icon: '🧠',
 		requiresApiKey: true,
+		supportsVision: true,
 		defaultBaseUrl: 'https://api.anthropic.com/v1/'
 	},
 	{
@@ -47,6 +53,56 @@ export const LLM_PROVIDERS: ProviderMetadata[] = [
 		icon: '🔀',
 		requiresApiKey: true,
 		defaultBaseUrl: 'https://openrouter.ai/api/v1/'
+	},
+	{
+		id: 'google',
+		name: 'Google Gemini',
+		description: 'Gemini models',
+		category: 'llm',
+		icon: '✨',
+		iconColor: '#4285F4',
+		requiresApiKey: true,
+		supportsVision: true,
+		defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/'
+	},
+	{
+		id: 'deepseek',
+		name: 'DeepSeek',
+		description: 'DeepSeek models',
+		category: 'llm',
+		icon: '🔍',
+		requiresApiKey: true,
+		defaultBaseUrl: 'https://api.deepseek.com/'
+	},
+	{
+		id: 'xai',
+		name: 'xAI (Grok)',
+		description: 'Grok models',
+		category: 'llm',
+		icon: '𝕏',
+		requiresApiKey: true,
+		supportsVision: true,
+		defaultBaseUrl: 'https://api.x.ai/v1/'
+	},
+	{
+		id: 'ollama',
+		name: 'Ollama',
+		description: 'Run LLMs locally on your machine',
+		category: 'llm',
+		icon: '🦙',
+		requiresApiKey: false,
+		isLocal: true,
+		defaultBaseUrl: 'http://localhost:11434'
+	},
+	{
+		id: 'lmstudio',
+		name: 'LM Studio',
+		description: 'Local LLM with GUI interface',
+		category: 'llm',
+		icon: '🖥️',
+		requiresApiKey: false,
+		isLocal: true,
+		defaultBaseUrl: 'http://localhost:1234/v1/'
 	},
 	{
 		id: 'custom-endpoint',
@@ -192,6 +248,32 @@ export const TTS_PROVIDERS: ProviderMetadata[] = [
 			{ id: 'female3', name: 'Female3 / Cosi (DE, female, warm)' }
 		]
 	},
+	// Local TTS - OpenAI-compatible server running on the user's machine
+	// (Kokoro-FastAPI, openedai-speech, etc). Voices/model are server-specific,
+	// so these are sensible Kokoro defaults plus a free-text override in the UI.
+	{
+		id: 'local-tts',
+		name: 'Local TTS',
+		description: 'Run a voice model locally (Kokoro, openedai-speech)',
+		category: 'tts',
+		icon: '🏠',
+		requiresApiKey: false,
+		isLocal: true,
+		defaultBaseUrl: 'http://localhost:8880/v1/',
+		models: [
+			{ id: 'kokoro', name: 'Kokoro' },
+			{ id: 'tts-1', name: 'tts-1 (compatibility alias)' }
+		],
+		voices: [
+			{ id: 'af_bella', name: 'Bella (US, female)' },
+			{ id: 'af_sky', name: 'Sky (US, female)' },
+			{ id: 'af_sarah', name: 'Sarah (US, female)' },
+			{ id: 'am_adam', name: 'Adam (US, male)' },
+			{ id: 'am_michael', name: 'Michael (US, male)' },
+			{ id: 'bf_emma', name: 'Emma (UK, female)' },
+			{ id: 'bm_george', name: 'George (UK, male)' }
+		]
+	},
 ];
 
 // ============================================
@@ -238,4 +320,9 @@ export function getTTSProvider(id: string): ProviderMetadata | undefined {
 
 export function getSTTProvider(id: string): ProviderMetadata | undefined {
 	return STT_PROVIDERS.find((p) => p.id === id);
+}
+
+/** Whether an LLM provider's models are broadly vision-capable (cloud providers). */
+export function providerSupportsVision(id: string): boolean {
+	return getLLMProvider(id)?.supportsVision === true;
 }

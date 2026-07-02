@@ -8,6 +8,8 @@ export interface TTSOptions {
 	/** Second voice ID, resolved when LLM emits [voice:alt] tag */
 	alternativeVoiceId?: string;
 	rvcVoiceId?: string;
+	/** Upstream local-tts model id */
+	model?: string;
 	baseUrl?: string;
 	speed?: number;
 	pitch?: number;
@@ -129,7 +131,8 @@ export const TTS_BASE_URLS: Partial<Record<TTSProvider, string>> = {
 	'openai-tts': 'https://api.openai.com/v1/',
 	alltalk: 'http://localhost:7851/api/',
 	chatterbox: 'http://localhost:8765/',
-	omnivoice: 'http://localhost:8766/'
+	omnivoice: 'http://localhost:8766/',
+	'local-tts': 'http://localhost:8880/v1/'
 };
 
 // Default voices per provider
@@ -138,7 +141,8 @@ export const DEFAULT_VOICES: Partial<Record<TTSProvider, string>> = {
 	'openai-tts': 'alloy',
 	alltalk: '',
 	chatterbox: '',
-	omnivoice: 'female3'
+	omnivoice: 'female3',
+	'local-tts': 'af_bella'
 };
 
 // Import individual providers
@@ -161,6 +165,7 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 		currentOptions.apiKey === options.apiKey &&
 		currentOptions.voiceId === options.voiceId &&
 		currentOptions.rvcVoiceId === options.rvcVoiceId &&
+		currentOptions.model === options.model &&
 		currentOptions.baseUrl === options.baseUrl &&
 		currentOptions.speed === options.speed &&
 		currentOptions.exaggeration === options.exaggeration &&
@@ -192,6 +197,12 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 
 		case 'omnivoice':
 			currentProvider = new OmniVoiceTTS(options);
+			break;
+
+		// Local TTS is OpenAI-compatible, so it reuses the OpenAI client with a
+		// localhost base URL. The provider id drives URL/key/error handling.
+		case 'local-tts':
+			currentProvider = new OpenAITTS(options);
 			break;
 
 		default:

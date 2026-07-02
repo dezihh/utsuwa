@@ -74,6 +74,7 @@
 	}
 
 	.docs-main {
+		position: relative;
 		flex: 1;
 		min-width: 0;
 		background: var(--docs-surface-solid);
@@ -83,6 +84,12 @@
 		overflow-y: auto;
 		scrollbar-width: thin;
 		scrollbar-color: transparent transparent;
+	}
+
+	/* Keep page content in a clean stacking context */
+	.docs-main > :global(*) {
+		position: relative;
+		z-index: 1;
 	}
 
 	.docs-main:hover {

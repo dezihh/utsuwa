@@ -407,6 +407,7 @@
 					apiKey: ttsConfig.apiKey,
 					voiceId: speechSettings.activeVoiceId as string || ttsConfig.voiceId,
 					rvcVoiceId: speechSettings.activeRvcVoiceId as string || ttsConfig.rvcVoiceId,
+					model: speechSettings.activeModel as string || ttsConfig.modelId,
 					baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
 					speed: speechSettings.speed as number ?? 1,
 					omnivoiceNumStep: ttsConfig.omnivoiceNumStep,

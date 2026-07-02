@@ -8,6 +8,7 @@
 	import { debugStore } from '$lib/stores/debug.svelte';
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
+	import { localPath } from '$lib/config/links';
 	import {
 		EMOTION_TAGS,
 		getEmotionVrmExpression,
@@ -338,7 +339,7 @@
 	async function triggerEvent(event: typeof testEvents[0]) {
 		debugEventsStore.trigger(event);
 		// Navigate to home to show the event
-		await goto('/app');
+		await goto(localPath('app'));
 	}
 
 	// ── Temporary VRM Upload ──

@@ -51,6 +51,14 @@ export const PROVIDER_EMOTION_CAPABILITIES: Record<TTSEmotionProvider, TTSProvid
 		supportsExaggeration: false,
 		supportsNativeTags: false,
 		availableNativeTags: []
+	},
+	'local-tts': {
+		supportsSpeed: true,
+		supportsPitch: true,
+		supportsVolume: true,
+		supportsExaggeration: false,
+		supportsNativeTags: false,
+		availableNativeTags: []
 	}
 };
 

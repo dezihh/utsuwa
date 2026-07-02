@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { Icon } from '$lib/components/ui';
 	import { onMount } from 'svelte';
+	import { DOCS_URL } from '$lib/config/site';
+	import { isTauri } from '$lib/services/platform/platform';
+	import { updaterStore } from '$lib/stores/updater.svelte';
 
 	interface Props {
 		onClose: () => void;
@@ -9,6 +12,29 @@
 	let { onClose }: Props = $props();
 
 	const version = `v${import.meta.env.VITE_APP_VERSION}`;
+
+	const updateStatusText = $derived.by(() => {
+		switch (updaterStore.status) {
+			case 'checking':
+				return 'Checking for updates…';
+			case 'uptodate':
+				return "You're on the latest version";
+			case 'available':
+				return `Update available: Utsuwa ${updaterStore.availableVersion}`;
+			case 'downloading':
+				return `Downloading… ${updaterStore.progress}%`;
+			case 'ready':
+				return 'Update installed — restarting…';
+			case 'error':
+				return updaterStore.errorMessage ?? 'Update check failed';
+			default:
+				return '';
+		}
+	});
+
+	const updateBusy = $derived(
+		updaterStore.status === 'checking' || updaterStore.status === 'downloading'
+	);
 
 	// System info
 	let sttSupport = $state('Checking...');
@@ -37,6 +63,14 @@
 	function handleOverlayClick(e: MouseEvent) {
 		if (e.target === e.currentTarget) onClose();
 	}
+
+	// Always open the docs subdomain; on desktop route it to the system browser.
+	function handleDocsClick(e: MouseEvent) {
+		if (isTauri()) {
+			e.preventDefault();
+			import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(DOCS_URL));
+		}
+	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -53,17 +87,30 @@
 
 		<!-- Logo & Version centered -->
 		<div class="app-header">
-			<div class="logo-badge">
-				<div class="logo-badge-inner">
-					<img src="/brand-assets/logo.svg" alt="Utsuwa - Open Source AI Soul Vessel" class="app-logo-svg" />
-				</div>
-				<div class="logo-badge-shine"></div>
-			</div>
+			<span class="app-logo" role="img" aria-label="Utsuwa - Open Source AI Soul Vessel"></span>
 			<span class="version-badge">
 				{version}
 				<span class="version-shine"></span>
 			</span>
 		</div>
+
+		<!-- Updates (desktop only) -->
+		{#if isTauri()}
+			<div class="updates-row">
+				<button
+					class="update-check-btn"
+					onclick={() =>
+						updaterStore.status === 'available' ? updaterStore.install() : updaterStore.check()}
+					disabled={updateBusy}
+				>
+					<Icon name={updaterStore.status === 'available' ? 'download' : 'refresh-cw'} size={13} />
+					<span>{updaterStore.status === 'available' ? 'Install & Restart' : 'Check for updates'}</span>
+				</button>
+				{#if updateStatusText}
+					<span class="update-status-text">{updateStatusText}</span>
+				{/if}
+			</div>
+		{/if}
 
 		<!-- Links -->
 		<div class="link-tiles">
@@ -79,7 +126,7 @@
 				<span class="tile-label">GitHub</span>
 				<span class="tile-shine"></span>
 			</a>
-			<a href="/docs" class="link-tile" style="--delay: 1; --tile-color: #01B2FF; --tile-glow: rgba(1, 178, 255, 0.3)">
+			<a href={DOCS_URL} target="_blank" rel="noopener" onclick={handleDocsClick} class="link-tile" style="--delay: 1; --tile-color: #00B2FF; --tile-glow: rgba(0, 178, 255, 0.3)">
 				<div class="tile-icon-wrapper">
 					<span class="tile-icon">
 						<Icon name="file-text" size={20} />
@@ -254,44 +301,17 @@
 		margin-bottom: 1rem;
 	}
 
-	.logo-badge {
-		position: relative;
+	.app-logo {
+		display: block;
+		height: 28px;
+		aspect-ratio: 1530 / 257;
+		background-color: #00B2FF;
+		-webkit-mask: url('/brand-assets/logo.svg') no-repeat center / contain;
+		mask: url('/brand-assets/logo.svg') no-repeat center / contain;
 	}
 
-	.logo-badge-inner {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 1rem 1.5rem;
-		background: linear-gradient(180deg, #66d9ff 0%, #01B2FF 40%, #0088cc 100%);
-		border-radius: 1rem;
-		box-shadow:
-			0 6px 24px rgba(1, 178, 255, 0.45),
-			0 3px 8px rgba(0, 0, 0, 0.12),
-			inset 0 2px 0 rgba(255, 255, 255, 0.4),
-			inset 0 -2px 4px rgba(0, 0, 0, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-	}
-
-	.logo-badge-shine {
-		position: absolute;
-		top: 3px;
-		left: 12%;
-		right: 12%;
-		height: 45%;
-		background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.1) 60%, transparent 100%);
-		border-radius: 0.75rem 0.75rem 50% 50%;
-		pointer-events: none;
-	}
-
-	.app-logo-svg {
-		height: 24px;
-		width: auto;
-		filter: brightness(10);
-	}
-
-	:global(.dark) .app-logo-svg {
-		filter: brightness(10);
+	:global(.dark) .app-logo {
+		background-color: #ffffff;
 	}
 
 	.version-badge {
@@ -320,6 +340,59 @@
 		background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.1) 60%, transparent 100%);
 		border-radius: 999px 999px 50% 50%;
 		pointer-events: none;
+	}
+
+	/* Updates row */
+	.updates-row {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.4rem;
+		margin-bottom: 1rem;
+	}
+
+	.update-check-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.4rem 0.85rem;
+		border-radius: 999px;
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: var(--text-secondary);
+		cursor: pointer;
+		background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		box-shadow:
+			0 2px 6px rgba(0, 0, 0, 0.06),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9);
+		transition: all 0.15s ease-out;
+	}
+
+	:global(.dark) .update-check-btn {
+		background: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
+		border-color: rgba(255, 255, 255, 0.08);
+		color: var(--text-secondary);
+		box-shadow:
+			0 2px 6px rgba(0, 0, 0, 0.25),
+			inset 0 1px 0 rgba(255, 255, 255, 0.05);
+	}
+
+	.update-check-btn:hover:not(:disabled) {
+		transform: translateY(-1px);
+		border-color: rgba(1, 178, 255, 0.4);
+		color: var(--text-primary);
+	}
+
+	.update-check-btn:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+
+	.update-status-text {
+		font-size: 0.65rem;
+		color: var(--text-tertiary);
+		text-align: center;
 	}
 
 	/* Link Tiles */

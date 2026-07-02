@@ -85,7 +85,7 @@ function normalizeEmotion(raw: string | undefined): Emotion | null {
 // Reasoning models (R1-style) emit a scratchpad before the answer. Strip it so
 // the trace never reaches the chat bubble or the JSON parser.
 function stripReasoning(text: string): string {
-	let out = text.replace(/<think(?:ing)?>[\/s\S]*?<\/think(?:ing)?>/gi, '');
+	let out = text.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '');
 	const close = out.match(/<\/think(?:ing)?>/i);
 	if (close && close.index !== undefined) {
 		out = out.slice(close.index + close[0].length);
@@ -95,7 +95,7 @@ function stripReasoning(text: string): string {
 
 // Chat-template / stop tokens some local GGUFs leak into their text output.
 const END_OF_TURN_RE = /<\/s>|<\|im_end\|>|<\|eot_id\|>|<\|end_of_text\|>|<\|endoftext\|>|<end_of_turn>/i;
-const STRAY_TOKEN_RE = /<\|[a-z0-9_]+\|>|<\/?s>|<\/?(?:bos|eos)>|<\/?(?:start|end)_of_turn>|\[\/?\ INST\]/gi;
+const STRAY_TOKEN_RE = /<\|[a-z0-9_]+\|>|<\/?s>|<\/?(?:bos|eos)>|<\/?(?:start|end)_of_turn>|\[\/?INST\]/gi;
 
 function stripControlTokens(text: string): string {
 	const idx = text.search(END_OF_TURN_RE);
@@ -104,10 +104,13 @@ function stripControlTokens(text: string): string {
 }
 
 // The model sometimes keeps writing past its own reply and starts a new
-// transcript turn as the user or a narrator. Cut at the first such turn on a
-// LATER line (anchored to \n so the real reply on line one is never cut).
+// transcript turn as the user or a narrator (e.g. `CJ: "..."`, `They: ...`,
+// `User: ...`), often a third-person note it meant for the memory JSON. Cut at
+// the first such turn on a LATER line (anchored to \n, so the real reply on
+// line one is never the cut point). Names vary, so we key on a known transcript
+// label or any `Name: "` that opens a quoted line.
 const HALLUCINATED_TURN_RE =
-	/\n[ \t]*(?:(?:They|You|User|Human|Assistant|Narrator|System|AI)[ \t]*:[ \t]|[A-Z][\w''.-]{0,19}[ \t]*:[ \t]*["\u201c])/;
+	/\n[ \t]*(?:(?:They|You|User|Human|Assistant|Narrator|System|AI)[ \t]*:[ \t]|[A-Z][\w'’.-]{0,19}[ \t]*:[ \t]*["“])/;
 
 function cutHallucinatedTurn(text: string): string {
 	const m = text.match(HALLUCINATED_TURN_RE);
@@ -120,6 +123,9 @@ const STATE_KEY_RE =
 
 // Scan from `start` (a '{') to its matching '}', ignoring braces inside strings.
 function balancedObjectFrom(text: string, start: number): string | null {
+	// First balanced {...} that actually carries a state key, so we don't grab
+	// unrelated JSON the user may have pasted into the chat.
+
 	let depth = 0;
 	let inStr = false;
 	let esc = false;

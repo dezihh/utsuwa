@@ -28,6 +28,7 @@
 	import { getLLMProvider, getTTSProvider } from '$lib/services/providers/registry';
 	import { streamChatDirect } from '$lib/services/chat/client-chat';
 	import { mcpStore } from '$lib/stores/mcp.svelte';
+	import type { PreparedImage } from '$lib/services/storage/keepsakes';
 	import { isTauri } from '$lib/services/platform';
 	import type { TTSProvider } from '$lib/types';
 	import type { StateUpdates } from '$lib/types/character';
@@ -804,8 +805,10 @@
 	}
 
 	// Handle send message
-	async function handleSend(content: string, role: 'user' | 'system' = 'user') {
+	async function handleSend(content: string, imagesOrRole: PreparedImage[] | 'user' | 'system' = 'user') {
 		if (!content.trim()) return;
+		const role: 'user' | 'system' = Array.isArray(imagesOrRole) ? 'user' : imagesOrRole;
+		const images: PreparedImage[] | undefined = Array.isArray(imagesOrRole) ? imagesOrRole : undefined;
 
 		const myGeneration = ++sendGeneration;
 
@@ -948,7 +951,11 @@
 			}
 		}
 
-		chatStore.addMessage(role, content);
+		chatStore.addMessage(
+			role,
+			content,
+			images?.map((img) => ({ id: img.id, url: URL.createObjectURL(img.blob) }))
+		);
 		chatStore.setLoading(true);
 		chatStore.setError(null);
 		isTyping = true;

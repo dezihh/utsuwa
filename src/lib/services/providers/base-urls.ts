@@ -8,6 +8,11 @@ import type { LLMProvider } from '$lib/types';
 export const PROVIDER_BASE_URLS: Partial<Record<LLMProvider, string>> = {
 	openai: 'https://api.openai.com/v1/',
 	anthropic: 'https://api.anthropic.com/v1/',
-	openrouter: 'https://openrouter.ai/api/v1/'
+	openrouter: 'https://openrouter.ai/api/v1/',
+	google: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+	deepseek: 'https://api.deepseek.com/',
+	xai: 'https://api.x.ai/v1/',
+	ollama: 'http://localhost:11434/v1/',
+	lmstudio: 'http://localhost:1234/v1/'
 	// custom-endpoint has no default — the user provides the base URL.
 };
