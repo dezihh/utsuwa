@@ -4,6 +4,8 @@ import type { StateUpdates, Emotion } from '$lib/types/character';
 export interface ParsedResponse {
 	dialogue: string;
 	stateUpdates: Partial<StateUpdates> | null;
+	/** Vocabulary mastery signals from the LLM, to be applied to familiarity scores. */
+	vocabResults?: Array<{ word: string; known: boolean }>;
 	parseError?: string;
 }
 
@@ -28,6 +30,8 @@ interface LLMStateOutput {
 		category?: string;
 		tags?: string[];
 	} | null;
+	/** Word-level mastery signals from a vocabulary exercise turn. */
+	vocab_results?: Array<{ word: string; known: boolean }> | null;
 }
 
 // Valid emotions for validation
@@ -51,6 +55,7 @@ export function parseResponse(rawResponse: string): ParsedResponse {
 	// Default result
 	let dialogue = rawResponse.trim();
 	let stateUpdates: Partial<StateUpdates> | null = null;
+	let vocabResults: Array<{ word: string; known: boolean }> | undefined;
 	let parseError: string | undefined;
 
 	// Try to extract JSON block
@@ -63,6 +68,7 @@ export function parseResponse(rawResponse: string): ParsedResponse {
 		try {
 			const parsed: LLMStateOutput = JSON.parse(jsonMatch[1]);
 			stateUpdates = convertLLMOutput(parsed);
+			vocabResults = extractVocabResults(parsed);
 		} catch (e) {
 			parseError = `Failed to parse JSON: ${e instanceof Error ? e.message : 'Unknown error'}`;
 			console.debug('Failed to parse LLM state updates:', e);
@@ -70,13 +76,14 @@ export function parseResponse(rawResponse: string): ParsedResponse {
 	} else {
 		// Try to find inline JSON (some models don't use code blocks)
 		const inlineJsonMatch = rawResponse.match(
-			/\{[\s\S]*"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|new_memory|structured_fact_seen|triggered_event)"[\s\S]*\}/
+			/\{[\s\S]*"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|new_memory|structured_fact_seen|triggered_event|vocab_results)"[\s\S]*\}/
 		);
 		if (inlineJsonMatch) {
 			dialogue = rawResponse.replace(inlineJsonMatch[0], '').trim();
 			try {
 				const parsed: LLMStateOutput = JSON.parse(inlineJsonMatch[0]);
 				stateUpdates = convertLLMOutput(parsed);
+				vocabResults = extractVocabResults(parsed);
 			} catch (e) {
 				// Ignore parse errors for inline JSON - might be false positive
 			}
@@ -96,11 +103,13 @@ export function parseResponse(rawResponse: string): ParsedResponse {
 						'respect_delta',
 						'new_memory',
 						'structured_fact_seen',
-						'triggered_event'
+						'triggered_event',
+						'vocab_results'
 					];
 					if (knownKeys.some((k) => k in parsed)) {
 						dialogue = rawResponse.replace(bareJsonMatch[0], '').trim();
 						stateUpdates = convertLLMOutput(parsed);
+						vocabResults = extractVocabResults(parsed);
 					}
 				} catch {
 					// Not valid JSON — ignore
@@ -141,7 +150,19 @@ export function parseResponse(rawResponse: string): ParsedResponse {
 	// Clean up dialogue
 	dialogue = cleanDialogue(dialogue);
 
-	return { dialogue, stateUpdates, parseError };
+	return { dialogue, stateUpdates, vocabResults, parseError };
+}
+
+/** Extract and validate vocab_results from a parsed LLM JSON output. */
+function extractVocabResults(
+	output: LLMStateOutput
+): Array<{ word: string; known: boolean }> | undefined {
+	if (!Array.isArray(output.vocab_results)) return undefined;
+	const results = output.vocab_results
+		.filter((r) => r && typeof r.word === 'string' && typeof r.known === 'boolean')
+		.map((r) => ({ word: (r.word as string).trim(), known: r.known as boolean }))
+		.filter((r) => r.word.length > 0);
+	return results.length > 0 ? results : undefined;
 }
 
 // Convert LLM output format to our StateUpdates format

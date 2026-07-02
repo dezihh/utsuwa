@@ -3,6 +3,15 @@ import type { VocabularyEntry, VocabQuery } from '$lib/types/vocabulary';
 
 const DEFAULT_CHARACTER_ID = 'default';
 
+/** Unbiased Fisher-Yates shuffle — mutates and returns the array. */
+function shuffleInPlace<T>(arr: T[]): T[] {
+	for (let i = arr.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[arr[i], arr[j]] = [arr[j], arr[i]];
+	}
+	return arr;
+}
+
 export async function saveVocabularyEntry(
 	entry: Omit<VocabularyEntry, 'id' | 'createdAt' | 'familiarity'>
 ): Promise<number> {
@@ -47,7 +56,7 @@ export async function getVocabularyEntries(
 			if (query.filter) {
 				entries = entries.filter((e) => e.level === query.filter);
 			}
-			entries.sort(() => Math.random() - 0.5);
+			shuffleInPlace(entries);
 			break;
 
 		case 'review':
@@ -66,7 +75,7 @@ export async function getVocabularyEntries(
 			break;
 
 		case 'random':
-			entries.sort(() => Math.random() - 0.5);
+			shuffleInPlace(entries);
 			break;
 	}
 
@@ -81,6 +90,32 @@ export async function updateVocabularyFamiliarity(
 		familiarity: Math.max(0, Math.min(1, familiarity)),
 		lastReviewed: new Date()
 	});
+}
+
+/**
+ * Apply a learned/struggled delta to all entries matching sourceWord + characterId.
+ * known=true  → +0.2 (4 correct answers to reach "known" threshold 0.8)
+ * known=false → -0.1 (3 consecutive wrong to drop from "known" to "learning")
+ */
+export async function updateVocabularyFamiliarityByWord(
+	characterId: string,
+	sourceWord: string,
+	known: boolean
+): Promise<void> {
+	const needle = sourceWord.trim().toLowerCase();
+	const entries = await db.vocabulary
+		.where('characterId')
+		.equals(characterId)
+		.filter((e) => e.sourceWord.trim().toLowerCase() === needle)
+		.toArray();
+	const delta = known ? 0.2 : -0.1;
+	for (const entry of entries) {
+		if (entry.id === undefined) continue;
+		await db.vocabulary.update(entry.id, {
+			familiarity: Math.max(0, Math.min(1, entry.familiarity + delta)),
+			lastReviewed: new Date()
+		});
+	}
 }
 
 export async function deleteAllVocabulary(characterId?: string): Promise<void> {

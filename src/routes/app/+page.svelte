@@ -69,7 +69,7 @@
 	import { imageSearchStore } from '$lib/stores/image-search.svelte';
 	import { extractVocabTags } from '$lib/utils/vocabulary';
 	import * as vocabularyStorage from '$lib/services/storage/vocabulary';
-	import type { VocabularyEntry } from '$lib/types/vocabulary';
+	import { vocabularyStore } from '$lib/stores/vocabulary.svelte';
 	import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
 	import type { ProviderConfig } from '$lib/types';
 
@@ -133,26 +133,7 @@
 	let currentBubbleSentence = $state('');
 	// Vocabulary words currently loaded into working memory, used for automatic
 	// [lang:xx] injection before TTS so source words keep correct pronunciation.
-	let loadedVocabulary = $state<VocabularyEntry[]>([]);
 	let llmAbortController: AbortController | null = null;
-
-	// Ensure vocabulary source words are wrapped in <lang code="XX"> tags before TTS,
-	// regardless of whether the LLM remembered to preserve them in its response.
-	function injectVocabLangTags(text: string): string {
-		if (loadedVocabulary.length === 0) return text;
-		let result = text;
-		for (const entry of loadedVocabulary) {
-			if (!entry.sourceLang || !entry.sourceWord) continue;
-			const escaped = entry.sourceWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-			// Only wrap bare occurrences — skip text already inside a lang tag.
-			const regex = new RegExp(
-				`(?<!<lang\\s+code=["']?[a-z]{2,3}["']?>)\\b(${escaped})\\b(?!</lang>)`,
-				'giu'
-			);
-			result = result.replace(regex, `<lang code="${entry.sourceLang}">$1</lang>`);
-		}
-		return result;
-	}
 	// Monotonic counter so aborted sends don't overwrite state of the active one.
 	let sendGeneration = $state(0);
 
@@ -403,6 +384,30 @@
 		let dialogue = imageCleaned;
 		const llmUpdates = parsed.stateUpdates;
 
+		// Vocabulary familiarity updates from this turn
+		if (parsed.vocabResults && parsed.vocabResults.length > 0 && settingsStore.isVocabularyEnabled()) {
+			const results = parsed.vocabResults;
+			for (const result of results) {
+				try {
+					await vocabularyStorage.updateVocabularyFamiliarityByWord(
+						currentCharacterId,
+						result.word,
+						result.known
+					);
+				} catch (e) {
+					console.warn('[Vocabulary] Failed to update familiarity:', e);
+				}
+			}
+			try {
+				await vocabularyStore.loadStats(currentCharacterId);
+			} catch { /* non-fatal */ }
+			debugStore.addLog({
+				category: 'memory',
+				title: 'Vocab Familiarity Updated',
+				content: results.map((r) => `${r.word}: ${r.known ? '+0.2 (known)' : '-0.1 (struggled)'}`).join('\n')
+			});
+		}
+
 		// Close image modal if LLM requested it
 		if (shouldCloseImages) {
 			imageSearchStore.closeModal();
@@ -432,12 +437,6 @@
 
 		if (vocabTags.length > 0 && settingsStore.isVocabularyEnabled()) {
 			const vocabWords: string[] = [];
-			const newEntries: VocabularyEntry[] = [];
-			const speechSettings = modulesStore.getModuleSettings('speech');
-			const activeTTSProvider = speechSettings?.activeProvider as string | undefined;
-			const omniAltEnabled =
-				activeTTSProvider === 'omnivoice' &&
-				!!settingsStore.getProviderConfig('omnivoice').omnivoiceAltEnabled;
 			for (const tag of vocabTags) {
 				try {
 					const entries = await vocabularyStorage.getVocabularyEntries({
@@ -447,23 +446,13 @@
 						characterId: currentCharacterId
 					});
 					if (entries.length > 0) {
-						newEntries.push(...entries);
-						entries.forEach((e) => {
-							// For OmniVoice dual-voice setups, wrap the source word in <lang code="xx">
-							// so the LLM is likely to preserve the tag when it repeats the word.
-							const source =
-								omniAltEnabled && e.sourceLang
-									? `<lang code="${e.sourceLang}">${e.sourceWord}</lang>`
-									: e.sourceWord;
-							vocabWords.push(`${source} = ${e.targetWord}`);
-						});
+						entries.forEach((e) => vocabWords.push(`${e.sourceWord} = ${e.targetWord}`));
 					}
 				} catch (e) {
 					console.warn('[Vocabulary] Failed to load entries:', e);
 				}
 			}
 			if (vocabWords.length > 0) {
-				loadedVocabulary = newEntries;
 				addTurnToWorkingMemory({
 					role: 'system',
 					sessionId: getWorkingMemory().currentSessionId,
@@ -1005,8 +994,7 @@
 
 			const enqueueTTS = (segment: SpeechSegment) => {
 				if (!ttsOptions) return;
-				// Ensure vocabulary source words keep their language tags for correct TTS pronunciation.
-				const injectedSegment = { ...segment, text: injectVocabLangTags(segment.text) };
+				const injectedSegment = segment;
 				sessionSegments.push(injectedSegment);
 				if (!ttsStarted) {
 					ttsStarted = true;
@@ -1145,7 +1133,7 @@
 				vrmStore.startTalking(displayText);
 				onTTSStarted();
 				const segments = splitIntoSegments(
-					injectVocabLangTags(cleanedResponse),
+					cleanedResponse,
 					ttsConfig?.language || undefined,
 					isChatterbox
 				);

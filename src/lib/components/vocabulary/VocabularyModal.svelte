@@ -22,6 +22,8 @@
 	let isImporting = $state(false);
 	let showDeleteConfirm = $state(false);
 	let isDeleting = $state(false);
+	let importSourceLang = $state('de');
+	let importTargetLang = $state('es');
 
 	// Current character ID for multi-character isolation
 	const currentCharacterId = $derived(settingsStore.getActiveProfileId());
@@ -122,8 +124,8 @@
 					const cols = parseCSVLine(line);
 					if (cols.length < 2) return null;
 					return {
-						sourceLang: 'de',
-						targetLang: 'es',
+						sourceLang: importSourceLang,
+						targetLang: importTargetLang,
 						sourceWord: cols[0] || '',
 						targetWord: cols[1] || '',
 						context: cols[2] || undefined,
@@ -207,6 +209,50 @@
 
 		<!-- CSV Upload -->
 		<div class="section-label">Import from CSV</div>
+
+		<!-- Language pair -->
+		<div class="lang-row">
+			<label class="lang-field">
+				<span class="lang-label">Learning language (source)</span>
+				<select bind:value={importSourceLang} class="lang-select">
+					<option value="de">German (de)</option>
+					<option value="en">English (en)</option>
+					<option value="es">Spanish (es)</option>
+					<option value="fr">French (fr)</option>
+					<option value="it">Italian (it)</option>
+					<option value="pt">Portuguese (pt)</option>
+					<option value="ja">Japanese (ja)</option>
+					<option value="zh">Chinese (zh)</option>
+					<option value="ko">Korean (ko)</option>
+					<option value="ru">Russian (ru)</option>
+					<option value="nl">Dutch (nl)</option>
+					<option value="pl">Polish (pl)</option>
+					<option value="tr">Turkish (tr)</option>
+					<option value="ar">Arabic (ar)</option>
+				</select>
+			</label>
+			<span class="lang-arrow">→</span>
+			<label class="lang-field">
+				<span class="lang-label">Native language (target)</span>
+				<select bind:value={importTargetLang} class="lang-select">
+					<option value="de">German (de)</option>
+					<option value="en">English (en)</option>
+					<option value="es">Spanish (es)</option>
+					<option value="fr">French (fr)</option>
+					<option value="it">Italian (it)</option>
+					<option value="pt">Portuguese (pt)</option>
+					<option value="ja">Japanese (ja)</option>
+					<option value="zh">Chinese (zh)</option>
+					<option value="ko">Korean (ko)</option>
+					<option value="ru">Russian (ru)</option>
+					<option value="nl">Dutch (nl)</option>
+					<option value="pl">Polish (pl)</option>
+					<option value="tr">Turkish (tr)</option>
+					<option value="ar">Arabic (ar)</option>
+				</select>
+			</label>
+		</div>
+
 		<div
 			class="drop-zone"
 			class:dragging={isDragging}
@@ -486,6 +532,51 @@
 
 	:global(.dark) .section-label.danger {
 		color: oklch(70% 0.15 25);
+	}
+
+	.lang-row {
+		display: flex;
+		align-items: flex-end;
+		gap: 0.75rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.lang-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		flex: 1;
+	}
+
+	.lang-label {
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-tertiary);
+	}
+
+	.lang-select {
+		padding: 0.375rem 0.5rem;
+		border-radius: 8px;
+		border: 1px solid rgba(0, 0, 0, 0.1);
+		background: var(--surface-1, #f8f8f8);
+		color: var(--text-primary);
+		font-size: 0.8rem;
+		cursor: pointer;
+	}
+
+	:global(.dark) .lang-select {
+		background: #2a2a2a;
+		border-color: rgba(255, 255, 255, 0.1);
+		color: var(--text-primary);
+	}
+
+	.lang-arrow {
+		font-size: 1rem;
+		color: var(--text-tertiary);
+		padding-bottom: 0.35rem;
+		flex-shrink: 0;
 	}
 
 	.drop-zone {

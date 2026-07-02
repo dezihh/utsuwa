@@ -288,7 +288,8 @@ After your response, you may optionally output state changes as JSON:
   "mood_change": { "emotion": "emotion_name", "intensity_delta": number },
   "energy_delta": number,
   "new_memory": null | "fact to remember about them",
-  "structured_fact_seen": { "type": "vocab", "key": "word", "value": "meaning", "category": "topic" }
+  "structured_fact_seen": { "type": "vocab", "key": "word", "value": "meaning", "category": "topic" },
+  "vocab_results": [{"word": "sourceWord", "known": true}, ...]
 }
 \`\`\`
 
@@ -298,7 +299,7 @@ CRITICAL: The JSON block above contains INTERNAL system commands. The keys "new_
 ${buildMemoryTagInstructions()}
 
 NOTE: In Companion Mode, only mood and energy can change. Do NOT suggest affection, trust, intimacy, comfort, or respect changes - these relationship stats are disabled.${ctx.vocabularyEnabled ? `
-- VOCABULARY: If you see "Vocabulary for the next exercise" in the conversation, the words are already loaded. Preserve any <lang code="XX"> tags wrapped around source words so they keep the correct pronunciation. Do NOT output another [vocab:...] tag — just use the words naturally in your response.` : ''}
+- VOCABULARY: If you see "Vocabulary for the next exercise" in the conversation, the words are already loaded. Do NOT output another [vocab:...] tag — just use the words naturally in your response.` : ''}
 </instructions>`);
 
 	// Place the language rule RIGHT AFTER instructions so it is fresh and not
@@ -561,7 +562,8 @@ After your dialogue response, you may optionally output state changes as JSON:
   "comfort_delta": number,
   "new_memory": null | "fact to remember about them",
   "triggered_event": null | "event_id",
-  "structured_fact_seen": null | { "type": "vocab", "key": "word", "value": "meaning", "category": "topic" }
+  "structured_fact_seen": null | { "type": "vocab", "key": "word", "value": "meaning", "category": "topic" },
+  "vocab_results": [{"word": "sourceWord", "known": true}, ...]
 }
 \`\`\`
 
@@ -1060,14 +1062,20 @@ function buildVocabularyLayer(ctx: PromptContext): string | null {
 ${metaBlock}The user has imported vocabulary words. You do NOT see them in this prompt — you must fetch them with a tag.
 
 When the user wants to practice vocabulary or learn new words, use ONE of these tags:
-  [vocab:random:5] — 5 random words to practice
-  [vocab:review:5] — 5 weakest words (lowest familiarity, not reviewed recently)
+  [vocab:random:20] — 20 random words to practice
+  [vocab:review:20] — 20 weakest words (lowest familiarity, not reviewed recently)
   [vocab:category:${exampleCategory}:10] — 10 words from a specific category
   [vocab:level:${exampleLevel}:20] — 20 words at a specific level
 
-The tag is hidden from the user. The words will appear as "Vocabulary for the next exercise" in your next prompt. Source words may already be wrapped in <lang code="XX"> tags (e.g. <lang code="es">casa</lang>) — preserve those tags when you repeat the words so pronunciation stays correct.
+The tag is hidden from the user. The words will appear as "Vocabulary for the next exercise" in your next prompt.
 
 When you see the vocabulary, simply use it conversationally — quiz, translate, or explain it.
+
+AFTER a vocabulary exercise turn (i.e. once you have actively tested each word), emit a vocab_results array in your JSON block:
+  "vocab_results": [{"word": "<sourceWord>", "known": true|false}, ...]
+- known: true  — the user demonstrated they know the word (correct translation/usage)
+- known: false — the user struggled, guessed wrong, or needed help
+Only emit vocab_results when words were actively tested in THAT turn. One entry per tested word.
 
 If the user asks which categories or levels are available, answer directly from the list above.
 Do NOT output another [vocab:...] tag if words are already loaded — just use them naturally.
