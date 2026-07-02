@@ -1,5 +1,4 @@
 import { browser } from '$app/environment';
-import { isTauri } from '$lib/services/platform/platform';
 
 type UpdateStatus =
 	| 'idle'
@@ -37,7 +36,7 @@ function createUpdaterStore() {
 	const currentVersion = `v${import.meta.env.VITE_APP_VERSION}`;
 
 	async function check(opts: { silent?: boolean } = {}) {
-		if (!browser || !isTauri()) return;
+		if (!__IS_DESKTOP__) return;
 		if (status === 'checking' || status === 'downloading') return;
 
 		status = 'checking';
@@ -68,7 +67,7 @@ function createUpdaterStore() {
 	}
 
 	async function install() {
-		if (!pending) return;
+		if (!__IS_DESKTOP__ || !pending) return;
 
 		status = 'downloading';
 		downloaded = 0;

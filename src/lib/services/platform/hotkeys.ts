@@ -1,4 +1,3 @@
-import { isTauri } from './platform';
 
 export type HotkeyAction = 'pushToTalk' | 'toggleOverlay' | 'focusChat';
 
@@ -30,7 +29,7 @@ export async function registerHotkey(
 	onKeyDown: HotkeyHandler,
 	onKeyUp?: KeyUpHandler
 ): Promise<boolean> {
-	if (!isTauri()) return false;
+	if (!__IS_DESKTOP__) return false;
 
 	try {
 		const { register } = await import(/* @vite-ignore */ '@tauri-apps/plugin-global-shortcut');
@@ -62,7 +61,7 @@ export async function registerHotkey(
  * Unregister a global hotkey (Tauri only, no-op on web)
  */
 export async function unregisterHotkey(action: HotkeyAction): Promise<void> {
-	if (!isTauri()) return;
+	if (!__IS_DESKTOP__) return;
 
 	const handler = handlers.get(action);
 	if (!handler) return;
@@ -89,7 +88,7 @@ export async function unregisterHotkey(action: HotkeyAction): Promise<void> {
  * Unregister all global hotkeys (Tauri only, no-op on web)
  */
 export async function unregisterAllHotkeys(): Promise<void> {
-	if (!isTauri()) return;
+	if (!__IS_DESKTOP__) return;
 
 	try {
 		const { unregisterAll } = await import(/* @vite-ignore */ '@tauri-apps/plugin-global-shortcut');
@@ -105,5 +104,5 @@ export async function unregisterAllHotkeys(): Promise<void> {
  * Check if global hotkeys are supported in the current environment
  */
 export function isHotkeysSupported(): boolean {
-	return isTauri();
+	return __IS_DESKTOP__;
 }

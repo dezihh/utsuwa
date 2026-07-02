@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Icon } from '$lib/components/ui';
-	import { isTauri } from '$lib/services/platform/platform';
 
 	interface Props {
 		onUpload: (file: File) => void;
@@ -13,7 +12,7 @@
 	// Tauri's webview intercepts native drag-and-drop, so dataTransfer.files
 	// is empty. Use Tauri's own drag-drop event + fs plugin to read the file.
 	$effect(() => {
-		if (!isTauri()) return;
+		if (!__IS_DESKTOP__) return;
 
 		let cancelled = false;
 		let unlisten: (() => void) | undefined;

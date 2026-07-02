@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { Icon } from '$lib/components/ui';
 	import { browser } from '$app/environment';
-	import { isTauri } from '$lib/services/platform/platform';
 	import { sttStore } from '$lib/stores/stt.svelte';
 	import { prepareImage, UnsupportedImageError, type PreparedImage } from '$lib/services/storage/keepsakes';
 	import { unlockAudioContext } from '$lib/services/tts/index';
@@ -172,7 +171,7 @@
 	}
 
 	$effect(() => {
-		if (!isTauri() || overlay) return;
+		if (!__IS_DESKTOP__ || overlay) return;
 		let cancelled = false;
 		let unlisten: (() => void) | undefined;
 		(async () => {

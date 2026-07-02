@@ -66,7 +66,7 @@
 
 	// Always open the docs subdomain; on desktop route it to the system browser.
 	function handleDocsClick(e: MouseEvent) {
-		if (isTauri()) {
+		if (__IS_DESKTOP__) {
 			e.preventDefault();
 			import(/* @vite-ignore */ '@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(DOCS_URL));
 		}

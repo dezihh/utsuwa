@@ -36,7 +36,7 @@
 		// In the desktop app, marketing/docs/blog links open in the system
 		// browser instead of navigating the webview.
 		document.addEventListener('click', (e) => {
-			if (!isDesktopBuild()) return;
+			if (!__IS_DESKTOP__) return;
 			const anchor = (e.target as Element).closest('a');
 			if (!anchor) return;
 			const href = anchor.getAttribute('href');
