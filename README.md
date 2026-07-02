@@ -46,7 +46,7 @@
 - **Scheduled Reminders & Open Tasks**: The companion can set time-based reminders (e.g., "remind me in 5 minutes to check the coffee") using inline `[reminder:5min]...[/reminder]` tags. Reminders are stored locally per session, polled in the background, and when triggered they are injected into the LLM context as a system message so the companion can react. The trigger itself is logged in the debug panel and does not appear in the visible chat history. Non-image reminders are also persisted as semantic facts with `source: open-task` so the companion keeps them in context until resolved. Upcoming reminders and open tasks are shown in a bell dropdown in the chat header, where you can also delete them.
 - **Image Search via SearxNG**: The companion can search for images on the web using SearxNG. When the user asks for pictures (e.g., "show me images of cats"), the companion outputs a `[search_image:cats]` tag and images appear in a popup modal. The companion can also close the popup with `[close_images]`. Requires a SearxNG instance (configured via `SEARXNG_URL` environment variable or MCP Tools settings).
 - **External Tools via MCP**: Expand your companion's abilities by connecting external tool servers under **Settings > MCP Servers**. For example, she can fetch an image from a URL you share and describe its contents directly, without showing technical details in chat or speech.
-- **Vocabulary Training System**: Dedicated vocabulary management separate from the Fact Library. Import vocabulary via CSV upload (drag & drop or paste), then practice with the companion using tag-based retrieval. The companion outputs `[vocab:MODE:FILTER:COUNT]` tags (e.g., `[vocab:category:Begrüßung:10]`, `[vocab:review:5]`, `[vocab:level:A1:20]`) and receives only the requested subset in the next prompt — never all words at once. Familiarity tracking per word. The prompt also exposes the available categories, levels, and source/target language pair derived from your imported vocabulary, so the companion can answer "which categories do I have?" or pick appropriate levels automatically. Enable/disable in Settings > Data.
+- **Vocabulary Training System**: Dedicated vocabulary management separate from the Fact Library. Import vocabulary via CSV upload (drag & drop or paste), then practice with the companion using tag-based retrieval. The companion outputs `[vocab:MODE:FILTER:COUNT]` tags (e.g., `[vocab:category:Begrüßung:10]`, `[vocab:review:20]`, `[vocab:level:A1:20]`) and receives only the requested subset in the next prompt — never all words at once. Spaced-repetition familiarity tracking per word: the companion signals which words the user knew or struggled with via a `vocab_results` JSON block, and scores update automatically after each exercise. The prompt also exposes the available categories, levels, and source/target language pair derived from your imported vocabulary, so the companion can answer "which categories do I have?" or pick appropriate levels automatically. Enable/disable in Settings > Data.
 - **Desktop App** *(beta, macOS only)*: Native desktop app with transparent overlay mode — your companion floats on your desktop
 
 ### Local-First Storage
@@ -219,7 +219,7 @@ Open the **Memory Inspector** (database icon in the top-left toolbar) and click 
 
 A dedicated system for language learning, separate from the general Fact Library:
 
-- **CSV Import**: Upload vocabulary lists via drag & drop or paste. Format:
+- **CSV Import**: Upload vocabulary lists via drag & drop or paste. Select the **language pair** (learning language → native language) in the import form before uploading — this ensures correct pronunciation tagging in the TTS pipeline. Format:
   ```csv
   sourceWord,targetWord,context,category,level,tags
   Hola,Hallo,"¡Hola! ¿Qué tal?",Begrüßung,A1,grußformel
@@ -228,11 +228,11 @@ A dedicated system for language learning, separate from the general Fact Library
   ```
   `sourceWord` is the word in the language you want to learn. `targetWord` is the translation in your native language.
 - **Tag-Based Retrieval**: The companion never sees all vocabulary at once. Instead, it uses tags to request subsets:
-  - `[vocab:random:5]` — 5 random words
-  - `[vocab:review:5]` — 5 words with lowest familiarity (weakest first)
+  - `[vocab:random:20]` — 20 random words
+  - `[vocab:review:20]` — 20 words with lowest familiarity (weakest first)
   - `[vocab:category:Begrüßung:10]` — 10 words from a category
   - `[vocab:level:A1:20]` — 20 words at a specific level
-- **Familiarity Tracking**: Each word has a familiarity score (0.0–1.0) that updates as the user practices
+- **Spaced Repetition (SRS)**: After each exercise turn, the companion emits a `vocab_results` JSON block rating each word as `known` or not. Familiarity scores update automatically: +0.2 per correct answer (4 correct = "known"), −0.1 per wrong answer. The `review` mode always surfaces the weakest, least-recently-reviewed words first.
 - **Prompt-Safe**: Only the requested subset is injected into the prompt (~150 tokens for 20 words), never the full list
 - **Enable/Disable**: Toggle vocabulary training in Settings > Data
 
@@ -242,14 +242,12 @@ The vocabulary system works in two turns. Here's the workflow:
 
 | Step | What you say | What happens |
 |---|---|---|
-| 1. Load words | *"Gib mir neue Vokabeln"* / *"Give me new vocabulary"* | The companion outputs a hidden `[vocab:random:5]` tag. The requested words are fetched from IndexedDB and injected into the next prompt's conversation context. |
-| 2. Use the words | *"Welche Wörter haben wir heute gelernt?"* / *"What words did we learn today?"* | The companion sees the loaded words in context and lists them. For OmniVoice with dual-voice configured, Spanish words are spoken by the alternative voice with correct pronunciation. |
-| 3. Quiz mode | *"Frag mich die Vokabeln ab"* / *"Quiz me on the words"* | The companion asks word by word — you translate back. |
-| 4. Practice weak words | *"Üben wir die schwierigen"* / *"Let's practice the hard ones"* | Companion outputs `[vocab:review:5]` to load the weakest words. |
+| 1. Load words | *"Gib mir neue Vokabeln"* / *"Give me new vocabulary"* | The companion outputs a hidden `[vocab:random:20]` tag. The requested words are fetched from IndexedDB and injected into the next prompt's conversation context. |
+| 2. Use the words | *"Welche Wörter haben wir heute gelernt?"* / *"What words did we learn today?"* | The companion sees the loaded words in context and lists them. |
+| 3. Quiz mode | *"Frag mich die Vokabeln ab"* / *"Quiz me on the words"* | The companion asks word by word — you translate back. After the exercise, it emits `vocab_results` to update familiarity scores automatically. |
+| 4. Practice weak words | *"Üben wir die schwierigen"* / *"Let's practice the hard ones"* | Companion outputs `[vocab:review:20]` to load the 20 weakest words. |
 
 **Key principle:** After step 1, do NOT say "read the words aloud" — that triggers another tag. Instead, ask conversationally: "What words did I learn?", "Quiz me!", or "Explain the first one." The words are already in context; the companion just needs a natural prompt to engage with them.
-
-**OmniVoice dual-voice integration:** When Spanish vocabulary is loaded and the companion outputs words with `[lang:es]` tags, OmniVoice switches to the alternative voice with Spanish pronunciation automatically. Configure this under **Settings > TTS > OmniVoice** (enable alternative voice and set alternative language to `es`).
 
 ### Desktop Application (Beta)
 

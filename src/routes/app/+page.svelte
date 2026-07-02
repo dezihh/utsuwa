@@ -35,7 +35,7 @@
 	import { onMount } from 'svelte';
 
 	// V2 companion system imports
-	import { buildSystemPrompt, type PromptContext } from '$lib/ai/prompt-builder';
+	import { buildSystemPrompt, buildExtractionSystemPrompt, type PromptContext } from '$lib/ai/prompt-builder';
 	import { parseResponse, validateStateUpdates, extractPotentialFacts } from '$lib/ai/response-parser';
 	import { calculateBaselineUpdates, analyzeMessage } from '$lib/engine/heuristics';
 	import { mergeUpdates, checkAndApplyStageTransition } from '$lib/engine/state-updates';
@@ -364,7 +364,11 @@
 	}
 
 	// Process companion response with v2 system
-	async function processCompanionResponse(userMessage: string, companionResponse: string): Promise<string> {
+	async function processCompanionResponse(
+		userMessage: string,
+		companionResponse: string,
+		llmMeta?: { provider?: string; model?: string; apiKey?: string; baseURL?: string; hasImages?: boolean }
+	): Promise<string> {
 		const state = characterStore.state;
 
 		const baselineUpdates = calculateBaselineUpdates(userMessage, state);
@@ -382,7 +386,31 @@
 		});
 		const { queries: imageQueries, shouldClose: shouldCloseImages, cleanedText: imageCleaned } = extractImageSearchTags(parsed.dialogue);
 		let dialogue = imageCleaned;
-		const llmUpdates = parsed.stateUpdates;
+		let llmUpdates = parsed.stateUpdates;
+
+		// Decoupled extraction fallback: if the model skipped the inline JSON block,
+		// fire a dedicated forced-JSON call to extract mood + memory from the exchange.
+		// This makes small and local models reliable without touching the streaming path.
+		if (!llmUpdates && llmMeta?.provider) {
+			try {
+				const { extractStateUpdates } = await import('$lib/services/chat/client-chat');
+				const extracted = await extractStateUpdates({
+					provider: llmMeta.provider as import('$lib/types').LLMProvider,
+					model: llmMeta.model ?? '',
+					apiKey: llmMeta.apiKey,
+					baseURL: llmMeta.baseURL,
+					system: buildExtractionSystemPrompt(llmMeta.hasImages),
+					userMessage,
+					reply: dialogue
+				});
+				if (extracted) {
+					llmUpdates = parseResponse(extracted).stateUpdates;
+					debugStore.addLog({ category: 'memory', title: 'Extraction Fallback', content: extracted });
+				}
+			} catch (e) {
+				console.debug('[Extraction] Fallback failed:', e);
+			}
+		}
 
 		// Vocabulary familiarity updates from this turn
 		if (parsed.vocabResults && parsed.vocabResults.length > 0 && settingsStore.isVocabularyEnabled()) {
@@ -685,7 +713,7 @@
 	// Build system prompt
 	async function buildCompanionSystemPrompt(
 		userMessage: string,
-		options?: { continueMode?: boolean; continueFromText?: string }
+		options?: { continueMode?: boolean; continueFromText?: string; hasImages?: boolean }
 	): Promise<string> {
 		const state = characterStore.state;
 		const persona = personaStore.activeCard;
@@ -756,7 +784,8 @@
 			memoryBudget,
 			contextSize,
 			nsfwMode: !!consciousnessSettings.nsfwMode,
-			sessionStartedAt: getWorkingMemory().sessionStartedAt
+			sessionStartedAt: getWorkingMemory().sessionStartedAt,
+			hasImages: options?.hasImages
 		};
 
 		const systemPrompt = buildSystemPrompt(context);
@@ -1123,7 +1152,12 @@
 
 			speechBuffer?.flush();
 			isTyping = false;
-			const cleanedResponse = await processCompanionResponse(content, fullContent);
+			const cleanedResponse = await processCompanionResponse(content, fullContent, {
+				provider,
+				model: selectedModel,
+				apiKey: apiKey || undefined,
+				baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl
+			});
 			const displayText = stripAllTags(cleanedResponse);
 			chatStore.updateLastMessage(displayText, stripForApiContext(cleanedResponse));
 
