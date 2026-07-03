@@ -10,7 +10,7 @@ import { getChatBaseUrl } from '$lib/services/providers/local-endpoints';
 import { normalizeChatBaseURL } from '$lib/services/chat/base-url';
 import { isLocalLLMProvider } from '$lib/services/providers/local-endpoints';
 import type { LLMProvider } from '$lib/types';
-import { debugStore } from '$lib/stores/debug.svelte';
+
 
 interface TextPart {
 	type: 'text';
@@ -46,6 +46,11 @@ interface LLMResponse {
 		};
 		finish_reason: string;
 	}>;
+}
+
+function logMcp(event: string, details: Record<string, unknown>) {
+	// eslint-disable-next-line no-console
+	console.log(`[MCP] ${event}`, JSON.stringify(details, null, 2));
 }
 
 const MAX_TOOL_ROUNDS = 5;
@@ -220,7 +225,7 @@ Already written (do not repeat):
 	let finalText = '';
 
 	try {
-	debugStore.logMcp('chat start', { model, toolCount: tools.length, serverCount: servers.length });
+	logMcp('chat start', { model, toolCount: tools.length, serverCount: servers.length });
 	// Agentic loop
 	for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
 		const response = await llmRequest(chatUrl, model, llmMessages, tools, apiKey);
@@ -229,7 +234,7 @@ Already written (do not repeat):
 		if (!choice) throw new Error('Empty LLM response');
 
 		const assistantMsg = choice.message;
-		debugStore.logMcp('chat LLM response', { round, content: assistantMsg.content, tool_calls: assistantMsg.tool_calls });
+		logMcp('chat LLM response', { round, content: assistantMsg.content, tool_calls: assistantMsg.tool_calls });
 
 		// Some models emit tool calls as <tool_call> text tags instead of the
 		// OpenAI tool_calls array. Fall back to parsing them from the content.
@@ -237,14 +242,14 @@ Already written (do not repeat):
 		if (toolCalls.length === 0) {
 			toolCalls = extractToolCallsFromText(assistantMsg.content);
 			if (toolCalls.length > 0) {
-				debugStore.logMcp('chat fallback tool_calls parsed', { round, toolCalls });
+				logMcp('chat fallback tool_calls parsed', { round, toolCalls });
 			}
 		}
 
 		// No tool calls — we have the final answer
 		if (toolCalls.length === 0) {
 			finalText = assistantMsg.content ?? '';
-			debugStore.logMcp('chat final answer', { round, finalText });
+			logMcp('chat final answer', { round, finalText });
 			break;
 		}
 
@@ -277,7 +282,7 @@ Already written (do not repeat):
 			})
 		);
 
-		debugStore.logMcp('chat tool results', { round, results: toolResults.map((r) => ({ name: r.name, content: r.content.slice(0, 500) })) });
+		logMcp('chat tool results', { round, results: toolResults.map((r) => ({ name: r.name, content: r.content.slice(0, 500) })) });
 
 		// Add tool results to message history
 		for (const r of toolResults) {

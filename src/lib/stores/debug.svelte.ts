@@ -13,8 +13,6 @@ export interface DebugSettings {
 	logSpeechArtifacts: boolean;
 	/** Log each TTS segment with language and assigned voice */
 	logTtsSegments: boolean;
-	/** Log MCP tool calls, responses, and errors */
-	logMcp: boolean;
 }
 
 const STORAGE_KEY = 'utsuwa-debug-settings';
@@ -25,8 +23,7 @@ const DEFAULT_SETTINGS: DebugSettings = {
 	logSessionLifecycle: true,
 	logFactLibrary: true,
 	logSpeechArtifacts: true,
-	logTtsSegments: true,
-	logMcp: true
+	logTtsSegments: true
 };
 
 function createDebugStore() {
@@ -131,14 +128,6 @@ function createDebugStore() {
 		});
 	}
 
-	function logMcp(event: string, details: Record<string, unknown>) {
-		if (!settings.logMcp) return;
-		addLog({
-			category: 'mcp',
-			title: event,
-			content: JSON.stringify(details, null, 2)
-		});
-	}
 
 	return {
 		// Settings
@@ -154,7 +143,6 @@ function createDebugStore() {
 		logSpeechArtifact,
 		logTTSSegment,
 		logTTSRequest,
-		logMcp
 	};
 }
 

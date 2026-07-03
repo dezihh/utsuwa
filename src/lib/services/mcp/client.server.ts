@@ -5,9 +5,14 @@
  */
 
 import type { McpServerConfig, McpTool, McpToolResult } from '$lib/types/mcp';
-import { debugStore } from '$lib/stores/debug.svelte';
+
 
 // ── JSON-RPC helpers ─────────────────────────────────────────────────────────
+
+function logMcp(event: string, details: Record<string, unknown>) {
+	// eslint-disable-next-line no-console
+	console.log(`[MCP] ${event}`, JSON.stringify(details, null, 2));
+}
 
 let _idCounter = 1;
 
@@ -42,13 +47,13 @@ async function httpRpc(url: string, method: string, params: unknown = {}): Promi
 	};
 	if (sessionId) headers['mcp-session-id'] = sessionId;
 
-	debugStore.logMcp('HTTP request', { url: normalizedUrl, method, params, hasSessionId: !!sessionId });
+	logMcp('HTTP request', { url: normalizedUrl, method, params, hasSessionId: !!sessionId });
 
 	const res = await fetch(normalizedUrl, { method: 'POST', headers, body });
 
 	if (!res.ok) {
 		const errText = await res.text();
-		debugStore.logMcp('HTTP error', { url: normalizedUrl, method, status: res.status, body: errText });
+		logMcp('HTTP error', { url: normalizedUrl, method, status: res.status, body: errText });
 		throw new Error(`MCP HTTP error ${res.status}: ${errText}`);
 	}
 
@@ -61,16 +66,16 @@ async function httpRpc(url: string, method: string, params: unknown = {}): Promi
 	// Streamable HTTP: server may respond with SSE
 	if (contentType.includes('text/event-stream')) {
 		const result = parseFirstSseResult(await res.text());
-		debugStore.logMcp('HTTP response (SSE)', { url: normalizedUrl, method, result });
+		logMcp('HTTP response (SSE)', { url: normalizedUrl, method, result });
 		return result;
 	}
 
 	const json = (await res.json()) as { result?: unknown; error?: { message: string } };
 	if (json.error) {
-		debugStore.logMcp('HTTP JSON-RPC error', { url: normalizedUrl, method, error: json.error });
+		logMcp('HTTP JSON-RPC error', { url: normalizedUrl, method, error: json.error });
 		throw new Error(`MCP error: ${json.error.message}`);
 	}
-	debugStore.logMcp('HTTP response', { url: normalizedUrl, method, result: json.result });
+	logMcp('HTTP response', { url: normalizedUrl, method, result: json.result });
 	return json.result;
 }
 
@@ -221,7 +226,7 @@ async function httpInitialize(url: string) {
 /** List all tools from a single MCP server */
 export async function listTools(config: McpServerConfig): Promise<McpTool[]> {
 	try {
-		debugStore.logMcp('listTools start', { server: config.name, url: config.url, transport: config.transport });
+		logMcp('listTools start', { server: config.name, url: config.url, transport: config.transport });
 		let result: unknown;
 		if (config.transport === 'http') {
 			await httpInitialize(config.url!);
@@ -243,11 +248,11 @@ export async function listTools(config: McpServerConfig): Promise<McpTool[]> {
 			description: t.description ?? '',
 			inputSchema: (t.inputSchema ?? { type: 'object' }) as McpTool['inputSchema']
 		}));
-		debugStore.logMcp('listTools result', { server: config.name, toolCount: mapped.length, tools: mapped.map((t) => t.name) });
+		logMcp('listTools result', { server: config.name, toolCount: mapped.length, tools: mapped.map((t) => t.name) });
 		return mapped;
 	} catch (err) {
 		const error = err instanceof Error ? err.message : String(err);
-		debugStore.logMcp('listTools error', { server: config.name, error });
+		logMcp('listTools error', { server: config.name, error });
 		console.error(`[MCP] listTools failed for "${config.name}":`, err);
 		return [];
 	}
@@ -260,7 +265,7 @@ export async function callTool(
 	args: Record<string, unknown>
 ): Promise<McpToolResult> {
 	try {
-		debugStore.logMcp('callTool start', { server: config.name, toolName, args });
+		logMcp('callTool start', { server: config.name, toolName, args });
 		let result: unknown;
 		if (config.transport === 'http') {
 			await httpInitialize(config.url!);
@@ -277,11 +282,11 @@ export async function callTool(
 			.join('\n');
 
 		const output = text || JSON.stringify(result);
-		debugStore.logMcp('callTool result', { server: config.name, toolName, content: output });
+		logMcp('callTool result', { server: config.name, toolName, content: output });
 		return { id: '', toolName, content: output, isError: false };
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
-		debugStore.logMcp('callTool error', { server: config.name, toolName, error: msg });
+		logMcp('callTool error', { server: config.name, toolName, error: msg });
 		return { id: '', toolName, content: `Error: ${msg}`, isError: true };
 	}
 }
