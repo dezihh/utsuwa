@@ -23,9 +23,17 @@ function rpcRequest(method: string, params: unknown = {}) {
 /** Per-URL MCP session IDs returned by Streamable HTTP initialize responses. */
 const httpSessionIds = new Map<string, string>();
 
+function normalizeMcpUrl(url: string): string {
+	// MCP Streamable HTTP endpoints are usually mounted under a path ending in
+	// a slash. A trailing slash avoids 307 redirects that some fetch
+	// implementations follow with a changed method (leading to 405 errors).
+	return url.replace(/\/?$/, '/');
+}
+
 async function httpRpc(url: string, method: string, params: unknown = {}): Promise<unknown> {
+	const normalizedUrl = normalizeMcpUrl(url);
 	const body = JSON.stringify(rpcRequest(method, params));
-	const sessionId = httpSessionIds.get(url);
+	const sessionId = httpSessionIds.get(normalizedUrl);
 
 	const headers: Record<string, string> = {
 		'Content-Type': 'application/json',
@@ -33,7 +41,7 @@ async function httpRpc(url: string, method: string, params: unknown = {}): Promi
 	};
 	if (sessionId) headers['mcp-session-id'] = sessionId;
 
-	const res = await fetch(url, { method: 'POST', headers, body });
+	const res = await fetch(normalizedUrl, { method: 'POST', headers, body });
 
 	if (!res.ok) {
 		throw new Error(`MCP HTTP error ${res.status}: ${await res.text()}`);
@@ -173,20 +181,21 @@ async function stdioRpc(config: McpServerConfig, method: string, params: unknown
 // ── HTTP initialize (called once before listing tools) ───────────────────────
 
 async function httpInitialize(url: string) {
+	const normalizedUrl = normalizeMcpUrl(url);
 	try {
-		await httpRpc(url, 'initialize', {
+		await httpRpc(normalizedUrl, 'initialize', {
 			protocolVersion: '2024-11-05',
 			capabilities: { tools: {} },
 			clientInfo: { name: 'utsuwa', version: '1.0.0' }
 		});
 		// Send initialized notification (fire and forget)
-		const sessionId = httpSessionIds.get(url);
+		const sessionId = httpSessionIds.get(normalizedUrl);
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
 			Accept: 'application/json, text/event-stream'
 		};
 		if (sessionId) headers['mcp-session-id'] = sessionId;
-		fetch(url, {
+		fetch(normalizedUrl, {
 			method: 'POST',
 			headers,
 			body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })

@@ -68,14 +68,19 @@ function extractImageFromToolResult(content: string): { mimeType: string; data: 
 }
 
 function toolsToOpenAI(tools: McpTool[]) {
-	return tools.map((t) => ({
-		type: 'function',
-		function: {
-			name: t.name,
-			description: t.description,
-			parameters: t.inputSchema
-		}
-	}));
+	return tools.map((t) => {
+		// Only send the fields the OpenAI tools schema expects.
+		const parameters: Record<string, unknown> = { ...t.inputSchema };
+		delete parameters['outputSchema'];
+		return {
+			type: 'function' as const,
+			function: {
+				name: t.name,
+				description: t.description,
+				parameters
+			}
+		};
+	});
 }
 
 /** Send a non-streaming request to an OpenAI-compatible endpoint */
