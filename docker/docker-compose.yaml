@@ -15,6 +15,7 @@ services:
       PNPM_HOME: /pnpm
       UTSUWA_PROFILE_SYNC_ENABLED: "true"
       UTSUWA_DATA_DIR: "/tmp/utsuwa-data"
+      ALLOW_LOCAL_PROVIDER_HOSTS: "true"
     volumes:
       - ..:/app
       - utsuwa-node-modules:/app/node_modules
