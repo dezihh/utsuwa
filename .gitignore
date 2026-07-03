@@ -44,3 +44,10 @@ data/profile-pin.hash
 
 # User audio recordings
 *.wav
+
+# Animation assets: only VRMA_0*.vrma, idle*.vrma and talking.vrma are kept in the repo.
+# All other .vrma files may be copyrighted and must stay local.
+static/animations/*.vrma
+!static/animations/VRMA_0*.vrma
+!static/animations/idle*.vrma
+!static/animations/talking.vrma
