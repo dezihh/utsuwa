@@ -756,6 +756,15 @@
 						<span class="debug-toggle-label">Log TTS Segments</span>
 						<span class="debug-toggle-desc">Each segment with language and assigned voice</span>
 					</label>
+					<label class="debug-toggle">
+						<input
+							type="checkbox"
+							checked={debugStore.settings.logMcp}
+							onchange={(e) => debugStore.updateSetting('logMcp', e.currentTarget.checked)}
+						/>
+						<span class="debug-toggle-label">Log MCP</span>
+						<span class="debug-toggle-desc">Tool calls, responses, and errors from MCP servers</span>
+					</label>
 				</div>
 			</section>
 

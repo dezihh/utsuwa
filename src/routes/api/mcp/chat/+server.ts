@@ -10,6 +10,7 @@ import { getChatBaseUrl } from '$lib/services/providers/local-endpoints';
 import { normalizeChatBaseURL } from '$lib/services/chat/base-url';
 import { isLocalLLMProvider } from '$lib/services/providers/local-endpoints';
 import type { LLMProvider } from '$lib/types';
+import { debugStore } from '$lib/stores/debug.svelte';
 
 interface TextPart {
 	type: 'text';
@@ -219,6 +220,7 @@ Already written (do not repeat):
 	let finalText = '';
 
 	try {
+	debugStore.logMcp('chat start', { model, toolCount: tools.length, serverCount: servers.length });
 	// Agentic loop
 	for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
 		const response = await llmRequest(chatUrl, model, llmMessages, tools, apiKey);
@@ -227,17 +229,22 @@ Already written (do not repeat):
 		if (!choice) throw new Error('Empty LLM response');
 
 		const assistantMsg = choice.message;
+		debugStore.logMcp('chat LLM response', { round, content: assistantMsg.content, tool_calls: assistantMsg.tool_calls });
 
 		// Some models emit tool calls as <tool_call> text tags instead of the
 		// OpenAI tool_calls array. Fall back to parsing them from the content.
 		let toolCalls = assistantMsg.tool_calls ?? [];
 		if (toolCalls.length === 0) {
 			toolCalls = extractToolCallsFromText(assistantMsg.content);
+			if (toolCalls.length > 0) {
+				debugStore.logMcp('chat fallback tool_calls parsed', { round, toolCalls });
+			}
 		}
 
 		// No tool calls — we have the final answer
 		if (toolCalls.length === 0) {
 			finalText = assistantMsg.content ?? '';
+			debugStore.logMcp('chat final answer', { round, finalText });
 			break;
 		}
 
@@ -269,6 +276,8 @@ Already written (do not repeat):
 				return { tool_call_id: tc.id, name: tc.function.name, content: result.content };
 			})
 		);
+
+		debugStore.logMcp('chat tool results', { round, results: toolResults.map((r) => ({ name: r.name, content: r.content.slice(0, 500) })) });
 
 		// Add tool results to message history
 		for (const r of toolResults) {
