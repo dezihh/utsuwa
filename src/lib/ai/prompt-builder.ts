@@ -660,6 +660,16 @@ TOOL USAGE RULES:
 - When a tool returns numbered items (for example vocabulary pairs), preserve EVERY item in your answer. Output the full source → target pair for each number; do NOT write empty placeholders like "1. 2. 3.".
 - If a tool call fails, answer as best you can from your knowledge and mention the limitation briefly.
 
+EXAMPLE — vocabulary tool result to user-friendly output:
+Tool result:
+1. Haus — casa [Wohnen | A1]
+2. Buch — libro [Bildung | A1]
+3. Apfel — manzana [Essen | A1]
+Your response must include:
+1. Haus — casa
+2. Buch — libro
+3. Apfel — manzana
+
 EXAMPLES of when to use tools:
 - User asks about current events, news, prices, weather → use search tool
 - User asks to look something up → use search tool

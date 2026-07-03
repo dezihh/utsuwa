@@ -14,6 +14,10 @@
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 	import { expressionController } from '$lib/services/vrm/expression-controller';
 	import { chatStore } from '$lib/stores/chat.svelte';
+// DEBUG: expose chatStore to window for console inspection
+if (typeof window !== 'undefined') {
+	(window as any).chatStore = chatStore;
+}
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { modulesStore } from '$lib/stores/modules.svelte';
 	import { ttsStore } from '$lib/stores/tts.svelte';
