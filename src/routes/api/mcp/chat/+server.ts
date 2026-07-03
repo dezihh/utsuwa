@@ -83,6 +83,42 @@ function toolsToOpenAI(tools: McpTool[]) {
 	});
 }
 
+/**
+ * Some local models (e.g. glm-5.2 via certain endpoints) emit tool calls as
+ * `<tool_call>{"name":"...","arguments":{}}</tool_call>` text instead of the
+ * OpenAI `tool_calls` array. This fallback parses those tags so the agentic
+ * loop can still execute them.
+ */
+function extractToolCallsFromText(text: string | null): ToolCall[] {
+	if (!text) return [];
+	const calls: ToolCall[] = [];
+	const regex = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
+	let match: RegExpExecArray | null;
+	let idCounter = 1;
+	while ((match = regex.exec(text)) !== null) {
+		try {
+			const parsed = JSON.parse(match[1].trim()) as {
+				name?: string;
+				arguments?: Record<string, unknown> | string;
+			};
+			if (parsed.name) {
+				const args =
+					typeof parsed.arguments === 'string'
+						? parsed.arguments
+						: JSON.stringify(parsed.arguments ?? {});
+				calls.push({
+					id: `toolu_fallback_${idCounter++}`,
+					type: 'function',
+					function: { name: parsed.name, arguments: args }
+				});
+			}
+		} catch {
+			// Ignore malformed tags
+		}
+	}
+	return calls;
+}
+
 /** Send a non-streaming request to an OpenAI-compatible endpoint */
 async function llmRequest(
 	url: string,
@@ -192,8 +228,15 @@ Already written (do not repeat):
 
 		const assistantMsg = choice.message;
 
+		// Some models emit tool calls as <tool_call> text tags instead of the
+		// OpenAI tool_calls array. Fall back to parsing them from the content.
+		let toolCalls = assistantMsg.tool_calls ?? [];
+		if (toolCalls.length === 0) {
+			toolCalls = extractToolCallsFromText(assistantMsg.content);
+		}
+
 		// No tool calls — we have the final answer
-		if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
+		if (toolCalls.length === 0) {
 			finalText = assistantMsg.content ?? '';
 			break;
 		}
@@ -202,12 +245,12 @@ Already written (do not repeat):
 		llmMessages.push({
 			role: 'assistant',
 			content: assistantMsg.content,
-			tool_calls: assistantMsg.tool_calls
+			tool_calls: toolCalls
 		});
 
 		// Execute each tool call in parallel
 		const toolResults = await Promise.all(
-			assistantMsg.tool_calls.map(async (tc) => {
+			toolCalls.map(async (tc) => {
 				const server = toolServerMap.get(tc.function.name);
 				if (!server) {
 					return {
