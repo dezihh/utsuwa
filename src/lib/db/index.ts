@@ -1,7 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { CharacterState } from '$lib/types/character';
 import type { Fact, SessionSummary, ConversationTurn, FactLibraryEntry, Reminder } from '$lib/types/memory';
-import type { VocabularyEntry } from '$lib/types/vocabulary';
 import type { CompletedEventRecord } from '$lib/types/events';
 
 // Database types with IndexedDB-friendly id handling
@@ -33,10 +32,6 @@ export interface DBReminder extends Omit<Reminder, 'id'> {
 	id?: number;
 }
 
-export interface DBVocabularyEntry extends Omit<VocabularyEntry, 'id'> {
-	id?: number;
-}
-
 // Legacy persona storage keys (for migration)
 const LEGACY_PERSONA_CARDS_KEY = 'utsuwa-persona-cards';
 const LEGACY_PERSONA_ACTIVE_KEY = 'utsuwa-persona-active-id';
@@ -49,7 +44,6 @@ class UtsuwaDatabase extends Dexie {
 	completedEvents!: EntityTable<DBCompletedEvent, 'id'>;
 	factLibrary!: EntityTable<DBFactLibraryEntry, 'id'>;
 	reminders!: EntityTable<DBReminder, 'id'>;
-	vocabulary!: EntityTable<DBVocabularyEntry, 'id'>;
 
 	constructor() {
 		super('utsuwa-db');
@@ -199,7 +193,7 @@ class UtsuwaDatabase extends Dexie {
 			reminders: '++id, sessionId, triggerAt, executed'
 		});
 
-		// Version 6: Add vocabulary table (separate from factLibrary)
+		// Version 6: Reserved (vocabulary table removed; external MCP service replaces it)
 		this.version(6).stores({
 			characterStates: '++id, updatedAt',
 			facts: '++id, characterId, category, importance, createdAt',
@@ -207,8 +201,7 @@ class UtsuwaDatabase extends Dexie {
 			conversationTurns: '++id, characterId, sessionId, createdAt',
 			completedEvents: '++id, characterId, eventId, completedAt',
 			factLibrary: '++id, characterId, type, category, confidence, createdAt',
-			reminders: '++id, sessionId, triggerAt, executed',
-			vocabulary: '++id, sourceWord, targetWord, category, level, familiarity, characterId, createdAt'
+			reminders: '++id, sessionId, triggerAt, executed'
 		});
 
 		// Version 7: Multi-character isolation - add characterId to characterStates and migrate all existing data
@@ -220,8 +213,7 @@ class UtsuwaDatabase extends Dexie {
 				conversationTurns: '++id, characterId, sessionId, createdAt',
 				completedEvents: '++id, characterId, eventId, completedAt',
 				factLibrary: '++id, characterId, type, category, confidence, createdAt',
-				reminders: '++id, sessionId, triggerAt, executed',
-				vocabulary: '++id, sourceWord, targetWord, category, level, familiarity, characterId, createdAt'
+				reminders: '++id, sessionId, triggerAt, executed'
 			})
 			.upgrade(async (tx) => {
 				const characterStates = tx.table('characterStates');
@@ -229,7 +221,6 @@ class UtsuwaDatabase extends Dexie {
 				const sessions = tx.table('sessions');
 				const conversationTurns = tx.table('conversationTurns');
 				const factLibrary = tx.table('factLibrary');
-				const vocabulary = tx.table('vocabulary');
 
 				await characterStates.toCollection().modify((cs: Record<string, unknown>) => {
 					if (!cs.characterId) cs.characterId = 'default';
@@ -248,9 +239,6 @@ class UtsuwaDatabase extends Dexie {
 				});
 				await factLibrary.toCollection().modify((e: Record<string, unknown>) => {
 					if (!e.characterId) e.characterId = 'default';
-				});
-				await vocabulary.toCollection().modify((v: Record<string, unknown>) => {
-					if (!v.characterId) v.characterId = 'default';
 				});
 			});
 	}

@@ -29,7 +29,7 @@
 	let isAdding = $state(false);
 	let addKey = $state('');
 	let addValue = $state('');
-	let addType = $state('vocab');
+	let addType = $state('fact');
 	let addCategory = $state('');
 	let addTags = $state('');
 	let addConfidence = $state(0.5);
@@ -37,7 +37,7 @@
 	// Import state
 	let showImport = $state(false);
 	let importText = $state('');
-	let importType = $state('vocab');
+	let importType = $state('fact');
 	let importCategory = $state('');
 	let importDelimiter = $state('auto');
 	let importCount = $state(0);
@@ -141,7 +141,7 @@
 			await memoryStorage.saveFactLibraryEntry({
 				key: addKey.trim(),
 				value: addValue.trim(),
-				type: addType.trim() || 'vocab',
+				type: addType.trim() || 'fact',
 				category: addCategory.trim() || undefined,
 				tags: addTags
 					.split(',')
@@ -212,7 +212,7 @@
 				await memoryStorage.saveFactLibraryEntry({
 					key: e.key,
 					value: e.value,
-					type: importType.trim() || 'vocab',
+					type: importType.trim() || 'fact',
 					category: importCategory.trim() || undefined,
 					tags: [],
 					confidence: 0.5,

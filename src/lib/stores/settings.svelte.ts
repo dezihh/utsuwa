@@ -60,9 +60,6 @@ function createSettingsStore() {
 	// Web search settings
 	let searxUrl = $state<string>('http://192.168.10.4:8090');
 
-	// Vocabulary training
-	let vocabularyEnabled = $state<boolean>(true);
-
 	// Load from localStorage on init
 	if (browser) {
 		const saved = localStorage.getItem('utsuwa-settings');
@@ -77,7 +74,6 @@ function createSettingsStore() {
 				}
 				if (parsed.activeProfileId) activeProfileId = parsed.activeProfileId;
 				if (parsed.searxUrl !== undefined) searxUrl = parsed.searxUrl;
-				if (parsed.vocabularyEnabled !== undefined) vocabularyEnabled = parsed.vocabularyEnabled;
 
 				// Migrate old settings format if needed
 				if (parsed.anthropicApiKey && !providerConfigs.anthropic) {
@@ -158,8 +154,7 @@ function createSettingsStore() {
 					hotkeys,
 					personalityProfiles,
 					activeProfileId,
-					searxUrl,
-					vocabularyEnabled
+					searxUrl
 				})
 			);
 		}
@@ -177,7 +172,6 @@ function createSettingsStore() {
 					if (Array.isArray(parsed.personalityProfiles)) personalityProfiles = parsed.personalityProfiles;
 					if (parsed.activeProfileId) activeProfileId = parsed.activeProfileId;
 					if (parsed.searxUrl !== undefined) searxUrl = parsed.searxUrl;
-					if (parsed.vocabularyEnabled !== undefined) vocabularyEnabled = parsed.vocabularyEnabled;
 				} catch {
 					// Ignore malformed data from other window
 				}
@@ -391,14 +385,6 @@ function createSettingsStore() {
 		save();
 	}
 
-	function isVocabularyEnabled(): boolean {
-		return vocabularyEnabled;
-	}
-
-	function setVocabularyEnabled(v: boolean) {
-		vocabularyEnabled = v;
-		save();
-	}
 
 	return {
 		// Provider configs
@@ -462,11 +448,7 @@ function createSettingsStore() {
 
 		// Web search
 		getSearxUrl,
-		setSearxUrl,
-
-		// Vocabulary
-		isVocabularyEnabled,
-		setVocabularyEnabled
+		setSearxUrl
 	};
 }
 

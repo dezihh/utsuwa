@@ -4,8 +4,6 @@ import type { StateUpdates, Emotion } from '$lib/types/character';
 export interface ParsedResponse {
 	dialogue: string;
 	stateUpdates: Partial<StateUpdates> | null;
-	/** Vocabulary mastery signals from the LLM, to be applied to familiarity scores. */
-	vocabResults?: Array<{ word: string; known: boolean }>;
 	parseError?: string;
 }
 
@@ -30,8 +28,6 @@ interface LLMStateOutput {
 		category?: string;
 		tags?: string[];
 	} | null;
-	/** Word-level mastery signals from a vocabulary exercise turn. */
-	vocab_results?: Array<{ word: string; known: boolean }> | null;
 }
 
 // Valid emotions for validation
@@ -119,7 +115,7 @@ function cutHallucinatedTurn(text: string): string {
 
 // JSON objects we care about carry at least one of these keys.
 const STATE_KEY_RE =
-	/"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|new_memory|structured_fact_seen|vocab_results)"/;
+	/"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|new_memory|structured_fact_seen)"/;
 
 // Scan from `start` (a '{') to its matching '}', ignoring braces inside strings.
 function balancedObjectFrom(text: string, start: number): string | null {
@@ -179,7 +175,6 @@ export function parseResponse(rawResponse: string): ParsedResponse {
 	const raw = stripReasoning(rawResponse);
 	let dialogue = raw.trim();
 	let stateUpdates: Partial<StateUpdates> | null = null;
-	let vocabResults: Array<{ word: string; known: boolean }> | undefined;
 	let parseError: string | undefined;
 
 	// Prefer a fenced ```json block; otherwise grab the first bare JSON object
@@ -189,7 +184,6 @@ export function parseResponse(rawResponse: string): ParsedResponse {
 		const parsed = tryParseJson(fenced[1]);
 		if (parsed) {
 			stateUpdates = convertLLMOutput(parsed);
-			vocabResults = extractVocabResults(parsed);
 		} else {
 			parseError = 'Failed to parse JSON state block';
 			console.debug('Failed to parse LLM state updates:', fenced[1]);
@@ -201,26 +195,13 @@ export function parseResponse(rawResponse: string): ParsedResponse {
 			const parsed = tryParseJson(obj);
 			if (parsed) {
 				stateUpdates = convertLLMOutput(parsed);
-				vocabResults = extractVocabResults(parsed);
 				dialogue = raw.replace(obj, '').trim();
 			}
 		}
 	}
 
 	dialogue = cleanDialogue(dialogue);
-	return { dialogue, stateUpdates, vocabResults, parseError };
-}
-
-/** Extract and validate vocab_results from a parsed LLM JSON output. */
-function extractVocabResults(
-	output: LLMStateOutput
-): Array<{ word: string; known: boolean }> | undefined {
-	if (!Array.isArray(output.vocab_results)) return undefined;
-	const results = output.vocab_results
-		.filter((r) => r && typeof r.word === 'string' && typeof r.known === 'boolean')
-		.map((r) => ({ word: (r.word as string).trim(), known: r.known as boolean }))
-		.filter((r) => r.word.length > 0);
-	return results.length > 0 ? results : undefined;
+	return { dialogue, stateUpdates, parseError };
 }
 
 // Convert LLM output format to our StateUpdates format
@@ -269,15 +250,12 @@ function convertLLMOutput(output: LLMStateOutput): Partial<StateUpdates> {
 	}
 
 	// Structured fact for fact library.
-	// Vocabulary words are handled by the vocabulary system and must NOT create
-	// duplicate structured facts, even if the model emits them.
 	if (output.structured_fact_seen && typeof output.structured_fact_seen === 'object') {
 		const fact = output.structured_fact_seen;
 		if (
 			typeof fact.key === 'string' &&
 			typeof fact.value === 'string' &&
-			typeof fact.type === 'string' &&
-			fact.type.toLowerCase() !== 'vocab'
+			typeof fact.type === 'string'
 		) {
 			updates.structuredFactSeen = {
 				type: fact.type,
@@ -299,11 +277,10 @@ function clampDelta(value: number | undefined, min: number, max: number): number
 }
 
 // Application control tags that must be stripped from visible chat text
-// AFTER the calling code has extracted them. Tags like [search_image:...],
-// [reminder:...], and [vocab:...] are handled by extractImageSearchTags,
-// extractReminderTags, and extractVocabTags respectively — they are NOT
-// stripped here because those extractors run on the dialogue output and
-// return their own cleanedText.
+// AFTER the calling code has extracted them. Tags like [search_image:...] and
+// [reminder:...] are handled by extractImageSearchTags and extractReminderTags
+// respectively — they are NOT stripped here because those extractors run on
+// the dialogue output and return their own cleanedText.
 //
 // Only tags consumed during streaming (TTS, voice, actions) or purely
 // cosmetic tags ([emote:...]) are stripped here.

@@ -5,13 +5,12 @@
 	interface Props {
 		onOpenMemoryGraph?: () => void;
 		onOpenFactLibrary?: () => void;
-		onOpenVocabulary?: () => void;
 		onOpenMemoryInspector?: () => void;
 		onBoardClick?: () => void;
 		leftOffset?: number;
 	}
 
-	let { onOpenMemoryGraph, onOpenFactLibrary, onOpenVocabulary, onOpenMemoryInspector, onBoardClick, leftOffset = 0 }: Props = $props();
+	let { onOpenMemoryGraph, onOpenFactLibrary, onOpenMemoryInspector, onBoardClick, leftOffset = 0 }: Props = $props();
 
 	function takeScreenshot() {
 		screenshotStore.take();
@@ -30,11 +29,6 @@
 	{#if onOpenFactLibrary}
 		<button class="icon-btn" onclick={onOpenFactLibrary} aria-label="Open fact library">
 			<Icon name="book" size={20} />
-		</button>
-	{/if}
-	{#if onOpenVocabulary}
-		<button class="icon-btn" onclick={onOpenVocabulary} aria-label="Open vocabulary manager">
-			<Icon name="globe" size={20} />
 		</button>
 	{/if}
 	{#if onOpenMemoryInspector}

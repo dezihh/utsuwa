@@ -102,18 +102,6 @@ export interface PromptContext {
 	imageModalOpen?: boolean;
 	/** The query that triggered the currently open image modal */
 	imageModalQuery?: string;
-	/** When true, injects vocabulary tag instructions */
-	vocabularyEnabled?: boolean;
-	/** Total number of imported vocabulary words */
-	vocabularyTotal?: number;
-	/** Available vocabulary categories (for LLM tag selection) */
-	vocabularyCategories?: string[];
-	/** Available vocabulary levels (e.g. A1, A2, B1) */
-	vocabularyLevels?: string[];
-	/** Source language code derived from vocabulary data (the language being learned) */
-	vocabularySourceLang?: string;
-	/** Target language code derived from vocabulary data (the user's native language) */
-	vocabularyTargetLang?: string;
 	/** Memory injection budget derived from the configured model context size */
 	memoryBudget?: MemoryBudget;
 	/** Configured context window size in tokens. Used to prevent prompt overflow. */
@@ -201,8 +189,6 @@ function assembleOptionalLayers(ctx: PromptContext): string[] {
 	if (responseLengthLayer) layers.push(responseLengthLayer);
 	const continueLayer = buildContinueLayer(ctx);
 	if (continueLayer) layers.push(continueLayer);
-	const vocabLayer = buildVocabularyLayer(ctx);
-	if (vocabLayer) layers.push(vocabLayer);
 	return layers;
 }
 
@@ -295,8 +281,7 @@ After your reply, ALWAYS end with a JSON block, even when little changed:
 {
   "mood_change": { "emotion": "emotion_name", "intensity_delta": number },
   "energy_delta": number,
-  "new_memory": null | "something specific worth remembering about them",
-  "vocab_results": [{"word": "sourceWord", "known": true}, ...]
+  "new_memory": null | "something specific worth remembering about them"
 }
 \`\`\`
 
@@ -307,12 +292,11 @@ Examples of good new_memory values:
 - "They showed me their dog, a scruffy terrier they clearly adore"
 - null (small talk where nothing notable came up)
 
-In Companion Mode, only mood and energy change. Do NOT suggest affection, trust, intimacy, comfort, or respect changes - these relationship stats are disabled.${ctx.vocabularyEnabled ? `
-- VOCABULARY: If you see "Vocabulary for the next exercise" in the conversation, the words are already loaded. Do NOT output another [vocab:...] tag — just use the words naturally in your response.` : ''}
+In Companion Mode, only mood and energy change. Do NOT suggest affection, trust, intimacy, comfort, or respect changes - these relationship stats are disabled.
 </instructions>`);
 
 	// Place the language rule RIGHT AFTER instructions so it is fresh and not
-	// diluted by later optional layers (vocabulary, image search, reminders, etc.).
+	// diluted by later optional layers (image search, reminders, etc.).
 	const langRule = buildLanguageRuleLayer(ctx);
 	if (langRule) parts.push(langRule);
 
@@ -499,11 +483,10 @@ function buildFactLibraryLayer(ctx: PromptContext): string | null {
 	});
 
 	return `<fact_library>
-Semantically relevant facts and vocabulary for this conversation:
+Semantically relevant facts for this conversation:
 ${lines.join('\n')}
 
 If the user learns or struggles with a general concept or fact from this list, set the JSON key structured_fact_seen in your state-update JSON block.
-Do NOT use structured_fact_seen for vocabulary words — those are already handled by the vocabulary system.
 </fact_library>`;
 }
 
@@ -511,7 +494,7 @@ Do NOT use structured_fact_seen for vocabulary words — those are already handl
 function buildMemoryTagInstructions(): string {
 	return `MEMORY GUIDELINES — INTERNAL COMMANDS, NEVER SPOKEN ALOUD:
 - Use the JSON key new_memory to persist facts about the user.
-- Use the JSON key structured_fact_seen ONLY when the user learns a concrete, discrete fact (e.g. "The capital of Spain is Madrid" or "The user prefers tea over coffee"). Do NOT use it for grammar explanations, vocabulary words, or general language lessons.
+- Use the JSON key structured_fact_seen ONLY when the user learns a concrete, discrete fact (e.g. "The capital of Spain is Madrid" or "The user prefers tea over coffee"). Do NOT use it for grammar explanations or general language lessons.
 - These keys are INTERNAL system commands. They must ONLY appear inside the JSON block after your dialogue.
 - NEVER say "new memory", "structured fact seen", "JSON", "state update", "memory", or "storage" in your spoken dialogue.
 - NEVER explain that you are saving or updating anything.
@@ -533,11 +516,7 @@ When using structured_fact_seen, provide:
 - value: the meaning or explanation
 - category: optional topic (e.g. "business", "travel", "science")
 
-BAD EXAMPLE (do NOT do this):
-{
-  "structured_fact_seen": { "type": "vocab", "key": "amigo", "value": "Freund" }
-}
-Vocabulary words must NEVER use structured_fact_seen.`;
+`;
 }
 
 // Instruction layer - how to respond
@@ -571,8 +550,7 @@ After your reply, ALWAYS end with a JSON block, even when little changed:
   "comfort_delta": number,
   "new_memory": null | "something specific worth remembering about them",
   "triggered_event": null | "event_id",
-  "structured_fact_seen": null | { "type": "vocab", "key": "word", "value": "meaning", "category": "topic" },
-  "vocab_results": [{"word": "sourceWord", "known": true}, ...]
+  "structured_fact_seen": null | { "type": "concept", "key": "term", "value": "meaning", "category": "topic" }
 }
 \`\`\`
 
@@ -1001,7 +979,7 @@ function buildReminderLayer(ctx: PromptContext): string | null {
 	parts.push(
 		`REMINDER TAG — set a reminder on your own initiative when:\n` +
 		`  1. You make a promise or want to follow up: "[reminder:24h]Follow up on user's question about X[/reminder]"\n` +
-		`  2. You assign a practice task: "Übe das bis morgen! [reminder:20h]Ask user to show the 5 vocabulary words[/reminder]"\n` +
+		`  2. You assign a practice task: "Übe das bis morgen! [reminder:20h]Ask user to show the 5 new words[/reminder]"\n` +
 		`  3. You want to check in after a difficult topic: "[reminder:2h]Ask how the user is feeling[/reminder]"\n` +
 		`  4. You want to do something playful: "[reminder:30s]wave enthusiastically[/reminder]"`
 	);
@@ -1096,57 +1074,6 @@ function buildImageSearchLayer(ctx: PromptContext): string | null {
 
 	return `<image_search_tool>\n${parts.join('\n\n')}\n</image_search_tool>`;
 }
-
-function buildVocabularyLayer(ctx: PromptContext): string | null {
-	if (!ctx.vocabularyEnabled) return null;
-
-	const total = ctx.vocabularyTotal ?? 0;
-	const categories = ctx.vocabularyCategories ?? [];
-	const levels = ctx.vocabularyLevels ?? [];
-	const sourceLang = ctx.vocabularySourceLang;
-	const targetLang = ctx.vocabularyTargetLang;
-
-	const metaLines: string[] = [];
-	if (total > 0) metaLines.push(`Total words in library: ${total}`);
-	if (sourceLang && targetLang) {
-		metaLines.push(`Language pair: ${sourceLang} (learning) → ${targetLang} (native)`);
-	}
-	if (categories.length > 0) {
-		metaLines.push(`Available categories: ${categories.join(', ')}`);
-	}
-	if (levels.length > 0) {
-		metaLines.push(`Available levels: ${levels.join(', ')}`);
-	}
-
-	const metaBlock = metaLines.length > 0 ? metaLines.join('\n') + '\n\n' : '';
-	const exampleCategory = categories[0] ?? 'Begrüßung';
-	const exampleLevel = levels[0] ?? 'A1';
-
-	return `<vocabulary>
-${metaBlock}The user has imported vocabulary words. You do NOT see them in this prompt — you must fetch them with a tag.
-
-When the user wants to practice vocabulary or learn new words, use ONE of these tags:
-  [vocab:random:20] — 20 random words to practice
-  [vocab:review:20] — 20 weakest words (lowest familiarity, not reviewed recently)
-  [vocab:category:${exampleCategory}:10] — 10 words from a specific category
-  [vocab:level:${exampleLevel}:20] — 20 words at a specific level
-
-The tag is hidden from the user. The words will appear as "Vocabulary for the next exercise" in your next prompt.
-
-When you see the vocabulary, simply use it conversationally — quiz, translate, or explain it.
-
-AFTER a vocabulary exercise turn (i.e. once you have actively tested each word), emit a vocab_results array in your JSON block:
-  "vocab_results": [{"word": "<sourceWord>", "known": true|false}, ...]
-- known: true  — the user demonstrated they know the word (correct translation/usage)
-- known: false — the user struggled, guessed wrong, or needed help
-Only emit vocab_results when words were actively tested in THAT turn. One entry per tested word.
-
-If the user asks which categories or levels are available, answer directly from the list above.
-Do NOT output another [vocab:...] tag if words are already loaded — just use them naturally.
-</vocabulary>`;
-}
-
-// Helper functions for descriptions
 function describeEnergy(energy: number): string {
 	if (energy >= 80) return 'Energetic';
 	if (energy >= 60) return 'Good';

@@ -50,7 +50,6 @@
 
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
 	import { splitIntoSegments, splitIntoSentences, stripTagsForBubble, getEmotionDisplayText } from '$lib/utils/sentences';
-	import { getVocabularyMeta } from '$lib/services/storage/vocabulary';
 
 	let isTyping = $state(false);
 	let activeEvent = $state<EventDefinition | null>(null);
@@ -234,21 +233,6 @@
 		const contextSize = Number(consciousnessSettings.contextSize) || 32768;
 		const memoryBudget = getMemoryBudget(contextSize);
 
-		let vocabMeta: {
-			total: number;
-			categories: string[];
-			levels: string[];
-			sourceLang: string | undefined;
-			targetLang: string | undefined;
-		} | null = null;
-		if (settingsStore.isVocabularyEnabled()) {
-			try {
-				vocabMeta = await getVocabularyMeta(currentCharacterId);
-			} catch {
-				// ignore — optional enrichment
-			}
-		}
-
 		const context: PromptContext = {
 			persona,
 			state,
@@ -261,12 +245,6 @@
 			availableActions: vrmStore.llmActions,
 			emotionMappings,
 			factLibraryEnabled: true,
-			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
-			vocabularyTotal: vocabMeta?.total,
-			vocabularyCategories: vocabMeta?.categories,
-			vocabularyLevels: vocabMeta?.levels,
-			vocabularySourceLang: vocabMeta?.sourceLang,
-			vocabularyTargetLang: vocabMeta?.targetLang,
 			memoryBudget,
 			sessionStartedAt: getWorkingMemory().sessionStartedAt
 		};

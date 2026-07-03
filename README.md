@@ -70,8 +70,8 @@
 - **Companion System**: Multi-axis relationship tracking with mood, events, and semantic memory
 - **Semantic Memory**: Local AI-powered memory search using Transformers.js — finds memories by meaning, not just keywords
 - **Memory Graph**: Interactive visualization showing how memories connect semantically
-- **5-Layer Memory Architecture**: Structured memory system with Base Soul (immutable core), Evolved Persona (learned adaptations), User Model (semantic facts), Episodic Memory (session summaries), and Fact Library (structured knowledge like concepts and exam facts). Vocabulary training is handled by a separate dedicated system.
-- **Fact Library**: Type-agnostic structured storage for concepts, exam facts, and general knowledge — automatically managed by the app with confidence-based review scheduling. Browse, search, edit, and review entries via the in-app UI (book icon in top-left). For vocabulary training, use the dedicated Vocabulary System instead.
+- **5-Layer Memory Architecture**: Structured memory system with Base Soul (immutable core), Evolved Persona (learned adaptations), User Model (semantic facts), Episodic Memory (session summaries), and Fact Library (structured knowledge like concepts and exam facts).
+- **Fact Library**: Type-agnostic structured storage for concepts, exam facts, and general knowledge — automatically managed by the app with confidence-based review scheduling. Browse, search, edit, and review entries via the in-app UI (book icon in top-left).
 - **Personality Evolution**: Your companion develops a unique personality over time. After every 10 sessions (configurable), an LLM analyzes your conversation history and suggests subtle communication adaptations — like becoming more playful, more direct, or adjusting to your preferred conversation pace. You review and approve each adaptation before it takes effect. Learned traits persist across sessions and shape every future response.
 - **Lazy Session Compaction**: Sessions are automatically summarized via LLM when a new session starts (robust against browser tab closure)
 - **Debug Logging**: Browser-console logging with filterable categories (Prompts, Memory, Sessions, Facts). Toggle categories in Settings > Developer
@@ -81,7 +81,6 @@
 - **Scheduled Reminders & Open Tasks**: The companion can set time-based reminders (e.g., "remind me in 5 minutes to check the coffee") using inline `[reminder:5min]...[/reminder]` tags. Reminders are stored locally per session, polled in the background, and when triggered they are injected into the LLM context as a system message so the companion can react. The trigger itself is logged in the browser console and does not appear in the visible chat history. Non-image reminders are also persisted as semantic facts with `source: open-task` so the companion keeps them in context until resolved. Upcoming reminders and open tasks are shown in a bell dropdown in the chat header, where you can also delete them.
 - **Image Search via SearxNG**: The companion can search for images on the web using SearxNG. When the user asks for pictures (e.g., "show me images of cats"), the companion outputs a `[search_image:cats]` tag and images appear in a popup modal. The companion can also close the popup with `[close_images]`. Requires a SearxNG instance (configured via `SEARXNG_URL` environment variable or MCP Tools settings).
 - **External Tools via MCP**: Expand your companion's abilities by connecting external tool servers under **Settings > MCP Servers**. For example, she can fetch an image from a URL you share and describe its contents directly, without showing technical details in chat or speech.
-- **Vocabulary Training System**: Dedicated vocabulary management separate from the Fact Library. Import vocabulary via CSV upload (drag & drop or paste), then practice with the companion using tag-based retrieval. The companion outputs `[vocab:MODE:FILTER:COUNT]` tags (e.g., `[vocab:category:Begrüßung:10]`, `[vocab:review:5]`, `[vocab:level:A1:20]`) and receives only the requested subset in the next prompt — never all words at once. Familiarity tracking per word. The prompt also exposes the available categories, levels, and source/target language pair derived from your imported vocabulary, so the companion can answer "which categories do I have?" or pick appropriate levels automatically. Enable/disable in Settings > Data.
 - **Desktop App** *(beta)*: Native desktop app for macOS, Windows, and Linux with transparent overlay mode — your companion floats on your desktop
 
 ### Local-First Storage
@@ -190,7 +189,7 @@ Open it from the **book icon** in the top-left toolbar. There you can browse, se
 | `dislike` | Key: `dislikes` → Value: `loud crowds, cilantro` | Avoids unpleasant suggestions |
 | `fact` | Key: `job` → Value: `software engineer` | Shapes conversation context |
 | `fact` | Key: `pet` → Value: `golden retriever named Mochi` | Asks about Mochi later |
-| `goal` | Key: `learning` → Value: `Spanish, A2 level` | Companion can practice vocabulary or cheer progress |
+| `goal` | Key: `learning` → Value: `Spanish, A2 level` | Companion can cheer progress or suggest next steps |
 | `shared_experience` | Key: `camping trip 2026` → Value: `rained all night, ate instant ramen` | Creates inside jokes and continuity |
 | `rule` | Key: `communication` → Value: `prefer short answers in the morning` | Tunes companion behavior |
 
@@ -211,7 +210,7 @@ Set delimiter to `|` and type to `preference` (or `fact`) to import all at once.
 
 **Review scheduling:** Entries track `confidence`, `reviewCount`, and `lastReviewedAt`. Lower-confidence facts are reviewed more often. You can manually review entries to increase confidence.
 
-**Note:** For language vocabulary, use the dedicated **Vocabulary Training System** instead. The Fact Library is for general knowledge and persistent user facts.
+The Fact Library is for general knowledge and persistent user facts.
 
 ### Automatically Learned Facts
 
@@ -249,42 +248,6 @@ Open the **Memory Inspector** (database icon in the top-left toolbar) and click 
 - The automatic fallback extractor and the retroactive tagger each cost one extra LLM call when triggered.
 - You can always add important facts manually in the **Fact Library** if the LLM misses them.
 - Use the **Memory Inspector** for a unified view of all learned facts, session summaries, and the current character state.
-
-### Vocabulary Training
-
-A dedicated system for language learning, separate from the general Fact Library:
-
-- **CSV Import**: Upload vocabulary lists via drag & drop or paste. Format:
-  ```csv
-  sourceWord,targetWord,context,category,level,tags
-  Hola,Hallo,"¡Hola! ¿Qué tal?",Begrüßung,A1,grußformel
-  Gracias,Danke,"Muchas gracias por tu ayuda",Höflichkeit,A1,dank
-  Bonita,Schön,"Qué bonita es esta flor",Adjektive,A1,beschreibung
-  ```
-  `sourceWord` is the word in the language you want to learn. `targetWord` is the translation in your native language.
-- **Tag-Based Retrieval**: The companion never sees all vocabulary at once. Instead, it uses tags to request subsets:
-  - `[vocab:random:5]` — 5 random words
-  - `[vocab:review:5]` — 5 words with lowest familiarity (weakest first)
-  - `[vocab:category:Begrüßung:10]` — 10 words from a category
-  - `[vocab:level:A1:20]` — 20 words at a specific level
-- **Familiarity Tracking**: Each word has a familiarity score (0.0–1.0) that updates as the user practices
-- **Prompt-Safe**: Only the requested subset is injected into the prompt (~150 tokens for 20 words), never the full list
-- **Enable/Disable**: Toggle vocabulary training in Settings > Data
-
-#### How to Practice Vocabulary
-
-The vocabulary system works in two turns. Here's the workflow:
-
-| Step | What you say | What happens |
-|---|---|---|
-| 1. Load words | *"Gib mir neue Vokabeln"* / *"Give me new vocabulary"* | The companion outputs a hidden `[vocab:random:5]` tag. The requested words are fetched from IndexedDB and injected into the next prompt's conversation context. |
-| 2. Use the words | *"Welche Wörter haben wir heute gelernt?"* / *"What words did we learn today?"* | The companion sees the loaded words in context and lists them. For OmniVoice with dual-voice configured, Spanish words are spoken by the alternative voice with correct pronunciation. |
-| 3. Quiz mode | *"Frag mich die Vokabeln ab"* / *"Quiz me on the words"* | The companion asks word by word — you translate back. |
-| 4. Practice weak words | *"Üben wir die schwierigen"* / *"Let's practice the hard ones"* | Companion outputs `[vocab:review:5]` to load the weakest words. |
-
-**Key principle:** After step 1, do NOT say "read the words aloud" — that triggers another tag. Instead, ask conversationally: "What words did I learn?", "Quiz me!", or "Explain the first one." The words are already in context; the companion just needs a natural prompt to engage with them.
-
-**OmniVoice dual-voice integration:** When Spanish vocabulary is loaded and the companion outputs words with `[lang:es]` tags, OmniVoice switches to the alternative voice with Spanish pronunciation automatically. Configure this under **Settings > TTS > OmniVoice** (enable alternative voice and set alternative language to `es`).
 
 ### Desktop Application (Beta)
 
@@ -783,7 +746,7 @@ pnpm tauri build  # Build desktop app installer
 - [x] **Developer Emotion Tags** — toggle on/off with visual active state, only one emotion per expression at a time
 - [x] **Model persistence fix** — non-local provider models (e.g. openai-compatible) are reloaded from cache on settings page revisit
 - [x] **5-Layer Memory Architecture** — Dexie Schema v4 with Base Soul (immutable `soulPrompt`), Evolved Persona (`communicationAdaptations`), User Model (`characterId`-tagged facts), Episodic Memory (lazy session compaction with semantic search), and Fact Library (type-agnostic structured storage with confidence tracking)
-- [x] **Structured Fact Extraction** — LLM can emit `structured_fact_seen` to save vocabulary, concepts, or exam facts to the Fact Library; app-managed with auto-confidence updates
+- [x] **Structured Fact Extraction** — LLM can emit `structured_fact_seen` to save concepts or exam facts to the Fact Library; app-managed with auto-confidence updates
 - [x] **Personality Evolution** — LLM-powered analysis of session summaries suggests communication adaptations; user confirms per-suggestion before applying; configurable threshold (2–100 sessions); adaptations written in the user's configured language; supports Companion and Dating Sim mode equally
 - [x] **Lazy Session Compaction** — Previous open sessions are summarized automatically when a new session starts (handles browser tab closure gracefully); turns are persisted with `sessionId`
 - [x] **Episodic Semantic Recall** — Past sessions are retrieved by semantic similarity (cosine on embeddings) rather than just recency; up to 3 thematically matching sessions are injected into the prompt
@@ -798,7 +761,7 @@ pnpm tauri build  # Build desktop app installer
 ### In Progress / Planned
 
 - [x] **LLM-based Session Summaries** — Replace heuristic summaries with real LLM-generated session summaries (2–4 sentences, key topics, emotional arc) for higher-quality episodic recall
-- [x] **Fact Library UI** — Settings page to browse, filter, edit, and delete Fact Library entries (vocabulary, concepts, exam facts) with confidence-based sorting
+- [x] **Fact Library UI** — Settings page to browse, filter, edit, and delete Fact Library entries (concepts, exam facts) with confidence-based sorting
 
 - [ ] **File, Image, and Video Uploads** - Add support for attaching files, images, and videos for multimodal LLM workflows and providers that can use richer context or web-aware tools
 - [ ] **Live2D Support** - Alternative to VRM for 2D animated avatars

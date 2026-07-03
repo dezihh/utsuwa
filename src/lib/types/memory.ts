@@ -58,7 +58,7 @@ export interface SessionSummary {
 export interface FactLibraryEntry {
 	id?: number;
 	characterId: string;
-	type: string; // 'vocab', 'exam_fact', 'concept', ...
+	type: string; // 'exam_fact', 'concept', 'preference', ...
 	key: string;
 	value: string;
 	category?: string;

@@ -399,7 +399,6 @@ export function stripAllTags(text: string): string {
 	return stripBrokenJsonFragments(
 		stripInternalLeakPhrases(
 			replaceEmotionTagsForDisplay(stripActionTags(stripLangTags(text)))
-				.replace(/\[vocab:[^\]]+\]/gi, '')
 		)
 	);
 }
@@ -514,7 +513,7 @@ function stripStateUpdateBlocks(text: string, removed: string[]): string {
 
 /**
  * Strip everything that should never be spoken by TTS:
- * JSON state-update blocks, image-search tags, vocabulary tags, action tags.
+ * JSON state-update blocks, image-search tags, action tags.
  * Keeps [lang:xx] and [voice:xxx] because splitIntoSegments uses them for TTS control.
  * Returns both the cleaned text and a list of removed artifacts for debugging.
  */
@@ -534,7 +533,7 @@ export function stripForSpeech(text: string): SpeechArtifacts {
 
 	// Remove application command tags (single tags and paired reminder blocks)
 	cleaned = cleaned.replace(
-		/\[reminder:[^\]]*\][\s\S]*?\[\/reminder\]|\[(?:search_image|close_images|vocab|action|emote|remind):[^\]]*\]/gi,
+		/\[reminder:[^\]]*\][\s\S]*?\[\/reminder\]|\[(?:search_image|close_images|action|emote|remind):[^\]]*\]/gi,
 		(match) => {
 			removed.push(match);
 			return '';

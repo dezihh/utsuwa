@@ -10,7 +10,6 @@
 	import MemoryGraphModal from '$lib/components/memory/MemoryGraphModal.svelte';
 	import FactLibraryModal from '$lib/components/memory/FactLibraryModal.svelte';
 	import MemoryInspectorModal from '$lib/components/memory/MemoryInspectorModal.svelte';
-	import VocabularyModal from '$lib/components/vocabulary/VocabularyModal.svelte';
 	import EvolutionConfirmModal from '$lib/components/ui/EvolutionConfirmModal.svelte';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 	import { expressionController } from '$lib/services/vrm/expression-controller';
@@ -71,9 +70,6 @@
 	import { extractImageSearchTags, tryExtractDelayedImageSearch, isCloseImageRequest } from '$lib/utils/image-search';
 	import { extractReminderTags } from '$lib/utils/reminders';
 	import { imageSearchStore } from '$lib/stores/image-search.svelte';
-	import { extractVocabTags } from '$lib/utils/vocabulary';
-	import * as vocabularyStorage from '$lib/services/storage/vocabulary';
-	import { vocabularyStore } from '$lib/stores/vocabulary.svelte';
 	import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
 	import type { ProviderConfig } from '$lib/types';
 
@@ -113,9 +109,6 @@
 	// Fact library modal state
 	let showFactLibrary = $state(false);
 
-	// Vocabulary modal state
-	let showVocabulary = $state(false);
-
 	// Memory inspector modal state
 	let showMemoryInspector = $state(false);
 
@@ -135,8 +128,6 @@
 	let spokenSoFar = $state('');
 	// Speech bubble shows exactly the sentence currently spoken by TTS.
 	let currentBubbleSentence = $state('');
-	// Vocabulary words currently loaded into working memory, used for automatic
-	// [lang:xx] injection before TTS so source words keep correct pronunciation.
 	let llmAbortController: AbortController | null = null;
 	// Monotonic counter so aborted sends don't overwrite state of the active one.
 	let sendGeneration = $state(0);
@@ -412,31 +403,6 @@
 			}
 		}
 
-		// Vocabulary familiarity updates from this turn
-		if (parsed.vocabResults && parsed.vocabResults.length > 0 && settingsStore.isVocabularyEnabled()) {
-			const results = parsed.vocabResults;
-			for (const result of results) {
-				try {
-					await vocabularyStorage.updateVocabularyFamiliarityByWord(
-						currentCharacterId,
-						result.word,
-						result.known
-					);
-				} catch (e) {
-					console.warn('[Vocabulary] Failed to update familiarity:', e);
-				}
-			}
-			try {
-				await vocabularyStore.loadStats(currentCharacterId);
-			} catch { /* non-fatal */ }
-			debugStore.addLog({
-				category: 'memory',
-				title: 'Vocab Familiarity Updated',
-				content: results.map((r) => `${r.word}: ${r.known ? '+0.2 (known)' : '-0.1 (struggled)'}`).join('\n')
-
-			});
-		}
-
 		// Close image modal if LLM requested it
 		if (shouldCloseImages) {
 			imageSearchStore.closeModal();
@@ -457,37 +423,6 @@
 				} catch (e) {
 					console.error('[Reminder] Failed to save LLM reminder:', e);
 				}
-			}
-		}
-
-		// Vocabulary tag extraction
-		const { tags: vocabTags, cleanedText: vocabCleaned } = extractVocabTags(dialogue);
-		dialogue = vocabCleaned;
-
-		if (vocabTags.length > 0 && settingsStore.isVocabularyEnabled()) {
-			const vocabWords: string[] = [];
-			for (const tag of vocabTags) {
-				try {
-					const entries = await vocabularyStorage.getVocabularyEntries({
-						mode: tag.mode,
-						filter: tag.filter,
-						count: tag.count,
-						characterId: currentCharacterId
-					});
-					if (entries.length > 0) {
-						entries.forEach((e) => vocabWords.push(`${e.sourceWord} = ${e.targetWord}`));
-					}
-				} catch (e) {
-					console.warn('[Vocabulary] Failed to load entries:', e);
-				}
-			}
-			if (vocabWords.length > 0) {
-				addTurnToWorkingMemory({
-					role: 'system',
-					sessionId: getWorkingMemory().currentSessionId,
-					content: 'Vocabulary for the next exercise:\n' + vocabWords.join('\n'),
-					createdAt: new Date()
-				} as import('$lib/types/memory').ConversationTurn);
 			}
 		}
 
@@ -721,23 +656,6 @@
 		const persona = personaStore.activeCard;
 		const memories = await retrieveRelevantContext(userMessage, currentCharacterId);
 
-		// Load vocabulary metadata for dynamic prompt injection (categories, levels, language pair).
-		// Non-fatal: if this fails the vocabulary layer still renders with static placeholder text.
-		let vocabMeta: {
-			total: number;
-			categories: string[];
-			levels: string[];
-			sourceLang: string | undefined;
-			targetLang: string | undefined;
-		} | null = null;
-		if (settingsStore.isVocabularyEnabled()) {
-			try {
-				vocabMeta = await vocabularyStorage.getVocabularyMeta(currentCharacterId);
-			} catch {
-				// ignore — optional enrichment
-			}
-		}
-
 		const speechSettings = modulesStore.getModuleSettings('speech');
 		const activeTTSProvider = speechSettings?.activeProvider as string | undefined;
 		const ttsConfig = activeTTSProvider ? settingsStore.getProviderConfig(activeTTSProvider) : null;
@@ -776,12 +694,6 @@
 			searxUrl: settingsStore.getSearxUrl() || undefined,
 			imageModalOpen: imageSearchStore.isOpen,
 			imageModalQuery: imageSearchStore.isOpen ? imageSearchStore.currentQuery : undefined,
-			vocabularyEnabled: settingsStore.isVocabularyEnabled(),
-			vocabularyTotal: vocabMeta?.total,
-			vocabularyCategories: vocabMeta?.categories,
-			vocabularyLevels: vocabMeta?.levels,
-			vocabularySourceLang: vocabMeta?.sourceLang,
-			vocabularyTargetLang: vocabMeta?.targetLang,
 			factLibraryEnabled: true,
 			memoryBudget,
 			contextSize,
@@ -1307,7 +1219,7 @@
 </script>
 
 <div class="app-container">
-	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} onOpenFactLibrary={() => showFactLibrary = true} onOpenVocabulary={() => showVocabulary = true} onOpenMemoryInspector={() => showMemoryInspector = true} {leftOffset} />
+	<TopLeftButtons onOpenMemoryGraph={() => showMemoryGraph = true} onOpenFactLibrary={() => showFactLibrary = true} onOpenMemoryInspector={() => showMemoryInspector = true} {leftOffset} />
 	<TopRightButtons
 		onInfoClick={() => showInfoModal = true}
 		{showSidebarBtn}
@@ -1326,9 +1238,6 @@
 	{/if}
 	{#if showFactLibrary}
 		<FactLibraryModal onClose={() => showFactLibrary = false} />
-	{/if}
-	{#if showVocabulary}
-		<VocabularyModal onClose={() => showVocabulary = false} />
 	{/if}
 	{#if showMemoryInspector}
 		<MemoryInspectorModal onClose={() => showMemoryInspector = false} />
