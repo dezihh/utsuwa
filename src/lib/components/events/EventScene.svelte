@@ -3,6 +3,7 @@
 	import type { StateUpdates } from '$lib/types/character';
 	import { Icon } from '$lib/components/ui';
 	import ChoiceDialog from './ChoiceDialog.svelte';
+	import { pop, fadeFast } from '$lib/utils/motion';
 
 	interface Props {
 		scene: Scene;
@@ -134,9 +135,9 @@
 	}
 </script>
 
-<div class="scene-overlay" class:overlay onclick={advance} role="button" tabindex="0" onkeypress={(e) => e.key === 'Enter' && advance()}>
+<div class="scene-overlay" class:overlay transition:fadeFast={{ duration: 200 }} onclick={advance} role="button" tabindex="0" onkeypress={(e) => e.key === 'Enter' && advance()}>
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-	<div class="scene-container" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.key === 'Escape' && onClose()} role="dialog" aria-modal="true" tabindex="-1">
+	<div class="scene-container" transition:pop={{ duration: 240, y: 18 }} onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.key === 'Escape' && onClose()} role="dialog" aria-modal="true" tabindex="-1">
 		<!-- Header with event title -->
 		{#if eventName}
 			<div class="scene-header">
@@ -155,6 +156,9 @@
 		{/if}
 
 		<div class="scene-content">
+			<!-- Each narrative phase fades in on its own beat -->
+			{#key phase}
+				<div class="phase-wrap" in:pop={{ duration: 260, y: 10 }}>
 			<!-- Intro phase -->
 			{#if phase === 'intro' && scene.intro}
 				<div class="scene-intro">
@@ -208,6 +212,8 @@
 			{#if phase !== 'choices'}
 				<div class="hint">{t('clickToContinue')}</div>
 			{/if}
+				</div>
+			{/key}
 		</div>
 	</div>
 </div>
@@ -216,14 +222,13 @@
 	.scene-overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.4);
+		background: rgba(28, 43, 51, 0.28);
 		backdrop-filter: blur(8px);
 		-webkit-backdrop-filter: blur(8px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		z-index: 1000;
-		animation: fadeIn 0.3s ease-out;
 	}
 
 	.scene-overlay.overlay {
@@ -232,37 +237,15 @@
 		-webkit-backdrop-filter: none;
 	}
 
-	@keyframes fadeIn {
-		from { opacity: 0; }
-		to { opacity: 1; }
-	}
-
 	.scene-container {
 		position: relative;
-		background: linear-gradient(180deg, #3a3a3e 0%, #2c2c30 50%, #222224 100%);
-		border: 1px solid rgba(255, 255, 255, 0.08);
-		border-radius: 1.25rem;
+		background: var(--bg-primary);
+		border-radius: var(--radius-xl);
 		max-width: 500px;
 		width: 90%;
 		max-height: 80vh;
 		overflow: hidden;
-		animation: slideUp 0.3s ease-out;
-		box-shadow:
-			0 8px 32px rgba(0, 0, 0, 0.5),
-			0 2px 8px rgba(0, 0, 0, 0.3),
-			inset 0 1px 0 rgba(255, 255, 255, 0.1),
-			inset 0 -1px 0 rgba(0, 0, 0, 0.3);
-	}
-
-	@keyframes slideUp {
-		from {
-			transform: translateY(20px) scale(0.98);
-			opacity: 0;
-		}
-		to {
-			transform: translateY(0) scale(1);
-			opacity: 1;
-		}
+		box-shadow: var(--shadow-xl);
 	}
 
 	/* Header */
@@ -271,8 +254,8 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 0.875rem 1rem;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-		background: linear-gradient(180deg, #3e3e42 0%, #333336 100%);
+		border-bottom: 1px solid var(--border-subtle);
+		background: var(--bg-secondary);
 	}
 
 	.event-title {
@@ -281,7 +264,7 @@
 		gap: 0.5rem;
 		font-weight: 600;
 		font-size: 0.9rem;
-		color: #01B2FF;
+		color: var(--accent);
 	}
 
 	.close-btn {
@@ -290,17 +273,17 @@
 		justify-content: center;
 		width: 1.75rem;
 		height: 1.75rem;
-		background: rgba(255, 255, 255, 0.1);
+		background: transparent;
 		border: none;
-		border-radius: 0.5rem;
-		color: rgba(255, 255, 255, 0.7);
+		border-radius: var(--radius-sm);
+		color: var(--text-secondary);
 		cursor: pointer;
-		transition: all 0.15s;
+		transition: background 0.15s, color 0.15s;
 	}
 
 	.close-btn:hover {
-		background: rgba(255, 255, 255, 0.15);
-		color: white;
+		background: var(--bg-tertiary);
+		color: var(--text-primary);
 	}
 
 	.close-btn.floating {
@@ -319,7 +302,7 @@
 	.intro-text,
 	.outro-text {
 		font-style: italic;
-		color: rgba(255, 255, 255, 0.6);
+		color: var(--text-secondary);
 		text-align: center;
 		line-height: 1.7;
 		margin-bottom: 1.25rem;
@@ -329,43 +312,39 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.375rem;
-		color: #01B2FF;
+		color: var(--accent);
 		font-weight: 600;
 		font-size: 0.8rem;
 		margin-bottom: 0.5rem;
 		padding: 0.25rem 0.625rem;
-		background: linear-gradient(180deg, #3a3a3e 0%, #2a2a2e 100%);
-		border-radius: 1rem;
-		border: 1px solid rgba(255, 255, 255, 0.06);
-		box-shadow:
-			0 2px 4px rgba(0, 0, 0, 0.3),
-			inset 0 1px 0 rgba(255, 255, 255, 0.08);
+		background: var(--accent-muted);
+		border-radius: var(--radius-full);
 	}
 
 	.dialogue-text {
-		color: rgba(255, 255, 255, 0.9);
+		color: var(--text-primary);
 		font-size: 1rem;
 		line-height: 1.7;
 		margin-bottom: 1.25rem;
 	}
 
 	.your-choice {
-		background: rgba(0, 0, 0, 0.2);
-		border-left: 3px solid #01B2FF;
+		background: var(--bg-secondary);
+		border-left: 3px solid var(--accent);
 		padding: 0.75rem 1rem;
 		margin-bottom: 1.25rem;
-		border-radius: 0 0.5rem 0.5rem 0;
+		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 	}
 
 	.choice-label {
 		font-size: 0.7rem;
-		color: rgba(255, 255, 255, 0.5);
+		color: var(--text-tertiary);
 		text-transform: uppercase;
 		letter-spacing: 0.025em;
 	}
 
 	.choice-text {
-		color: rgba(255, 255, 255, 0.9);
+		color: var(--text-primary);
 		margin: 0.25rem 0 0;
 	}
 
@@ -373,27 +352,20 @@
 		display: block;
 		width: 100%;
 		padding: 0.75rem;
-		background: linear-gradient(180deg, #66d9ff 0%, #4dd0ff 25%, #01B2FF 60%, #0099dd 100%);
+		background: var(--accent);
 		border: none;
-		border-radius: 0.625rem;
-		color: white;
+		border-radius: var(--radius-full);
+		color: #fff;
 		font-weight: 500;
 		font-size: 0.875rem;
 		cursor: pointer;
-		transition: all 0.2s;
-		box-shadow:
-			0 4px 16px rgba(1, 178, 255, 0.4),
-			0 2px 4px rgba(0, 0, 0, 0.1),
-			inset 0 1px 0 rgba(255, 255, 255, 0.3);
+		transition: background 0.15s, box-shadow 0.15s, transform 0.15s;
 	}
 
 	.continue-btn:hover {
-		background: linear-gradient(180deg, #80e0ff 0%, #66d9ff 25%, #1ebfff 60%, #00a6e6 100%);
+		background: var(--accent-hover);
 		transform: translateY(-1px);
-		box-shadow:
-			0 6px 24px rgba(1, 178, 255, 0.55),
-			0 3px 6px rgba(0, 0, 0, 0.12),
-			inset 0 1px 0 rgba(255, 255, 255, 0.4);
+		box-shadow: var(--shadow-glow);
 	}
 
 	.continue-btn:active {
@@ -402,7 +374,7 @@
 
 	.hint {
 		text-align: center;
-		color: rgba(255, 255, 255, 0.35);
+		color: var(--text-tertiary);
 		font-size: 0.7rem;
 		margin-top: 1rem;
 	}

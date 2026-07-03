@@ -125,7 +125,6 @@ export interface MessageAnalysis {
 	topicDepth: TopicDepth;
 	detectedEmotion?: string;
 	extractedFacts: string[];
-	mentionedKeywords: string[];
 	isQuestion: boolean;
 	hasEmotionalContent: boolean;
 }

@@ -55,9 +55,6 @@
 			{#if currentIcon === 'persona'}
 				<!-- User circle solid -->
 				<svg viewBox="0 0 512 512" fill="currentColor"><path d="M399 384.2C376.9 345.8 335.4 320 288 320H224c-47.4 0-88.9 25.8-111 64.2c35.2 39.2 86.2 63.8 143 63.8s107.8-24.7 143-63.8zM0 256a256 256 0 1 1 512 0A256 256 0 1 1 0 256zm256 16a72 72 0 1 0 0-144 72 72 0 1 0 0 144z"/></svg>
-			{:else if currentIcon === 'heart'}
-				<!-- Heart solid -->
-				<svg viewBox="0 0 512 512" fill="currentColor"><path d="M47.6 300.4L228.3 469.1c7.5 7 17.4 10.9 27.7 10.9s20.2-3.9 27.7-10.9L464.4 300.4c30.4-28.3 47.6-68 47.6-109.5v-5.8c0-69.9-50.5-129.5-119.4-141C347 36.5 300.6 51.4 268 84L256 96 244 84c-32.6-32.6-79-47.5-124.6-39.9C50.5 55.6 0 115.2 0 185.1v5.8c0 41.5 17.2 81.2 47.6 109.5z"/></svg>
 			{:else if currentIcon === 'monitor'}
 				<!-- Desktop solid -->
 				<svg viewBox="0 0 576 512" fill="currentColor"><path d="M64 0C28.7 0 0 28.7 0 64V352c0 35.3 28.7 64 64 64H240l-10.7 32H160c-17.7 0-32 14.3-32 32s14.3 32 32 32H416c17.7 0 32-14.3 32-32s-14.3-32-32-32H346.7L336 416H512c35.3 0 64-28.7 64-64V64c0-35.3-28.7-64-64-64H64zM512 64V288H64V64H512z"/></svg>
@@ -82,28 +79,17 @@
 		display: flex;
 		height: 100vh;
 		overflow: hidden;
-		background: var(--bg-primary);
+		background: var(--bg-page);
 	}
 
 	.sidebar {
 		width: 260px;
 		flex-shrink: 0;
-		background: linear-gradient(180deg, #f8f8f8 0%, #ebebeb 100%);
-		border-right: 1px solid rgba(0, 0, 0, 0.08);
+		background: var(--bg-primary);
+		border-right: 1px solid var(--border-light);
 		display: flex;
 		flex-direction: column;
 		padding: 1rem;
-		box-shadow:
-			inset -1px 0 0 rgba(255, 255, 255, 0.8),
-			2px 0 8px rgba(0, 0, 0, 0.04);
-	}
-
-	:global(.dark) .sidebar {
-		background: linear-gradient(180deg, #1f1f1f 0%, #171717 100%);
-		border-right-color: rgba(255, 255, 255, 0.06);
-		box-shadow:
-			inset -1px 0 0 rgba(255, 255, 255, 0.03),
-			2px 0 8px rgba(0, 0, 0, 0.2);
 	}
 
 	.sidebar-header {
@@ -116,40 +102,18 @@
 		gap: 0.5rem;
 		padding: 0.5rem 0.875rem;
 		margin-bottom: 1rem;
-		background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
-		border: 1px solid rgba(0, 0, 0, 0.08);
+		background: var(--bg-tertiary);
+		border: 1px solid transparent;
 		color: var(--text-secondary);
 		font-size: 0.875rem;
 		text-decoration: none;
-		border-radius: 12px;
-		transition: all 0.15s ease-out;
-		box-shadow:
-			0 2px 6px rgba(0, 0, 0, 0.06),
-			inset 0 1px 0 rgba(255, 255, 255, 0.9);
-	}
-
-	:global(.dark) .back-button {
-		background: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
-		border-color: rgba(255, 255, 255, 0.08);
-		box-shadow:
-			0 2px 6px rgba(0, 0, 0, 0.2),
-			inset 0 1px 0 rgba(255, 255, 255, 0.05);
+		border-radius: var(--radius-full);
+		transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 	}
 
 	.back-button:hover {
-		background: linear-gradient(180deg, #f5f5f5 0%, #e8e8e8 100%);
+		background: color-mix(in srgb, var(--bg-tertiary), var(--text-primary) 8%);
 		color: var(--text-primary);
-		transform: translateY(-1px);
-		box-shadow:
-			0 4px 10px rgba(0, 0, 0, 0.08),
-			inset 0 1px 0 rgba(255, 255, 255, 0.9);
-	}
-
-	:global(.dark) .back-button:hover {
-		background: linear-gradient(180deg, #333333 0%, #282828 100%);
-		box-shadow:
-			0 4px 10px rgba(0, 0, 0, 0.3),
-			inset 0 1px 0 rgba(255, 255, 255, 0.08);
 	}
 
 	.sidebar-header h1 {
@@ -162,7 +126,7 @@
 	.nav {
 		display: flex;
 		flex-direction: column;
-		gap: 0.375rem;
+		gap: 0.25rem;
 	}
 
 	.nav-item {
@@ -170,57 +134,27 @@
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.75rem 1rem;
-		border-radius: 14px;
+		border-radius: var(--radius-md);
 		color: var(--text-secondary);
 		text-decoration: none;
 		font-size: 0.875rem;
 		font-weight: 500;
-		transition: all 0.15s ease-out;
-		background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		box-shadow:
-			0 2px 4px rgba(0, 0, 0, 0.04),
-			inset 0 1px 0 rgba(255, 255, 255, 0.9);
-	}
-
-	:global(.dark) .nav-item {
-		background: linear-gradient(180deg, #2a2a2a 0%, #222222 100%);
-		border-color: rgba(255, 255, 255, 0.06);
-		box-shadow:
-			0 2px 4px rgba(0, 0, 0, 0.15),
-			inset 0 1px 0 rgba(255, 255, 255, 0.05);
+		background: transparent;
+		transition: background 0.15s ease, color 0.15s ease;
 	}
 
 	.nav-item:hover {
-		background: linear-gradient(180deg, #f8f8f8 0%, #eeeeee 100%);
+		background: var(--bg-secondary);
 		color: var(--text-primary);
-		transform: translateY(-1px);
-		box-shadow:
-			0 4px 8px rgba(0, 0, 0, 0.08),
-			inset 0 1px 0 rgba(255, 255, 255, 0.9);
-	}
-
-	:global(.dark) .nav-item:hover {
-		background: linear-gradient(180deg, #333333 0%, #2a2a2a 100%);
-		box-shadow:
-			0 4px 8px rgba(0, 0, 0, 0.25),
-			inset 0 1px 0 rgba(255, 255, 255, 0.08);
 	}
 
 	.nav-item.active {
-		background: linear-gradient(180deg, #4dd0ff 0%, #01B2FF 100%);
-		border-color: rgba(0, 0, 0, 0.1);
-		color: white;
+		background: var(--accent-muted);
+		color: var(--accent);
 		font-weight: 600;
-		box-shadow:
-			0 3px 8px rgba(1, 178, 255, 0.35),
-			inset 0 1px 0 rgba(255, 255, 255, 0.3);
-	}
-
-	:global(.dark) .nav-item.active {
-		box-shadow:
-			0 3px 10px rgba(1, 178, 255, 0.4),
-			inset 0 1px 0 rgba(255, 255, 255, 0.2);
+		/* Shared-element morph: the active pill slides between nav items
+		   during the app's view transitions */
+		view-transition-name: settings-nav-active;
 	}
 
 	.nav-label {
@@ -234,6 +168,12 @@
 		display: flex;
 		flex-direction: column;
 		position: relative;
+		background: var(--bg-secondary);
+	}
+
+	/* Pure black in dark; stays a soft gray well in light so cards still read */
+	:global(.dark) .content {
+		background: var(--bg-page);
 	}
 
 	.page-bg-icon {
@@ -243,7 +183,7 @@
 		opacity: 0.04;
 		pointer-events: none;
 		z-index: 0;
-		color: #01B2FF;
+		color: var(--accent);
 		transform: rotate(-12deg);
 	}
 
@@ -358,16 +298,11 @@
 		.nav-item {
 			white-space: nowrap;
 			padding: 0.625rem 0.875rem;
-			border-radius: 2rem;
+			border-radius: var(--radius-full);
 			font-size: 0.8125rem;
 			min-height: 44px;
 			display: flex;
 			align-items: center;
-		}
-
-		.nav-item.active {
-			background: #01B2FF;
-			color: white;
 		}
 
 		.content {

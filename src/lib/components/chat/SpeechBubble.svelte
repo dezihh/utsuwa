@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
+	import { pop, fadeFast } from '$lib/utils/motion';
 
 	interface Props {
 		message: string;
@@ -65,6 +66,7 @@
 	});
 
 	// Get screen positions from VRM store
+
 	const screenPos = $derived(vrmStore.headScreenPosition);
 	const headTopPos = $derived(vrmStore.headTopScreenPosition);
 
@@ -101,27 +103,31 @@
 </script>
 
 {#if visible && (message || isTyping)}
-	<div class="speech-bubble-container" role="status" aria-live="polite" style={bubbleStyle()}>
+	<div
+		class="speech-bubble-container"
+		transition:pop={{ duration: 220, y: 6 }}
+		role="status"
+		aria-live="polite"
+		style={bubbleStyle()}
+	>
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="speech-bubble"
-			class:dark={isDark}
-			onclick={handleClick}
-			style="background: {glassBackground()}; border-color: {glassBorder()}; box-shadow: {glassShadow()};"
-		>
-			<div class="speech-bubble-content">
-				{#if isTyping}
-					<div class="typing-indicator" style="--dot-color: {dotsColor()}">
-						<span></span>
-						<span></span>
-						<span></span>
-					</div>
-				{:else}
-					<p class="message" style="color: {textColor()}">{message}</p>
-				{/if}
-			</div>
-			<div class="bubble-tail" style="border-right-color: {tailColor()}"></div>
+		<div class="speech-bubble" onclick={handleClick}>
+			<!-- Keyed so consecutive replies fade in instead of hard-swapping text -->
+			{#key isTyping ? '::typing' : message}
+				<div class="speech-bubble-content" in:fadeFast={{ duration: 180 }}>
+					{#if isTyping}
+						<div class="typing-indicator">
+							<span></span>
+							<span></span>
+							<span></span>
+						</div>
+					{:else}
+						<p class="message">{message}</p>
+					{/if}
+				</div>
+			{/key}
+			<div class="bubble-tail"></div>
 		</div>
 	</div>
 {/if}
@@ -131,20 +137,8 @@
 		position: fixed;
 		z-index: 50;
 		pointer-events: none;
-		animation: fadeIn 0.25s ease-out;
 		/* Position set dynamically via style attribute */
 		transition: top 0.1s ease-out, left 0.1s ease-out;
-	}
-
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateX(10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateX(0);
-		}
 	}
 
 	.speech-bubble {
@@ -152,10 +146,9 @@
 		max-width: 320px;
 		min-width: 60px;
 		overflow: hidden;
-		backdrop-filter: blur(16px);
-		-webkit-backdrop-filter: blur(16px);
-		border: 1px solid;
-		border-radius: 16px;
+		background: var(--bg-secondary);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow-md);
 		pointer-events: auto;
 		cursor: pointer;
 		transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
@@ -163,6 +156,7 @@
 
 	.speech-bubble:hover {
 		transform: scale(1.02) translateY(-1px);
+		box-shadow: var(--shadow-lg);
 	}
 
 	.speech-bubble-content {
@@ -178,7 +172,7 @@
 		height: 0;
 		border-top: 8px solid transparent;
 		border-bottom: 8px solid transparent;
-		border-right: 10px solid;
+		border-right: 10px solid var(--bg-secondary);
 	}
 
 	.message {
@@ -192,6 +186,7 @@
 		-webkit-line-clamp: 4;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+		color: var(--text-primary);
 	}
 
 	.typing-indicator {
@@ -203,12 +198,9 @@
 	.typing-indicator span {
 		width: 8px;
 		height: 8px;
-		background: linear-gradient(180deg, #4dd0ff 0%, var(--dot-color) 100%);
+		background: var(--accent);
 		border-radius: 50%;
 		animation: bounce 1.4s ease-in-out infinite;
-		box-shadow:
-			0 2px 4px rgba(1, 178, 255, 0.3),
-			inset 0 1px 0 rgba(255, 255, 255, 0.4);
 	}
 
 	.typing-indicator span:nth-child(1) {

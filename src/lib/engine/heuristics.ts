@@ -1,6 +1,6 @@
 import type { CharacterState, StateUpdates, Emotion } from '$lib/types/character';
 import type { MessageAnalysis, TopicDepth } from '$lib/types/memory';
-import { calculateMessageImpact } from './state-updates';
+import { calculateMessageImpact } from './state-updates.ts';
 
 // Word-level sentiment keywords (matched with word boundary)
 const POSITIVE_WORDS = [
@@ -122,7 +122,6 @@ export function analyzeMessage(content: string): MessageAnalysis {
 		topicDepth,
 		detectedEmotion,
 		extractedFacts,
-		mentionedKeywords: words.filter((w) => w.length > 4),
 		isQuestion,
 		hasEmotionalContent
 	};

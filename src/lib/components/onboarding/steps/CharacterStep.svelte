@@ -16,22 +16,18 @@
 	const isValid = $derived(name.trim().length > 0);
 </script>
 
-<div class="step-content">
-	<div class="step-header">
-		<div class="header-icon">
-			<Icon name="user" size={24} />
-			<div class="header-icon-shine"></div>
-		</div>
-		<h2 class="title">Name Your Companion</h2>
-		<p class="subtitle">Give your AI companion a name and personality</p>
+<div class="ob-step">
+	<div class="ob-head">
+		<h2 class="ob-title">Name your companion</h2>
+		<p class="ob-subtitle">Give your AI companion a name and a personality.</p>
 	</div>
 
-	<div class="form-group">
-		<label for="name" class="label">Name</label>
+	<div class="ob-field">
+		<label for="name" class="ob-label">Name</label>
 		<input
 			id="name"
 			type="text"
-			class="input"
+			class="ob-input"
 			value={name}
 			oninput={(e) => onNameChange(e.currentTarget.value)}
 			placeholder="Enter a name..."
@@ -52,23 +48,24 @@
 				{/each}
 			</div>
 		</div>
+
 		<textarea
 			id="personality"
-			class="textarea"
+			class="ob-textarea"
 			value={systemPrompt}
 			oninput={(e) => onSystemPromptChange(e.currentTarget.value)}
 			placeholder="Describe their personality, speaking style, background..."
 			rows="5"
 		></textarea>
-		<span class="hint">This shapes how your companion talks and behaves</span>
+		<span class="ob-hint">This shapes how your companion talks and behaves.</span>
 	</div>
 
-	<div class="actions">
-		<button class="back-btn" onclick={onBack}>
+	<div class="ob-actions ob-actions--split">
+		<button class="btn btn-secondary" onclick={onBack}>
 			<Icon name="chevron-left" size={16} />
 			Back
 		</button>
-		<button class="next-btn" onclick={onNext} disabled={!isValid}>
+		<button class="btn btn-primary" onclick={onNext} disabled={!isValid}>
 			Next
 			<Icon name="chevron-right" size={16} />
 		</button>
@@ -350,3 +347,4 @@
 		cursor: not-allowed;
 	}
 </style>
+

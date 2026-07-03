@@ -348,6 +348,39 @@ function stripAllTags(text: string): string {
 }
 
 // Clean up dialogue text
+// State-block markers used to spot a truncated JSON block leaking into dialogue.
+const STATE_BLOCK_START =
+	/\{[^{}]*"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|energy_delta|new_memory)"/i;
+
+// Cut a trailing state block that was never closed (unterminated ```json fence,
+// or a bare `{...` whose braces never balance) — the mark of a response truncated
+// mid-JSON. Balanced blocks and ordinary prose with a stray brace are left alone.
+function stripTruncatedStateBlock(text: string): string {
+	// Unterminated ```json fence: an opener with no matching closing fence.
+	const fence = text.search(/```json/i);
+	if (fence !== -1 && !/```json[\s\S]*?```/i.test(text)) {
+		return text.slice(0, fence).trimEnd();
+	}
+
+	// Bare block: find where a state object starts, then walk braces. If depth
+	// never returns to zero, the block is truncated and everything from it is cut.
+	const match = text.match(STATE_BLOCK_START);
+	if (match?.index !== undefined) {
+		let depth = 0;
+		let balanced = false;
+		for (const ch of text.slice(match.index)) {
+			if (ch === '{') depth++;
+			else if (ch === '}' && --depth === 0) {
+				balanced = true;
+				break;
+			}
+		}
+		if (!balanced) return text.slice(0, match.index).trimEnd();
+	}
+
+	return text;
+}
+
 function cleanDialogue(text: string): string {
 	// Cut runaway output at a leaked stop token and drop stray template tokens.
 	let cleaned = stripControlTokens(text);
@@ -357,6 +390,11 @@ function cleanDialogue(text: string): string {
 
 	// Remove all application control tags from visible chat
 	cleaned = stripAllTags(cleaned);
+
+	// Drop a trailing UNterminated state block first (small models truncated
+	// mid-JSON): it has no closing ``` or `}`, so the closed-object cleaner below
+	// would only fragment it and leave shards in the dialogue.
+	cleaned = stripTruncatedStateBlock(cleaned);
 
 	// Remove any leftover JSON-like content (valid or broken fragments)
 	cleaned = cleaned.replace(/\{[^}]*"(?:mood|delta|emotion)[^}]*\}/gi, '');

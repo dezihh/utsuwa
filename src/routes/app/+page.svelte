@@ -1,6 +1,5 @@
 <script lang="ts">
 	import VrmScene from '$lib/components/vrm/VrmScene.svelte';
-	import CompanionStatus from '$lib/components/ui/CompanionStatus.svelte';
 	import FloatingStatIndicators from '$lib/components/ui/FloatingStatIndicators.svelte';
 	import { TopRightButtons, TopLeftButtons, InfoModal, ImageSearchModal, Icon } from '$lib/components/ui';
 	import BottomChatBar from '$lib/components/chat/BottomChatBar.svelte';
@@ -30,10 +29,12 @@
 	import { mcpStore } from '$lib/stores/mcp.svelte';
 	import type { PreparedImage } from '$lib/services/storage/keepsakes';
 	import { isTauri } from '$lib/services/platform';
+	import { browser } from '$app/environment';
 	import type { TTSProvider } from '$lib/types';
 	import type { StateUpdates } from '$lib/types/character';
 	import type { EventDefinition, EventType } from '$lib/types/events';
 	import { onMount } from 'svelte';
+	import { pop, fadeFast } from '$lib/utils/motion';
 
 	// V2 companion system imports
 	import { buildSystemPrompt, buildExtractionSystemPrompt, type PromptContext } from '$lib/ai/prompt-builder';
@@ -43,6 +44,7 @@
 	import type { SpeechSegment } from '$lib/services/voice-orchestrator';
 	import {
 		retrieveRelevantContext,
+		recordTurn,
 		addTurnToWorkingMemory,
 		hydrateWorkingMemory,
 		clearWorkingMemory,
@@ -60,6 +62,7 @@
 	import * as memoryStorage from '$lib/services/storage/memory';
 	import { initEmbeddingModel, subscribeToEmbeddingState, type EmbeddingState } from '$lib/services/embeddings';
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
+	import { completionMarkers } from '$lib/engine/event-completion';
 	import { allEvents } from '$lib/data/events';
 	import { debugStore } from '$lib/stores/debug.svelte';
 	import { splitIntoSegments, splitIntoSentences, stripAllTags, stripForApiContext, stripForSpeech, stripTagsForBubble, isContinueRequest, getEmotionDisplayText } from '$lib/utils/sentences';
@@ -243,16 +246,16 @@
 	// Track embedding model state
 	let embeddingState = $state<EmbeddingState>({ isLoading: false, isReady: false, error: null });
 
+
 	// Hydrate working memory on start
 	$effect(() => {
-		isMemoryReady = false;
 		(async () => {
 			try {
 				await hydrateWorkingMemory(currentCharacterId);
 				isMemoryReady = true;
+
 			} catch (e) {
 				console.error('Failed to hydrate working memory:', e);
-				isMemoryReady = true; // Don't block the app
 			}
 		})();
 	});
@@ -266,10 +269,6 @@
 
 	// Initialize embedding model and backfill any facts without embeddings
 	$effect(() => {
-		const unsub = subscribeToEmbeddingState((state) => {
-			embeddingState = state;
-		});
-
 		initEmbeddingModel().then(async (ready) => {
 			if (ready) {
 				const status = await getEmbeddingBackfillStatus();
@@ -280,15 +279,15 @@
 		}).catch((e) => {
 			console.error('Failed to initialize embedding model:', e);
 		});
-
-		return unsub;
 	});
 
-	// Check for first-run (onboarding)
+	// Check for first-run (onboarding). ?onboarding=1 force-opens it for testing
+	// without resetting the companion.
 	$effect(() => {
 		if (characterStore.isReady && !onboardingDismissed) {
+			const forced = browser && new URLSearchParams(window.location.search).has('onboarding');
 			const { lastInteraction, totalInteractions } = characterStore.state;
-			showOnboarding = lastInteraction === null && totalInteractions === 0;
+			showOnboarding = forced || (lastInteraction === null && totalInteractions === 0);
 		}
 	});
 
@@ -434,6 +433,7 @@
 				category: 'memory',
 				title: 'Vocab Familiarity Updated',
 				content: results.map((r) => `${r.word}: ${r.known ? '+0.2 (known)' : '-0.1 (struggled)'}`).join('\n')
+
 			});
 		}
 
@@ -616,6 +616,7 @@
 				console.debug('[Session] Failed to save turns:', e);
 			}
 		}
+
 
 		// Extract facts
 		const potentialFacts = extractPotentialFacts(dialogue, userMessage);
@@ -1131,6 +1132,19 @@
 				const decoder = new TextDecoder();
 				if (!reader) throw new Error('No response body');
 
+				const processLine = (line: string) => {
+					if (line.startsWith('0:')) {
+						const text = JSON.parse(line.slice(2));
+						fullContent += text;
+						chatStore.updateLastMessage(fullContent);
+					} else if (line.startsWith('e:')) {
+						const { error } = JSON.parse(line.slice(2));
+						throw new Error(error);
+					}
+				};
+
+				// Buffer partial lines so a delta split across network chunks doesn't break JSON.parse
+				let streamBuffer = '';
 				while (true) {
 					if (llmAbortController.signal.aborted) break;
 
@@ -1153,8 +1167,11 @@
 							const { error } = JSON.parse(line.slice(2));
 							throw new Error(error);
 						}
+
 					}
 				}
+				streamBuffer += decoder.decode();
+				if (streamBuffer) processLine(streamBuffer);
 			}
 
 			speechBuffer?.flush();
@@ -1268,7 +1285,11 @@
 			choiceIndex,
 			choiceIndex !== undefined ? `Choice ${choiceIndex + 1}` : undefined
 		).then(() => {
-			characterStore.markEventCompleted(event.id);
+			// Records the event id plus the chosen outcome marker (e.g.
+			// confession_accepted), which is what gates later relationship stages.
+			for (const marker of completionMarkers(event, choiceIndex)) {
+				characterStore.markEventCompleted(marker);
+			}
 		}).catch((e) => {
 			console.error('Failed to record event completion:', e);
 		});
@@ -1296,6 +1317,7 @@
 		upcomingReminders={reminderStore.upcoming}
 		onDeleteReminder={deleteReminder}
 	/>
+
 	{#if showInfoModal}
 		<InfoModal onClose={() => showInfoModal = false} />
 	{/if}
@@ -1325,7 +1347,7 @@
 		<!-- VRM Stage (Full Background) -->
 		<div class="stage-container">
 			{#if vrmStore.isLoading || !vrmStore.modelUrl}
-				<div class="loading-dots">
+				<div class="loading-dots" out:fadeFast={{ duration: 300 }}>
 					<span class="dot"></span>
 					<span class="dot"></span>
 					<span class="dot"></span>
@@ -1334,16 +1356,17 @@
 
 			{#if vrmStore.error}
 				<div class="error-toast" onclick={() => vrmStore.setError(null)} role="button" tabindex="0" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); vrmStore.setError(null); } }}>
+
 					<span>{vrmStore.error}</span>
 					<button type="button" class="toast-dismiss" aria-label="Dismiss">✕</button>
 				</div>
 			{/if}
 
-			<VrmScene />
+			<!-- The avatar resolves into focus once the model is ready -->
+			<div class="vrm-stage" class:is-loading={vrmStore.isLoading || !vrmStore.modelUrl}>
+				<VrmScene />
+			</div>
 		</div>
-
-		<!-- Companion Status (Top Left) - includes settings icons now -->
-		<CompanionStatus />
 
 		<!-- Floating Stat Indicators -->
 		<FloatingStatIndicators />
@@ -1375,7 +1398,7 @@
 			duplexNoiseDetected={duplexStore.noiseDetected}
 			duplexSensitivity={duplexStore.sensitivity}
 			onToggleDuplex={toggleDuplex}
-			onAdjustSensitivity={(delta) => duplexStore.adjustSensitivity(delta)}
+			onAdjustSensitivity={(delta: number) => duplexStore.adjustSensitivity(delta)}
 		/>
 
 		<!-- Error toast for chat errors -->
@@ -1392,6 +1415,7 @@
 					<Icon name="copy" size={14} />
 				</button>
 				<button type="button" class="toast-dismiss" onclick={() => chatStore.dismissError()} aria-label="Dismiss">✕</button>
+
 			</div>
 		{/if}
 
@@ -1440,6 +1464,20 @@
 		position: absolute;
 		inset: 0;
 		z-index: 0;
+	}
+
+	/* The scene sits blurred and dimmed while the model loads, then resolves
+	   into focus. Base state carries no filter so nothing lingers after. */
+	.vrm-stage {
+		height: 100%;
+		transition:
+			opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+			filter 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+	}
+
+	.vrm-stage.is-loading {
+		opacity: 0;
+		filter: blur(14px);
 	}
 
 	.loading-dots {
@@ -1491,10 +1529,10 @@
 		width: fit-content;
 		max-width: 600px;
 		padding: 0.75rem 1rem;
-		background: linear-gradient(180deg, #ff6b6b 0%, #ee5a5a 100%);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 16px;
-		color: white;
+		background: var(--color-error);
+		border: 1px solid transparent;
+		border-radius: var(--radius-lg);
+		color: #fff;
 		font-size: 0.875rem;
 		z-index: 50;
 		animation: errorSlideDownShake 0.5s ease-out;
@@ -1506,6 +1544,7 @@
 		user-select: text;
 		-webkit-user-select: text;
 		-moz-user-select: text;
+
 	}
 
 	.error-toast span {
@@ -1526,7 +1565,7 @@
 		background: rgba(255, 255, 255, 0.2);
 		border: none;
 		padding: 0.25rem;
-		border-radius: 6px;
+		border-radius: var(--radius-sm);
 		cursor: pointer;
 		color: white;
 		opacity: 0.9;

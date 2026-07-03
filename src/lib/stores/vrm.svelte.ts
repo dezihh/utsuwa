@@ -766,6 +766,7 @@ function createVrmStore() {
 		void saveAnimationMetadata();
 	}
 
+
 	function getActiveModel(): VrmModel | null {
 		return models.find((m) => m.id === activeModelId) || null;
 	}
@@ -882,6 +883,7 @@ function createVrmStore() {
 		removeModel,
 		renameModel,
 		loadModelBlob,
+
 		getActiveModel,
 		setModelPreview,
 		addAnimation,

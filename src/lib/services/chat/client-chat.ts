@@ -181,6 +181,7 @@ export async function streamChatDirect(
 			onError,
 			format: provider === 'anthropic' ? 'anthropic' : 'openai'
 		});
+
 	} catch (err) {
 		if (err instanceof Error && err.name === 'AbortError') {
 			// Stream was cancelled by the caller — don't report as error
@@ -201,6 +202,7 @@ export async function streamChatDirect(
 }
 
 interface ExtractStateUpdatesOptions {
+
 	provider: LLMProvider;
 	model: string;
 	apiKey?: string;

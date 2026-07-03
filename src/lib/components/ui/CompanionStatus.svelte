@@ -2,6 +2,7 @@
 	import { characterStore } from '$lib/stores/character.svelte';
 	import { Icon } from '$lib/components/ui';
 	import { localPath } from '$lib/config/links';
+	import { pop, fadeFast } from '$lib/utils/motion';
 
 	interface Props {
 		overlay?: boolean;
@@ -12,23 +13,22 @@
 
 	const charState = $derived(characterStore.state);
 	const moodInfo = $derived(characterStore.moodInfo);
-	const stageInfo = $derived(characterStore.stageInfo);
 	const affectionPercent = $derived(characterStore.affectionPercent);
 	const isCompanionMode = $derived(characterStore.appMode === 'companion');
 
 	// Stats config with colors for the vertical bars
 	const datingStats = $derived([
-		{ key: 'affection', label: 'Love', icon: 'heart', value: affectionPercent, color: '#ff6b9d', glowColor: 'rgba(255, 107, 157, 0.5)' },
-		{ key: 'trust', label: 'Trust', icon: 'shield', value: charState.trust, color: '#4dd0ff', glowColor: 'rgba(77, 208, 255, 0.5)' },
-		{ key: 'intimacy', label: 'Intimacy', icon: 'sparkles', value: charState.intimacy, color: '#c084fc', glowColor: 'rgba(192, 132, 252, 0.5)' },
-		{ key: 'comfort', label: 'Comfort', icon: 'home', value: charState.comfort, color: '#4ade80', glowColor: 'rgba(74, 222, 128, 0.5)' },
-		{ key: 'energy', label: 'Energy', icon: 'zap', value: charState.energy, color: '#fbbf24', glowColor: 'rgba(251, 191, 36, 0.5)' },
-		{ key: 'respect', label: 'Respect', icon: 'award', value: charState.respect, color: '#60a5fa', glowColor: 'rgba(96, 165, 250, 0.5)' }
+		{ key: 'affection', label: 'Love', icon: 'heart', value: affectionPercent, color: 'var(--stat-affection)' },
+		{ key: 'trust', label: 'Trust', icon: 'shield', value: charState.trust, color: 'var(--stat-trust)' },
+		{ key: 'intimacy', label: 'Intimacy', icon: 'sparkles', value: charState.intimacy, color: 'var(--stat-intimacy)' },
+		{ key: 'comfort', label: 'Comfort', icon: 'home', value: charState.comfort, color: 'var(--stat-comfort)' },
+		{ key: 'energy', label: 'Energy', icon: 'zap', value: charState.energy, color: 'var(--stat-energy)' },
+		{ key: 'respect', label: 'Respect', icon: 'award', value: charState.respect, color: 'var(--stat-respect)' }
 	]);
 
 	const companionStats = $derived([
-		{ key: 'energy', label: 'Energy', icon: 'zap', value: charState.energy, color: '#4dd0ff', glowColor: 'rgba(77, 208, 255, 0.5)' },
-		{ key: 'chats', label: 'Chats', icon: 'message-circle', value: Math.min(charState.totalInteractions, 100), color: '#4ade80', glowColor: 'rgba(74, 222, 128, 0.5)' }
+		{ key: 'energy', label: 'Energy', icon: 'zap', value: charState.energy, color: 'var(--stat-energy)' },
+		{ key: 'chats', label: 'Chats', icon: 'message-circle', value: Math.min(charState.totalInteractions, 100), color: 'var(--color-success)' }
 	]);
 </script>
 
@@ -38,21 +38,15 @@
 		{#if isExpanded}
 			<div
 				class="overlay-expanded-panel"
+				transition:pop={{ base: 'translateX(-50%)', y: 10, duration: 220 }}
 				class:high-affection={!isCompanionMode && charState.affection > 500}
 			>
 				<div class="status-details">
 					<div class="stat-bars" class:companion-mode={isCompanionMode}>
 						{#each isCompanionMode ? companionStats : datingStats as stat, i}
-							<div class="stat-bar-wrapper" style="--delay: {i}; --bar-color: {stat.color}; --bar-glow: {stat.glowColor}">
+							<div class="stat-bar-wrapper" style="--delay: {i}; --bar-color: {stat.color}">
 								<div class="stat-bar-track">
-									<div class="stat-bar-fill" style="height: {stat.value}%">
-										<div class="stat-bar-shine"></div>
-									</div>
-									<div class="stat-bar-bubbles">
-										{#each Array(3) as _, j}
-											<div class="bubble" style="--bubble-delay: {j * 0.3}s"></div>
-										{/each}
-									</div>
+									<div class="stat-bar-fill" style="height: {stat.value}%"></div>
 								</div>
 								<div class="stat-icon">
 									<Icon name={stat.icon} size={14} />
@@ -98,14 +92,15 @@
 			title={isExpanded ? 'Collapse status' : 'Show status'}
 			style="--mood-color: {moodInfo.color}"
 		>
-			<span class="icon-inner">
-				{#if isExpanded}
-					<Icon name="x" size={20} />
-				{:else}
-					<Icon name={moodInfo.icon} size={20} />
-				{/if}
-			</span>
-			<span class="btn-shine"></span>
+			{#key isExpanded}
+				<span class="icon-inner" in:fadeFast={{ duration: 150 }}>
+					{#if isExpanded}
+						<Icon name="x" size={20} />
+					{:else}
+						<Icon name={moodInfo.icon} size={20} />
+					{/if}
+				</span>
+			{/key}
 		</button>
 	</div>
 {:else}
@@ -116,19 +111,12 @@
 		class:high-affection={!isCompanionMode && charState.affection > 500}
 	>
 		{#if isExpanded}
-			<div class="status-details">
+			<div class="status-details" transition:pop={{ duration: 200, y: 8 }}>
 				<div class="stat-bars" class:companion-mode={isCompanionMode}>
 					{#each isCompanionMode ? companionStats : datingStats as stat, i}
-						<div class="stat-bar-wrapper" style="--delay: {i}; --bar-color: {stat.color}; --bar-glow: {stat.glowColor}">
+						<div class="stat-bar-wrapper" style="--delay: {i}; --bar-color: {stat.color}">
 							<div class="stat-bar-track">
-								<div class="stat-bar-fill" style="height: {stat.value}%">
-									<div class="stat-bar-shine"></div>
-								</div>
-								<div class="stat-bar-bubbles">
-									{#each Array(3) as _, j}
-										<div class="bubble" style="--bubble-delay: {j * 0.3}s"></div>
-									{/each}
-								</div>
+								<div class="stat-bar-fill" style="height: {stat.value}%"></div>
 							</div>
 							<div class="stat-icon">
 								<Icon name={stat.icon} size={14} />
@@ -189,44 +177,13 @@
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 35;
-		/* Glossy panel - like a PS2 menu */
-		background: linear-gradient(
-			180deg,
-			rgba(255, 255, 255, 0.95) 0%,
-			rgba(245, 245, 250, 0.9) 50%,
-			rgba(235, 235, 240, 0.95) 100%
-		);
-		backdrop-filter: blur(20px);
-		-webkit-backdrop-filter: blur(20px);
-		border: 1px solid rgba(255, 255, 255, 0.6);
-		border-radius: 20px;
+		background: var(--bg-primary);
+		border-radius: var(--radius-lg);
 		overflow: hidden;
-		transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+		transition: box-shadow 0.2s;
 		display: flex;
 		flex-direction: column;
-		/* Layered shadows for depth */
-		box-shadow:
-			0 0 0 1px rgba(0, 0, 0, 0.05),
-			0 4px 20px rgba(0, 0, 0, 0.1),
-			0 8px 32px rgba(0, 0, 0, 0.08),
-			inset 0 1px 0 rgba(255, 255, 255, 1),
-			inset 0 -1px 0 rgba(0, 0, 0, 0.05);
-	}
-
-	:global(.dark) .status-container {
-		background: linear-gradient(
-			180deg,
-			rgba(45, 45, 50, 0.95) 0%,
-			rgba(35, 35, 40, 0.95) 50%,
-			rgba(28, 28, 32, 0.98) 100%
-		);
-		border-color: rgba(255, 255, 255, 0.1);
-		box-shadow:
-			0 0 0 1px rgba(0, 0, 0, 0.3),
-			0 4px 20px rgba(0, 0, 0, 0.4),
-			0 8px 32px rgba(0, 0, 0, 0.3),
-			inset 0 1px 0 rgba(255, 255, 255, 0.08),
-			inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+		box-shadow: var(--shadow-sm);
 	}
 
 	@media (min-width: 641px) {
@@ -236,19 +193,7 @@
 	}
 
 	.status-container.high-affection {
-		box-shadow:
-			0 0 0 1px rgba(0, 0, 0, 0.05),
-			0 4px 20px rgba(0, 0, 0, 0.1),
-			0 0 40px rgba(255, 107, 157, 0.2),
-			inset 0 1px 0 rgba(255, 255, 255, 1);
-	}
-
-	:global(.dark) .status-container.high-affection {
-		box-shadow:
-			0 0 0 1px rgba(0, 0, 0, 0.3),
-			0 4px 20px rgba(0, 0, 0, 0.4),
-			0 0 50px rgba(255, 107, 157, 0.25),
-			inset 0 1px 0 rgba(255, 255, 255, 0.08);
+		box-shadow: 0 0 0 1px var(--stat-affection), var(--shadow-sm);
 	}
 
 	/* Toggle Button */
@@ -258,7 +203,7 @@
 		gap: 0.5rem;
 		width: 100%;
 		padding: 0.625rem 0.875rem;
-		background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, transparent 100%);
+		background: transparent;
 		border: none;
 		border-top: 1px solid transparent;
 		cursor: pointer;
@@ -267,17 +212,8 @@
 		transition: background 0.15s;
 	}
 
-	:global(.dark) .status-toggle {
-		background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
-	}
-
 	.expanded .status-toggle {
-		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		background: transparent;
-	}
-
-	:global(.dark) .expanded .status-toggle {
-		border-top-color: rgba(255, 255, 255, 0.06);
+		border-top: 1px solid var(--border-subtle);
 	}
 
 	.mood-icon {
@@ -306,11 +242,7 @@
 	}
 
 	.status-toggle:hover {
-		background: linear-gradient(180deg, rgba(0, 0, 0, 0.03) 0%, rgba(0, 0, 0, 0.02) 100%);
-	}
-
-	:global(.dark) .status-toggle:hover {
-		background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+		background: var(--bg-secondary);
 	}
 
 	/* Expanded Content */
@@ -321,7 +253,7 @@
 		gap: 0.75rem;
 	}
 
-	/* Sims-style Vertical Stat Bars */
+	/* Vertical Stat Bars */
 	.stat-bars {
 		display: flex;
 		justify-content: center;
@@ -355,33 +287,10 @@
 	.stat-bar-track {
 		width: 20px;
 		height: 70px;
-		background: linear-gradient(
-			180deg,
-			rgba(0, 0, 0, 0.15) 0%,
-			rgba(0, 0, 0, 0.1) 50%,
-			rgba(0, 0, 0, 0.08) 100%
-		);
-		border-radius: 10px;
+		background: var(--bg-tertiary);
+		border-radius: var(--radius-full);
 		position: relative;
 		overflow: hidden;
-		/* Inner shadow for inset look */
-		box-shadow:
-			inset 0 2px 4px rgba(0, 0, 0, 0.15),
-			inset 0 0 0 1px rgba(0, 0, 0, 0.05),
-			0 1px 0 rgba(255, 255, 255, 0.5);
-	}
-
-	:global(.dark) .stat-bar-track {
-		background: linear-gradient(
-			180deg,
-			rgba(0, 0, 0, 0.4) 0%,
-			rgba(0, 0, 0, 0.3) 50%,
-			rgba(0, 0, 0, 0.25) 100%
-		);
-		box-shadow:
-			inset 0 2px 4px rgba(0, 0, 0, 0.4),
-			inset 0 0 0 1px rgba(0, 0, 0, 0.2),
-			0 1px 0 rgba(255, 255, 255, 0.05);
 	}
 
 	.stat-bar-fill {
@@ -389,88 +298,9 @@
 		bottom: 0;
 		left: 0;
 		right: 0;
-		background: linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--bar-color) 100%, white 30%) 0%,
-			var(--bar-color) 40%,
-			color-mix(in srgb, var(--bar-color) 100%, black 15%) 100%
-		);
-		border-radius: 8px;
+		background: var(--bar-color);
+		border-radius: var(--radius-full);
 		transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-		/* Glow effect */
-		box-shadow:
-			0 0 12px var(--bar-glow),
-			0 0 4px var(--bar-glow),
-			inset 0 0 0 1px rgba(255, 255, 255, 0.3);
-	}
-
-	.stat-bar-shine {
-		position: absolute;
-		top: 0;
-		left: 2px;
-		right: 50%;
-		height: 100%;
-		background: linear-gradient(
-			90deg,
-			rgba(255, 255, 255, 0.4) 0%,
-			rgba(255, 255, 255, 0.1) 100%
-		);
-		border-radius: 6px 0 0 6px;
-		pointer-events: none;
-	}
-
-	/* Animated bubbles in the bar */
-	.stat-bar-bubbles {
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		height: 100%;
-		pointer-events: none;
-		overflow: hidden;
-	}
-
-	.bubble {
-		position: absolute;
-		width: 4px;
-		height: 4px;
-		background: rgba(255, 255, 255, 0.6);
-		border-radius: 50%;
-		bottom: -6px;
-		left: 50%;
-		transform: translateX(-50%);
-		animation: bubbleRise 2s ease-in-out infinite;
-		animation-delay: var(--bubble-delay);
-		opacity: 0;
-	}
-
-	.bubble:nth-child(2) {
-		left: 30%;
-		width: 3px;
-		height: 3px;
-	}
-
-	.bubble:nth-child(3) {
-		left: 70%;
-		width: 3px;
-		height: 3px;
-	}
-
-	@keyframes bubbleRise {
-		0% {
-			bottom: -6px;
-			opacity: 0;
-		}
-		10% {
-			opacity: 0.7;
-		}
-		90% {
-			opacity: 0.3;
-		}
-		100% {
-			bottom: 100%;
-			opacity: 0;
-		}
 	}
 
 	.stat-icon {
@@ -479,20 +309,9 @@
 		justify-content: center;
 		width: 24px;
 		height: 24px;
-		background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
-		border-radius: 8px;
+		background: var(--bg-secondary);
+		border-radius: var(--radius-sm);
 		color: var(--bar-color);
-		box-shadow:
-			0 2px 4px rgba(0, 0, 0, 0.1),
-			inset 0 1px 0 rgba(255, 255, 255, 0.9);
-		filter: drop-shadow(0 0 3px var(--bar-glow));
-	}
-
-	:global(.dark) .stat-icon {
-		background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
-		box-shadow:
-			0 2px 4px rgba(0, 0, 0, 0.3),
-			inset 0 1px 0 rgba(255, 255, 255, 0.08);
 	}
 
 	.stat-label {
@@ -519,44 +338,25 @@
 		font-weight: 600;
 		color: var(--text-secondary);
 		padding: 0.3rem 0.5rem;
-		background: linear-gradient(180deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.06) 100%);
-		border-radius: 20px;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
-	}
-
-	:global(.dark) .quick-stat {
-		background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.04) 100%);
-		border-color: rgba(255, 255, 255, 0.08);
-		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+		background: var(--bg-tertiary);
+		border-radius: var(--radius-full);
 	}
 
 	.quick-stat.streak {
-		color: white;
-		background: linear-gradient(180deg, #ff8f3f 0%, #ff6b1a 100%);
-		border-color: rgba(0, 0, 0, 0.1);
-		box-shadow:
-			0 2px 8px rgba(255, 107, 26, 0.35),
-			inset 0 1px 0 rgba(255, 255, 255, 0.3);
+		color: var(--color-warning);
+		background: color-mix(in srgb, var(--color-warning) 12%, transparent);
 	}
 
 	.quick-stat.profile-link {
-		color: white;
+		color: #fff;
 		text-decoration: none;
-		background: linear-gradient(180deg, #4dd0ff 0%, #01B2FF 100%);
-		border-color: rgba(0, 0, 0, 0.1);
-		box-shadow:
-			0 2px 8px rgba(1, 178, 255, 0.3),
-			inset 0 1px 0 rgba(255, 255, 255, 0.3);
+		background: var(--accent);
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: background 0.15s ease;
 	}
 
 	.quick-stat.profile-link:hover {
-		transform: translateY(-1px);
-		box-shadow:
-			0 4px 12px rgba(1, 178, 255, 0.4),
-			inset 0 1px 0 rgba(255, 255, 255, 0.4);
+		background: var(--accent-hover);
 	}
 
 	/* Overlay mode: compact circular button */
@@ -573,30 +373,17 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+		transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s;
 		position: relative;
 		overflow: hidden;
-		background: linear-gradient(
-			180deg,
-			#3a3a3a 0%,
-			#1a1a1a 60%,
-			#0a0a0a 100%
-		);
-		color: white;
-		box-shadow:
-			0 4px 16px rgba(0, 0, 0, 0.35),
-			0 2px 4px rgba(0, 0, 0, 0.2),
-			inset 0 1px 0 rgba(255, 255, 255, 0.15),
-			inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+		background: var(--bg-primary);
+		color: var(--text-primary);
+		box-shadow: var(--shadow-md);
 	}
 
 	.overlay-status-btn:hover {
 		transform: translateY(-2px);
-		box-shadow:
-			0 6px 24px rgba(0, 0, 0, 0.45),
-			0 3px 6px rgba(0, 0, 0, 0.25),
-			inset 0 1px 0 rgba(255, 255, 255, 0.2),
-			inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+		box-shadow: var(--shadow-lg);
 	}
 
 	.overlay-status-btn:active {
@@ -609,21 +396,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-	}
-
-	.overlay-status-btn .btn-shine {
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 50%;
-		height: 50%;
-		background: linear-gradient(
-			180deg,
-			rgba(255, 255, 255, 0.4) 0%,
-			rgba(255, 255, 255, 0) 100%
-		);
-		border-radius: 50% 50% 0 0;
-		pointer-events: none;
+		color: var(--mood-color, var(--text-primary));
 	}
 
 	/* Expanded panel floating above the controls, centered in viewport */
@@ -632,58 +405,13 @@
 		bottom: 5.5rem;
 		left: 50%;
 		transform: translateX(-50%);
-		background: linear-gradient(
-			180deg,
-			rgba(255, 255, 255, 0.95) 0%,
-			rgba(245, 245, 250, 0.9) 50%,
-			rgba(235, 235, 240, 0.95) 100%
-		);
-		backdrop-filter: blur(20px);
-		-webkit-backdrop-filter: blur(20px);
-		border: 1px solid rgba(255, 255, 255, 0.6);
-		border-radius: 20px;
-		box-shadow:
-			0 0 0 1px rgba(0, 0, 0, 0.05),
-			0 4px 20px rgba(0, 0, 0, 0.1),
-			0 8px 32px rgba(0, 0, 0, 0.08),
-			inset 0 1px 0 rgba(255, 255, 255, 1),
-			inset 0 -1px 0 rgba(0, 0, 0, 0.05);
-		animation: panelSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+		background: var(--bg-primary);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow-lg);
 		white-space: nowrap;
 	}
 
-	:global(.dark) .overlay-expanded-panel {
-		background: linear-gradient(
-			180deg,
-			rgba(45, 45, 50, 0.95) 0%,
-			rgba(35, 35, 40, 0.95) 50%,
-			rgba(28, 28, 32, 0.98) 100%
-		);
-		border-color: rgba(255, 255, 255, 0.1);
-		box-shadow:
-			0 0 0 1px rgba(0, 0, 0, 0.3),
-			0 4px 20px rgba(0, 0, 0, 0.4),
-			0 8px 32px rgba(0, 0, 0, 0.3),
-			inset 0 1px 0 rgba(255, 255, 255, 0.08),
-			inset 0 -1px 0 rgba(0, 0, 0, 0.2);
-	}
-
 	.overlay-expanded-panel.high-affection {
-		box-shadow:
-			0 0 0 1px rgba(0, 0, 0, 0.05),
-			0 4px 20px rgba(0, 0, 0, 0.1),
-			0 0 40px rgba(255, 107, 157, 0.2),
-			inset 0 1px 0 rgba(255, 255, 255, 1);
-	}
-
-	@keyframes panelSlideUp {
-		from {
-			opacity: 0;
-			transform: translateX(-50%) translateY(8px);
-		}
-		to {
-			opacity: 1;
-			transform: translateX(-50%) translateY(0);
-		}
+		box-shadow: 0 0 0 1px var(--stat-affection), var(--shadow-lg);
 	}
 </style>

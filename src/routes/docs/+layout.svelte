@@ -62,9 +62,9 @@
 <style>
 	.docs {
 		min-height: 100vh;
-		background: var(--docs-bg);
+		background: var(--bg-page);
 		color: var(--docs-text);
-		font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		font-family: var(--font-sans);
 	}
 
 	.docs-body {

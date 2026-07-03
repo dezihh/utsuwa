@@ -4,7 +4,7 @@ import { EVENT_IDS } from '$lib/data/events/constants';
 // 'companion' is NOT included here because it's a locked mode, not a progression stage.
 // It is set/unset exclusively via app mode switching (characterStore.setAppMode)
 // and is never reached through normal stage calculation.
-const STAGE_ORDER: RelationshipStage[] = [
+export const STAGE_ORDER: RelationshipStage[] = [
 	'stranger',
 	'acquaintance',
 	'friend',
@@ -14,11 +14,6 @@ const STAGE_ORDER: RelationshipStage[] = [
 	'committed',
 	'soulmate'
 ];
-
-// Get stage index
-export function getStageIndex(stage: RelationshipStage): number {
-	return STAGE_ORDER.indexOf(stage);
-}
 
 // Stage requirements for progression
 const STAGE_REQUIREMENTS: Record<RelationshipStage, {

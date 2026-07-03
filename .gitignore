@@ -5,7 +5,7 @@ node_modules
 .vercel
 .netlify
 .wrangler
-/.pnpm-store
+.pnpm-store
 /.svelte-kit
 /build
 
@@ -51,3 +51,6 @@ static/animations/*.vrma
 !static/animations/VRMA_0*.vrma
 !static/animations/idle*.vrma
 !static/animations/talking.vrma
+
+# Temporary marketing-capture harness (do NOT commit)
+src/routes/(shots)/

@@ -1,10 +1,12 @@
 import { streamText, type StreamTextOptions } from '@xsai/stream-text';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import type { LLMProvider } from '$lib/types';
 import { getChatBaseUrl } from '$lib/services/providers/local-endpoints';
 import { normalizeChatBaseURL } from '$lib/services/chat/base-url';
 import { PROVIDER_BASE_URLS } from '$lib/services/providers/base-urls';
 import { parseSSEStream } from '$lib/services/chat/stream-parser';
+import { assertSafeProviderUrl } from '$lib/services/providers/url-guard';
 
 function formatCustomEndpointError(err: unknown, baseURL?: string): string {
 	const message = err instanceof Error ? err.message : 'Failed to connect to provider';
@@ -155,6 +157,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		llmFrequencyPenalty
 	};
 
+	if (!Array.isArray(messages)) {
+		return new Response(JSON.stringify({ error: 'messages must be an array' }), {
+			status: 400,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
+
 	const typedProvider = provider as LLMProvider;
 	const isCustomEndpoint = typedProvider === 'custom-endpoint';
 	const requiresApiKey = typedProvider !== 'custom-endpoint';
@@ -195,6 +204,16 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		providerBaseURL = normalizeChatBaseURL(typedProvider, providerBaseURL);
+
+		// Block SSRF: the base URL is client-supplied and fetched server-side.
+		try {
+			assertSafeProviderUrl(providerBaseURL, env.ALLOW_LOCAL_PROVIDER_HOSTS === 'true');
+		} catch (e) {
+			return new Response(
+				JSON.stringify({ error: e instanceof Error ? e.message : 'Invalid provider URL' }),
+				{ status: 400, headers: { 'Content-Type': 'application/json' } }
+			);
+		}
 
 		// Add system message (use provided systemPrompt or default)
 		const defaultSystemPrompt =

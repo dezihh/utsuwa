@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import DocsPrevNext from '$lib/components/docs/DocsPrevNext.svelte';
-	import { DOCS_URL } from '$lib/config/site';
+	import { DOCS_URL, SITE_URL } from '$lib/config/site';
 	import { docsNav } from '$lib/config/docs-nav';
 	import { localPath } from '$lib/config/links';
 	import { addCodeCopyButtons } from '$lib/utils/add-code-copy-buttons';
@@ -100,7 +100,7 @@
 		publisher: {
 			'@type': 'Organization',
 			name: 'Utsuwa',
-			url: '${SITE_URL}'
+			url: SITE_URL
 		}
 	})}</script>`}
 	{@html '<style>html { scroll-padding-top: 6rem; }</style>'}
@@ -120,7 +120,7 @@
 
 		<article class="docs-content prose" bind:this={articleEl}>
 			<div class="page-toolbar">
-				<button type="button" class="copy-page-btn" onclick={copyPage} title="Copy page content">
+				<button type="button" class="btn btn-secondary" onclick={copyPage} title="Copy page content">
 					<Icon name={copied ? 'check' : 'copy'} size={14} />
 					<span>{copied ? 'Copied' : 'Copy page'}</span>
 				</button>
@@ -131,8 +131,8 @@
 	</div>
 
 	{#if toc.length}
-		<aside class="toc" aria-label="On this page">
-			<p class="toc-title">On this page</p>
+		<aside class="toc" aria-label="Table of contents">
+			<p class="toc-title">Table of contents</p>
 			<ul class="toc-list">
 				{#each toc as heading}
 					<li class:sub={heading.level === 3}>
@@ -184,22 +184,22 @@
 		gap: 0.4rem;
 		font-size: 0.78rem;
 		font-weight: 500;
-		color: var(--docs-text-muted);
+		color: var(--text-secondary);
 		margin-bottom: 1.25rem;
 	}
 
 	.breadcrumb a {
-		color: var(--docs-text-muted);
+		color: var(--text-secondary);
 		text-decoration: none;
 		transition: color 0.15s ease;
 	}
 
 	.breadcrumb a:hover {
-		color: var(--docs-accent);
+		color: var(--text-primary);
 	}
 
 	.crumb-current {
-		color: var(--docs-text);
+		color: var(--text-primary);
 		font-weight: 600;
 	}
 
@@ -213,95 +213,58 @@
 		margin-bottom: 0.5rem;
 	}
 
-	.copy-page-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.4rem 0.75rem;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--docs-text-muted);
-		background: var(--docs-surface);
-		border: 1px solid var(--docs-border);
-		border-radius: 0.5rem;
-		cursor: pointer;
-		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-		box-shadow:
-			0 1px 0 var(--docs-inner-highlight) inset,
-			0 2px 4px rgba(0, 0, 0, 0.06);
-	}
-
-	.copy-page-btn:hover {
-		color: var(--docs-accent);
-		background: var(--docs-surface-solid);
-		border-color: var(--docs-accent);
-		transform: translateY(-1px);
-		box-shadow:
-			0 1px 0 var(--docs-inner-highlight) inset,
-			0 0 12px var(--docs-glow),
-			0 4px 8px rgba(0, 0, 0, 0.1);
-	}
-
-	.copy-page-btn:active {
-		transform: translateY(0);
-		box-shadow:
-			0 1px 2px var(--docs-inner-shadow) inset,
-			0 0 6px var(--docs-glow);
-	}
-
 	/* On-page table of contents */
 	.toc {
 		position: sticky;
 		top: 1.5rem;
 		width: 14rem;
 		flex-shrink: 0;
+		align-self: start;
 		max-height: calc(100vh - 6rem);
 		overflow-y: auto;
-		padding-top: 0.25rem;
 	}
 
 	.toc-title {
-		font-size: 0.7rem;
-		font-weight: 700;
-		letter-spacing: 0.12em;
-		text-transform: uppercase;
-		color: var(--docs-text-muted);
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--text-secondary);
 		margin: 0 0 0.75rem;
-		padding-left: 0.85rem;
+		padding-left: 0.75rem;
 	}
 
 	.toc-list {
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		border-left: 1px solid var(--docs-border);
-	}
-
-	.toc-list li.sub a {
-		padding-left: 1.75rem;
-		font-size: 0.78rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
 	}
 
 	.toc-list a {
 		display: block;
-		padding: 0.32rem 0.85rem;
-		margin-left: -1px;
-		border-left: 2px solid transparent;
-		font-size: 0.82rem;
+		padding: 0.4rem 0.75rem;
+		border-radius: var(--radius-md);
+		font-size: 0.8125rem;
 		line-height: 1.4;
-		color: var(--docs-text-muted);
+		color: var(--text-secondary);
 		text-decoration: none;
-		transition: color 0.15s ease, border-color 0.15s ease;
+		transition: color 0.15s ease, background 0.15s ease;
+	}
+
+	.toc-list li.sub a {
+		padding-left: 1.5rem;
+		font-size: 0.78rem;
 	}
 
 	.toc-list a:hover {
-		color: var(--docs-text);
+		color: var(--text-primary);
 	}
 
 	.toc-list a.active {
-		color: var(--docs-accent);
-		border-left-color: var(--docs-accent);
-		font-weight: 600;
+		background: var(--bg-tertiary);
+		color: var(--text-primary);
+		font-weight: 500;
 	}
 
 	@media (max-width: 1100px) {

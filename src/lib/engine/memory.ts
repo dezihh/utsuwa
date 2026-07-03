@@ -65,11 +65,12 @@ export function shouldStartNewSession(lastInteraction: Date | null): boolean {
 	return Date.now() - new Date(lastInteraction).getTime() > SESSION_INACTIVITY_MS;
 }
 
+
 // Add a turn to working memory
 export function addTurnToWorkingMemory(turn: Omit<ConversationTurn, 'id'>): void {
 	workingMemory.turns.push({
 		...turn,
-		createdAt: new Date()
+		createdAt: turn.createdAt ?? new Date()
 	} as ConversationTurn);
 
 	// Trim to max size
@@ -78,6 +79,50 @@ export function addTurnToWorkingMemory(turn: Omit<ConversationTurn, 'id'>): void
 	}
 
 	workingMemory.messageCount++;
+}
+
+// How many turns have been persisted under the current session.
+let currentSessionTurnCount = 0;
+
+// Open a session for this run on first use, so persisted turns can be grouped
+// and "last time you talked" style context has something to read.
+async function ensureSession(): Promise<number | undefined> {
+	if (workingMemory.currentSessionId !== undefined) return workingMemory.currentSessionId;
+	try {
+		const session = await memoryApi.createSession();
+		workingMemory.currentSessionId = session.id;
+		workingMemory.sessionStartedAt = session.startedAt;
+		currentSessionTurnCount = 0;
+		return session.id;
+	} catch (e) {
+		console.debug('[Memory] Failed to create session:', e);
+		return undefined;
+	}
+}
+
+// Record a conversation turn: mirror it into working memory AND persist it to
+// IndexedDB so history survives reloads and exports aren't empty. Persistence
+// failures are non-fatal — the in-RAM copy still drives the current session.
+export async function recordTurn(
+	turn: Omit<ConversationTurn, 'id' | 'createdAt' | 'sessionId'>
+): Promise<void> {
+	const sessionId = await ensureSession();
+	const full: Omit<ConversationTurn, 'id'> = { ...turn, sessionId, createdAt: new Date() };
+
+	addTurnToWorkingMemory(full);
+
+	try {
+		await memoryStorage.saveConversationTurn(full);
+		if (sessionId !== undefined) {
+			currentSessionTurnCount++;
+			await memoryStorage.updateSession(sessionId, {
+				messageCount: currentSessionTurnCount,
+				endedAt: full.createdAt
+			});
+		}
+	} catch (e) {
+		console.debug('[Memory] Failed to persist conversation turn:', e);
+	}
 }
 
 // Get recent turns from working memory
@@ -94,6 +139,7 @@ export function clearWorkingMemory(): void {
 		currentSessionId: undefined
 	};
 }
+
 
 // Hydrate working memory from IndexedDB (call on page load)
 export async function hydrateWorkingMemory(characterId: string = 'default'): Promise<void> {
@@ -298,6 +344,7 @@ export const memoryApi = {
 		const created = await memoryStorage.getFactById(id);
 		if (created) return created;
 		// Fallback (should never happen — the fact was just saved)
+
 		return {
 			id,
 			...fact,
@@ -610,19 +657,12 @@ function extractTriggerWords(message: string): string[] {
 	const triggers: string[] = [];
 	const lowerMessage = message.toLowerCase();
 
-	// Personal triggers
-	const personalPatterns = [
-		/\b(remember|recall|forgot|forget)\s+(?:when|that|about)\s+([^.!?]+)/gi,
-		/\b(last time|before|earlier|yesterday|ago)\b/gi,
-		/\b(you said|you mentioned|you told)\b/gi
-	];
-
-	for (const pattern of personalPatterns) {
-		let match;
-		while ((match = pattern.exec(lowerMessage)) !== null) {
-			if (match[2]) {
-				triggers.push(match[2].trim());
-			}
+	// Personal triggers ("remember when ...", "recall that ...")
+	const recallPattern = /\b(?:remember|recall|forgot|forget)\s+(?:when|that|about)\s+([^.!?]+)/gi;
+	let match;
+	while ((match = recallPattern.exec(lowerMessage)) !== null) {
+		if (match[1]) {
+			triggers.push(match[1].trim());
 		}
 	}
 
@@ -713,6 +753,7 @@ export function extractFactsFromConversation(
 
 // Re-export helpers so existing imports keep working.
 export { determineFactCategory, calculateFactImportance } from '$lib/utils/memory-helpers';
+
 
 // Backfill embeddings for facts that don't have them
 export async function backfillEmbeddings(

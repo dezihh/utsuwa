@@ -17,7 +17,7 @@ type HotkeyHandler = () => void;
 type KeyUpHandler = () => void;
 
 const handlers: Map<HotkeyAction, { onKeyDown: HotkeyHandler; onKeyUp?: KeyUpHandler }> = new Map();
-const registeredShortcuts: Set<string> = new Set();
+const registeredShortcuts: Map<HotkeyAction, string> = new Map();
 
 /**
  * Register a global hotkey handler (Tauri only, no-op on web)
@@ -49,7 +49,7 @@ export async function registerHotkey(
 		});
 
 		handlers.set(action, { onKeyDown, onKeyUp });
-		registeredShortcuts.add(shortcut);
+		registeredShortcuts.set(action, shortcut);
 		return true;
 	} catch (e) {
 		console.error(`Failed to register hotkey ${shortcut}:`, e);
@@ -63,21 +63,22 @@ export async function registerHotkey(
 export async function unregisterHotkey(action: HotkeyAction): Promise<void> {
 	if (!__IS_DESKTOP__) return;
 
-	const handler = handlers.get(action);
-	if (!handler) return;
+	const shortcut = registeredShortcuts.get(action);
+	if (!shortcut) {
+		handlers.delete(action);
+		return;
+	}
 
 	try {
 		const { unregister } = await import(/* @vite-ignore */ '@tauri-apps/plugin-global-shortcut');
 
-		for (const shortcut of registeredShortcuts) {
-			try {
-				await unregister(shortcut);
-				registeredShortcuts.delete(shortcut);
-			} catch {
-				// Shortcut may not be registered
-			}
+		try {
+			await unregister(shortcut);
+		} catch {
+			// Shortcut may not be registered
 		}
 
+		registeredShortcuts.delete(action);
 		handlers.delete(action);
 	} catch (e) {
 		console.error(`Failed to unregister hotkey:`, e);

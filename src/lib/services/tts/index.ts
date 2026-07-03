@@ -145,6 +145,7 @@ export const DEFAULT_VOICES: Partial<Record<TTSProvider, string>> = {
 	'local-tts': 'af_bella'
 };
 
+
 // Import individual providers
 import { ElevenLabsTTS } from './elevenlabs';
 import { OpenAITTS } from './openai-tts';
@@ -173,6 +174,7 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 		currentOptions.cfgWeight === options.cfgWeight &&
 		currentOptions.temperature === options.temperature &&
 		currentOptions.omnivoiceNumStep === options.omnivoiceNumStep
+
 	) {
 		return currentProvider;
 	}

@@ -1,4 +1,5 @@
 import { db } from '$lib/db';
+import { cosineSimilarity } from '$lib/services/embeddings';
 import type { Fact, FactCategory } from '$lib/types/memory';
 
 export interface GraphNode {
@@ -27,24 +28,6 @@ export interface GraphData {
 export interface GraphFilters {
 	categories: Set<FactCategory>;
 	minSimilarity: number;
-}
-
-// Cosine similarity between two embeddings
-function cosineSimilarity(a: number[], b: number[]): number {
-	if (a.length !== b.length) return 0;
-
-	let dot = 0;
-	let normA = 0;
-	let normB = 0;
-
-	for (let i = 0; i < a.length; i++) {
-		dot += a[i] * b[i];
-		normA += a[i] * a[i];
-		normB += b[i] * b[i];
-	}
-
-	const denominator = Math.sqrt(normA) * Math.sqrt(normB);
-	return denominator === 0 ? 0 : dot / denominator;
 }
 
 // Get all facts with embeddings from the database
@@ -122,28 +105,7 @@ export function getConnectedNodes(data: GraphData, nodeId: number): Set<number> 
 
 // Category colors
 export const categoryColors: Record<FactCategory, string> = {
-	user: '#01B2FF',
-	relationship: '#f472b6',
+	user: '#00b2ff',
+	relationship: '#ff477f',
 	shared_experience: '#34d399'
 };
-
-// Get node size based on importance (normalized to 4-20 range)
-export function getNodeSize(importance: number): number {
-	const min = 4;
-	const max = 20;
-	return min + (importance / 100) * (max - min);
-}
-
-// Get node opacity based on recency (last 30 days = full opacity)
-export function getNodeOpacity(lastAccessed?: Date, createdAt?: Date): number {
-	const date = lastAccessed || createdAt;
-	if (!date) return 0.5;
-
-	const now = Date.now();
-	const daysSince = (now - new Date(date).getTime()) / (1000 * 60 * 60 * 24);
-
-	if (daysSince <= 7) return 1;
-	if (daysSince <= 30) return 0.8;
-	if (daysSince <= 90) return 0.6;
-	return 0.4;
-}

@@ -1,65 +1,9 @@
-import type { CharacterState, StateUpdates, MoodState, Emotion, RelationshipStage } from '$lib/types/character';
-import { calculateStage } from './stages';
+import type { CharacterState, StateUpdates, Emotion, MoodState, RelationshipStage } from '$lib/types/character';
+import { calculateStage } from './stages.ts';
 
 // Clamp a value between min and max
 function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, value));
-}
-
-// Apply state updates to character state
-export function applyStateUpdates(state: CharacterState, updates: StateUpdates): CharacterState {
-	const newState = { ...state };
-
-	// Apply mood change
-	if (updates.moodChange) {
-		const newMood: MoodState = {
-			...newState.mood,
-			primary: updates.moodChange.emotion,
-			intensity: clamp(newState.mood.intensity + (updates.moodChange.intensityDelta ?? 0), 0, 100)
-		};
-
-		// Add cause to causes array (keep last 5)
-		if (updates.moodChange.cause) {
-			newMood.causes = [...newState.mood.causes.slice(-4), updates.moodChange.cause];
-		}
-
-		newState.mood = newMood;
-	}
-
-	// Apply energy delta
-	if (updates.energyDelta !== undefined) {
-		newState.energy = clamp(newState.energy + updates.energyDelta, 0, 100);
-	}
-
-	// Apply affection delta
-	if (updates.affectionDelta !== undefined) {
-		newState.affection = clamp(newState.affection + updates.affectionDelta, 0, 1000);
-	}
-
-	// Apply trust delta
-	if (updates.trustDelta !== undefined) {
-		newState.trust = clamp(newState.trust + updates.trustDelta, 0, 100);
-	}
-
-	// Apply intimacy delta
-	if (updates.intimacyDelta !== undefined) {
-		newState.intimacy = clamp(newState.intimacy + updates.intimacyDelta, 0, 100);
-	}
-
-	// Apply comfort delta
-	if (updates.comfortDelta !== undefined) {
-		newState.comfort = clamp(newState.comfort + updates.comfortDelta, 0, 100);
-	}
-
-	// Apply respect delta
-	if (updates.respectDelta !== undefined) {
-		newState.respect = clamp(newState.respect + updates.respectDelta, 0, 100);
-	}
-
-	// Update timestamp
-	newState.updatedAt = new Date();
-
-	return newState;
 }
 
 // Check and apply stage transition if needed
@@ -124,6 +68,71 @@ export function applyTimeDecay(state: CharacterState, hoursSinceLastInteraction:
 	}
 
 	return updates;
+}
+
+// The subset of fields a load-time decay pass may change, plus whether anything
+// changed at all (so the caller only persists when needed).
+export interface TimeDecayApplication {
+	next: Partial<Pick<CharacterState, 'energy' | 'affection' | 'trust' | 'mood' | 'lastDecayAt'>>;
+	changed: boolean;
+}
+
+// Resolve how a page load should apply time decay. Energy recovery is
+// self-limiting (caps at 100) so it runs on every load, but affection/trust/mood
+// decay is applied at most once per absence: a refresh or a second window would
+// otherwise re-deduct the same time away. `lastDecayAt` records that this
+// absence's decay is accounted for; it re-arms when the user next interacts
+// (which advances lastInteraction past lastDecayAt). `now` is passed in so this
+// stays pure and testable.
+export function resolveTimeDecayOnLoad(state: CharacterState, now: number): TimeDecayApplication {
+	const result: TimeDecayApplication = { next: {}, changed: false };
+	if (!state.lastInteraction) return result;
+
+	const lastInteractionMs = new Date(state.lastInteraction).getTime();
+	const hoursSince = (now - lastInteractionMs) / (1000 * 60 * 60);
+	if (hoursSince <= 0.5) return result;
+
+	const timeUpdates = applyTimeDecay(state, hoursSince);
+	const alreadyDecayed =
+		state.lastDecayAt != null && new Date(state.lastDecayAt).getTime() >= lastInteractionMs;
+
+	const next: TimeDecayApplication['next'] = {};
+	let decayApplied = false;
+
+	if (timeUpdates.energyDelta !== undefined) {
+		next.energy = clamp(state.energy + timeUpdates.energyDelta, 0, 100);
+	}
+
+	if (!alreadyDecayed) {
+		if (timeUpdates.affectionDelta !== undefined) {
+			next.affection = clamp(state.affection + timeUpdates.affectionDelta, 0, 1000);
+			decayApplied = true;
+		}
+		if (timeUpdates.trustDelta !== undefined) {
+			next.trust = clamp(state.trust + timeUpdates.trustDelta, 0, 100);
+			decayApplied = true;
+		}
+		if (timeUpdates.moodChange) {
+			const mood: MoodState = {
+				...state.mood,
+				primary: timeUpdates.moodChange.emotion,
+				intensity: clamp(state.mood.intensity + (timeUpdates.moodChange.intensityDelta ?? 0), 0, 100),
+				causes: timeUpdates.moodChange.cause
+					? [...state.mood.causes.slice(-4), timeUpdates.moodChange.cause]
+					: state.mood.causes
+			};
+			next.mood = mood;
+			decayApplied = true;
+		}
+	}
+
+	if (decayApplied) {
+		next.lastDecayAt = new Date(now);
+	}
+
+	result.next = next;
+	result.changed = timeUpdates.energyDelta !== undefined || decayApplied;
+	return result;
 }
 
 // Calculate interaction impact based on message analysis

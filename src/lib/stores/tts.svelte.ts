@@ -198,6 +198,7 @@ function createTTSStore() {
 		return dataArray;
 	}
 
+
 	return {
 		get isSpeaking() {
 			return isSpeaking;
@@ -212,6 +213,7 @@ function createTTSStore() {
 		endSpeechSession,
 		stop,
 		getAnalyserData
+
 	};
 }
 

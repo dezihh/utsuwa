@@ -359,12 +359,12 @@ function createSettingsStore() {
 		return config.cachedModels;
 	}
 
-	function clearCachedModels(providerId: string) {
-		if (providerConfigs[providerId]) {
-			delete providerConfigs[providerId].cachedModels;
-			delete providerConfigs[providerId].modelsFetchedAt;
-			save();
-		}
+	function clearCachedModels(providerId: string): void {
+		const config = providerConfigs[providerId];
+		if (!config) return;
+		config.cachedModels = undefined;
+		config.modelsFetchedAt = undefined;
+		save();
 	}
 
 	// Hotkey configuration

@@ -43,9 +43,6 @@
 			<DocsSearch bind:this={searchComponent} id="header-search" />
 		</div>
 	{/if}
-	<a href={localPath('docs')} class="logo mobile-logo">
-		<img src="/brand-assets/logo.svg" alt="Utsuwa" class="logo-img" />
-	</a>
 	<div class="header-right">
 		<nav class="header-nav">
 			<a href={localPath('docs')} class="nav-link" class:active={isSection('docs')}>Docs</a>
@@ -56,11 +53,11 @@
 				<Icon name={iconName} size={18} />
 			</button>
 		{/if}
-		<a href={GITHUB_RELEASES} target="_blank" rel="noopener noreferrer" class="download-btn">
+		<a href={GITHUB_RELEASES} target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm download-btn">
 			<Icon name="download" size={14} />
 			Download
 		</a>
-		<a href={sectionUrl('app')} class="try-live-btn">Try Live</a>
+		<a href={sectionUrl('app')} class="btn btn-primary btn-sm try-live-btn">Try Live</a>
 	</div>
 </header>
 
@@ -71,11 +68,11 @@
 		justify-content: space-between;
 		height: 3.5rem;
 		padding: 0 1.5rem;
-		background: var(--docs-bg);
-		border-bottom: 1px solid var(--docs-border);
+		background: var(--bg-page);
+		border-bottom: 1px solid var(--border-subtle);
 		position: sticky;
 		top: 0;
-		z-index: 10;
+		z-index: 50;
 	}
 
 	.header-left {
@@ -107,7 +104,7 @@
 	.logo-img {
 		height: 1.5rem;
 		width: auto;
-		filter: var(--docs-logo-filter, none) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+		filter: var(--docs-logo-filter, none);
 	}
 
 	.header-nav {
@@ -119,20 +116,20 @@
 	.nav-link {
 		font-size: 0.8125rem;
 		font-weight: 500;
-		color: var(--docs-text-muted);
+		color: var(--text-secondary);
 		text-decoration: none;
 		padding: 0.375rem 0.625rem;
 		border-radius: 0.375rem;
-		transition: all 0.15s ease;
+		transition: color 0.15s ease, background 0.15s ease;
 	}
 
 	.nav-link:hover {
-		color: var(--docs-text);
-		background: var(--docs-surface);
+		color: var(--text-primary);
+		background: var(--bg-tertiary);
 	}
 
 	.nav-link.active {
-		color: var(--docs-accent);
+		color: var(--accent);
 	}
 
 	.header-right {
@@ -145,140 +142,41 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--docs-surface);
-		border: 1px solid var(--docs-border);
+		background: var(--bg-tertiary);
+		border: none;
 		padding: 0.5rem;
 		border-radius: 0.5rem;
-		color: var(--docs-text-muted);
+		color: var(--text-secondary);
 		cursor: pointer;
-		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-		box-shadow:
-			0 1px 0 var(--docs-inner-highlight) inset,
-			0 2px 4px rgba(0, 0, 0, 0.05);
+		transition: color 0.15s ease, background 0.15s ease;
 	}
 
 	.header-btn:hover {
-		color: var(--docs-accent);
-		background: var(--docs-surface-solid);
-		border-color: var(--docs-accent);
-		box-shadow:
-			0 1px 0 var(--docs-inner-highlight) inset,
-			0 0 12px var(--docs-glow),
-			0 2px 8px rgba(0, 0, 0, 0.08);
-		transform: translateY(-1px);
-	}
-
-	.header-btn:active {
-		transform: translateY(0);
-		box-shadow:
-			0 1px 2px var(--docs-inner-shadow) inset,
-			0 0 8px var(--docs-glow);
-	}
-
-	.download-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.375rem 0.875rem;
-		font-size: 0.8125rem;
-		font-weight: 600;
-		color: var(--docs-text);
-		background: var(--docs-glass-bg);
-		backdrop-filter: blur(8px);
-		-webkit-backdrop-filter: blur(8px);
-		border: 1px solid var(--docs-border);
-		border-radius: 0.5rem;
-		text-decoration: none;
-		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-		box-shadow:
-			0 1px 0 var(--docs-inner-highlight) inset,
-			0 2px 4px rgba(0, 0, 0, 0.05);
-	}
-
-	.download-btn:hover {
-		color: var(--docs-accent);
-		border-color: var(--docs-accent);
-		background: var(--docs-surface-solid);
-		transform: translateY(-1px);
-		box-shadow:
-			0 1px 0 var(--docs-inner-highlight) inset,
-			0 0 12px var(--docs-glow),
-			0 2px 8px rgba(0, 0, 0, 0.08);
-	}
-
-	.download-btn:active {
-		transform: translateY(0);
-		box-shadow:
-			0 1px 2px var(--docs-inner-shadow) inset,
-			0 0 8px var(--docs-glow);
-	}
-
-	.try-live-btn {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.375rem 0.875rem;
-		font-size: 0.8125rem;
-		font-weight: 600;
-		color: white;
-		background: var(--docs-btn-gradient);
-		border: 1px solid rgba(0, 0, 0, 0.1);
-		border-radius: 0.5rem;
-		text-decoration: none;
-		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.3),
-			0 2px 6px rgba(1, 178, 255, 0.25);
-		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
-	}
-
-	.try-live-btn:hover {
-		background: var(--docs-btn-gradient-hover);
-		transform: translateY(-1px);
-		box-shadow:
-			inset 0 1px 0 rgba(255, 255, 255, 0.4),
-			0 0 16px var(--docs-glow),
-			0 4px 12px rgba(1, 178, 255, 0.3);
-	}
-
-	.try-live-btn:active {
-		transform: translateY(0);
-		box-shadow:
-			inset 0 2px 4px rgba(0, 0, 0, 0.2),
-			0 1px 2px rgba(0, 0, 0, 0.1);
+		color: var(--text-primary);
+		background: color-mix(in srgb, var(--bg-tertiary), var(--text-primary) 8%);
 	}
 
 	.hamburger {
 		display: none;
 		align-items: center;
 		justify-content: center;
-		background: var(--docs-surface);
-		border: 1px solid var(--docs-border);
+		background: var(--bg-tertiary);
+		border: none;
 		padding: 0.5rem;
 		border-radius: 0.5rem;
-		color: var(--docs-text-muted);
+		color: var(--text-secondary);
 		cursor: pointer;
-		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-		box-shadow:
-			0 1px 0 var(--docs-inner-highlight) inset,
-			0 2px 4px rgba(0, 0, 0, 0.05);
+		transition: color 0.15s ease, background 0.15s ease;
 	}
 
 	.hamburger:hover {
-		color: var(--docs-accent);
-		background: var(--docs-surface-solid);
-		border-color: var(--docs-accent);
-		box-shadow:
-			0 1px 0 var(--docs-inner-highlight) inset,
-			0 0 12px var(--docs-glow);
-	}
-
-	.mobile-logo {
-		display: none;
+		color: var(--text-primary);
+		background: color-mix(in srgb, var(--bg-tertiary), var(--text-primary) 8%);
 	}
 
 	@media (max-width: 768px) {
 		.docs-header {
-			position: relative;
+			position: sticky;
 			padding: 0 0.75rem;
 		}
 
@@ -306,8 +204,6 @@
 
 		.download-btn,
 		.try-live-btn {
-			padding: 0.4rem 0.75rem;
-			font-size: 0.6875rem;
 			min-height: 2.25rem;
 		}
 
@@ -317,10 +213,6 @@
 
 		.header-right {
 			gap: 0.25rem;
-		}
-
-		.mobile-logo {
-			display: none;
 		}
 	}
 </style>

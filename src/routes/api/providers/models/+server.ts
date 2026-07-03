@@ -1,6 +1,8 @@
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import type { LLMProvider } from '$lib/types';
 import { normalizeOpenAICompatibleBaseURL } from '$lib/services/chat/base-url';
+import { assertSafeProviderUrl } from '$lib/services/providers/url-guard';
 
 interface ModelInfo {
 	id: string;
@@ -215,6 +217,19 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Remove trailing slash for consistency
 		const cleanBaseUrl = effectiveBaseUrl.replace(/\/+$/, '');
 		const openAICompatibleBaseUrl = normalizeOpenAICompatibleBaseURL(cleanBaseUrl);
+
+		// Block SSRF: the base URL is client-supplied and fetched server-side.
+		try {
+			assertSafeProviderUrl(cleanBaseUrl, env.ALLOW_LOCAL_PROVIDER_HOSTS === 'true');
+		} catch (e) {
+			return Response.json(
+				{
+					models: [],
+					error: e instanceof Error ? e.message : 'Invalid provider URL'
+				} as FetchModelsResponse,
+				{ status: 400 }
+			);
+		}
 
 		let models: ModelInfo[] = [];
 

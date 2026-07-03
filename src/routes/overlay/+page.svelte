@@ -1,5 +1,6 @@
 <script lang="ts">
 	import VrmScene from '$lib/components/vrm/VrmScene.svelte';
+	import { pop } from '$lib/utils/motion';
 	import BottomChatBar from '$lib/components/chat/BottomChatBar.svelte';
 	import SpeechBubble from '$lib/components/chat/SpeechBubble.svelte';
 	import FloatingChatIcon from '$lib/components/overlay/FloatingChatIcon.svelte';
@@ -23,6 +24,7 @@
 	import { streamChatDirect } from '$lib/services/chat/client-chat';
 	import { allEvents } from '$lib/data/events';
 	import { checkAllEvents, eventsApi } from '$lib/engine/events';
+	import { completionMarkers } from '$lib/engine/event-completion';
 	import type { TTSProvider } from '$lib/types';
 	import type { EventDefinition } from '$lib/types/events';
 	import type { StateUpdates } from '$lib/types/character';
@@ -33,7 +35,7 @@
 	import { mergeUpdates, checkAndApplyStageTransition } from '$lib/engine/state-updates';
 	import {
 		retrieveRelevantContext,
-		addTurnToWorkingMemory,
+		recordTurn,
 		hydrateWorkingMemory,
 		memoryApi,
 		determineFactCategory,
@@ -45,15 +47,16 @@
 	} from '$lib/engine/memory';
 	import { getMemoryBudget } from '$lib/types/memory';
 	import { initEmbeddingModel, subscribeToEmbeddingState } from '$lib/services/embeddings';
+
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
 	import { splitIntoSegments, splitIntoSentences, stripTagsForBubble, getEmotionDisplayText } from '$lib/utils/sentences';
 	import { getVocabularyMeta } from '$lib/services/storage/vocabulary';
 
 	let isTyping = $state(false);
-	let isMemoryReady = $state(false);
 	let activeEvent = $state<EventDefinition | null>(null);
 	// Speech bubble shows exactly the sentence currently spoken by TTS.
 	let currentBubbleSentence = $state('');
+	let isMemoryReady = $state(false);
 
 	// Fallback bubble text: last sentence of the latest assistant message.
 	const latestResponse = $derived.by(() => {
@@ -69,22 +72,19 @@
 
 	// Hydrate working memory on start
 	$effect(() => {
-		isMemoryReady = false;
 		(async () => {
 			try {
 				await hydrateWorkingMemory(currentCharacterId);
 				isMemoryReady = true;
+
 			} catch (e) {
 				console.error('Failed to hydrate working memory:', e);
-				isMemoryReady = true;
 			}
 		})();
 	});
 
 	// Initialize embedding model and backfill facts without embeddings
 	$effect(() => {
-		const unsub = subscribeToEmbeddingState(() => {});
-
 		initEmbeddingModel().then(async (ready) => {
 			if (ready) {
 				const status = await getEmbeddingBackfillStatus();
@@ -95,8 +95,6 @@
 		}).catch((e) => {
 			console.error('Failed to initialize embedding model:', e);
 		});
-
-		return unsub;
 	});
 
 	// Debug events (from developer tools)
@@ -177,8 +175,9 @@
 			}
 		}
 
-		addTurnToWorkingMemory({ role: 'user', content: userMessage, createdAt: new Date() });
-		addTurnToWorkingMemory({ role: 'assistant', content: dialogue, createdAt: new Date() });
+		// Persist the exchange (and mirror into working memory) so it survives reloads
+		await recordTurn({ role: 'user', content: userMessage });
+		await recordTurn({ role: 'assistant', content: dialogue });
 
 		const potentialFacts = extractPotentialFacts(dialogue, userMessage);
 		for (const factContent of potentialFacts.slice(0, 2)) {
@@ -342,7 +341,7 @@
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
-						messages: chatStore.messages.map((m) => ({ role: m.role, content: m.content })),
+						messages: chatStore.messages.slice(0, -1).filter((m) => m.content).map((m) => ({ role: m.role, content: m.content })),
 						provider,
 						model: selectedModel,
 						apiKey: apiKey || undefined,
@@ -366,22 +365,32 @@
 				const decoder = new TextDecoder();
 				if (!reader) throw new Error('No response body');
 
+				const processLine = (line: string) => {
+					if (line.startsWith('0:')) {
+						const text = JSON.parse(line.slice(2));
+						fullContent += text;
+						chatStore.updateLastMessage(fullContent);
+					} else if (line.startsWith('e:')) {
+						const { error } = JSON.parse(line.slice(2));
+						throw new Error(error);
+					}
+				};
+
+				// Buffer partial lines so a delta split across network chunks doesn't break JSON.parse
+				let streamBuffer = '';
 				while (true) {
 					const { done, value } = await reader.read();
 					if (done) break;
 
-					const chunk = decoder.decode(value, { stream: true });
-					for (const line of chunk.split('\n')) {
-						if (line.startsWith('0:')) {
-							const text = JSON.parse(line.slice(2));
-							fullContent += text;
-							chatStore.updateLastMessage(fullContent);
-						} else if (line.startsWith('e:')) {
-							const { error } = JSON.parse(line.slice(2));
-							throw new Error(error);
-						}
+					streamBuffer += decoder.decode(value, { stream: true });
+					const lines = streamBuffer.split('\n');
+					streamBuffer = lines.pop() || '';
+					for (const line of lines) {
+						processLine(line);
 					}
 				}
+				streamBuffer += decoder.decode();
+				if (streamBuffer) processLine(streamBuffer);
 			}
 
 			isTyping = false;
@@ -451,7 +460,11 @@
 		eventsApi.recordCompletedEvent(
 			event, choiceIndex,
 			choiceIndex !== undefined ? `Choice ${choiceIndex + 1}` : undefined
-		).then(() => characterStore.markEventCompleted(event.id))
+		).then(() => {
+			for (const marker of completionMarkers(event, choiceIndex)) {
+				characterStore.markEventCompleted(marker);
+			}
+		})
 		.catch((e) => console.error('Failed to record event:', e));
 		activeEvent = null;
 	}
@@ -494,7 +507,7 @@
 
 	<!-- Expandable Chat Bar -->
 	{#if chatExpanded}
-		<div class="chat-bar-container">
+		<div class="chat-bar-container" out:pop={{ base: 'translateX(-50%)', y: 10, duration: 180 }}>
 			<BottomChatBar onSend={handleSend} disabled={chatStore.isLoading} overlay />
 		</div>
 	{/if}
@@ -503,14 +516,14 @@
 	{#if chatStore.error}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="error-toast" onclick={() => chatStore.setError(null)}>
+		<div class="error-toast" out:pop={{ base: 'translateX(-50%)', y: 8, duration: 180 }} onclick={() => chatStore.setError(null)}>
 			<span>{chatStore.error}</span>
 		</div>
 	{/if}
 	{#if sttStore.error}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="error-toast" onclick={() => sttStore.clearError()}>
+		<div class="error-toast error-toast--stt" out:pop={{ base: 'translateX(-50%)', y: 8, duration: 180 }} onclick={() => sttStore.clearError()}>
 			<span>{sttStore.error}</span>
 		</div>
 	{/if}
@@ -556,18 +569,19 @@
 		right: 0.75rem;
 		width: 32px;
 		height: 32px;
-		border: none;
-		border-radius: 50%;
-		background: rgba(0, 0, 0, 0.5);
-		color: white;
+		border-radius: var(--radius-full);
+		background: var(--bg-tertiary);
+		color: var(--text-secondary);
 		cursor: pointer;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		box-shadow: var(--shadow-sm);
 		z-index: 50;
 		opacity: 0;
 		pointer-events: none;
-		transition: opacity 0.15s ease, transform 0.15s ease;
+		transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease,
+			box-shadow 0.15s ease, transform 0.15s ease;
 	}
 
 	.overlay-container:hover .exit-btn {
@@ -577,6 +591,9 @@
 
 	.exit-btn:hover {
 		opacity: 1;
+		color: var(--text-primary);
+		background: color-mix(in srgb, var(--bg-tertiary), var(--text-primary) 8%);
+		box-shadow: var(--shadow-md);
 		transform: scale(1.1);
 	}
 
@@ -620,21 +637,22 @@
 		left: 50%;
 		transform: translateX(-50%);
 		padding: 0.5rem 0.875rem;
-		background: linear-gradient(180deg, #ff6b6b 0%, #ee5a5a 100%);
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 12px;
-		color: white;
+		background: var(--color-error);
+		border: 1px solid transparent;
+		border-radius: var(--radius-lg);
+		color: #fff;
 		font-size: 0.75rem;
 		max-width: calc(100% - 2rem);
 		text-align: center;
 		cursor: pointer;
 		z-index: 50;
 		animation: slideUpShake 0.5s ease-out;
-		box-shadow:
-			0 4px 20px rgba(238, 90, 90, 0.4),
-			0 2px 4px rgba(0, 0, 0, 0.1),
-			inset 0 1px 0 rgba(255, 255, 255, 0.3);
-		text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+		box-shadow: var(--shadow-lg);
+	}
+
+	/* STT errors stack above chat errors instead of sharing the same slot */
+	.error-toast--stt {
+		bottom: 8.5rem;
 	}
 
 	@keyframes slideUpShake {

@@ -2,14 +2,6 @@
 export * from './module';
 export * from './tts-emotion';
 
-// Chat types
-export interface ChatMessage {
-	id: string;
-	role: 'user' | 'assistant';
-	content: string;
-	timestamp: Date;
-}
-
 // LLM Provider IDs
 export type LLMProvider =
 	| 'openai'
@@ -144,11 +136,4 @@ export interface ProviderConfig {
 	omnivoiceAltCloneId?: string;
 	/** OmniVoice: ISO 639-1 code for the alternative language. Only this language triggers the alt voice. */
 	omnivoiceAltLanguage?: string;
-}
-
-// VRM types
-export interface VRMLoadProgress {
-	loaded: number;
-	total: number;
-	percent: number;
 }

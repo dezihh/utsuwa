@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { onNavigate } from '$app/navigation';
 	import { unlockAudioContext } from '$lib/services/tts';
 	import UpdateBanner from '$lib/components/updater/UpdateBanner.svelte';
 
@@ -19,6 +20,17 @@
 		window.addEventListener('touchstart', once, { capture: true, passive: true });
 		window.addEventListener('click', once, { capture: true });
 	}
+
+	// Crossfade app-side navigations (app <-> settings) where supported.
+	onNavigate((navigation) => {
+		if (!document.startViewTransition) return;
+		return new Promise((resolve) => {
+			document.startViewTransition(async () => {
+				resolve();
+				await navigation.complete;
+			});
+		});
+	});
 </script>
 
 <svelte:head>

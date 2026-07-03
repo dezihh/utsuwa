@@ -257,8 +257,3 @@ class UtsuwaDatabase extends Dexie {
 }
 
 export const db = new UtsuwaDatabase();
-
-// Helper to check if we're in a browser environment with IndexedDB support
-export function isIndexedDBAvailable(): boolean {
-	return typeof window !== 'undefined' && 'indexedDB' in window;
-}

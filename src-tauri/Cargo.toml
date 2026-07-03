@@ -1,6 +1,6 @@
 [package]
 name = "utsuwa"
-version = "0.5.0"
+version = "0.6.0"
 description = "Open Source AI Soul Vessel - VRM Avatar Companion"
 authors = ["Ordinary Company Group LLC"]
 edition = "2021"
@@ -22,7 +22,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-tauri-plugin-global-shortcut = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 

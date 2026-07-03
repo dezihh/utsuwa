@@ -1,6 +1,5 @@
 import {
 	type CharacterState,
-	type MoodState,
 	type StateUpdates,
 	type RelationshipStage,
 	type PersonaExtensions,
@@ -16,8 +15,8 @@ import {
 	deleteCharacterState
 } from '$lib/services/storage/character';
 import { statChangesStore } from './statChanges.svelte';
-import { applyTimeDecay } from '$lib/engine/state-updates';
-import { calculateStage } from '$lib/engine/stages';
+import { resolveTimeDecayOnLoad } from '$lib/engine/state-updates';
+import { calculateStage, STAGE_ORDER } from '$lib/engine/stages';
 
 // Single character state
 let state = $state<CharacterState>(createDefaultCharacterState() as CharacterState);
@@ -75,54 +74,15 @@ function createCharacterStore() {
 			const loaded = await getCharacterState(characterId);
 			state = loaded;
 
-			// Apply time-based recovery/decay based on time since last interaction
-			if (state.lastInteraction) {
-				const hoursSince =
-					(Date.now() - new Date(state.lastInteraction).getTime()) / (1000 * 60 * 60);
-				if (hoursSince > 0.5) {
-					// Only apply if at least 30 minutes have passed
-					const timeUpdates = applyTimeDecay(state, hoursSince);
-					if (Object.keys(timeUpdates).length > 0) {
-						// Apply updates directly without emitting visual indicators (silent recovery)
-						if (timeUpdates.energyDelta !== undefined) {
-							state = {
-								...state,
-								energy: Math.max(0, Math.min(100, state.energy + timeUpdates.energyDelta))
-							};
-						}
-						if (timeUpdates.affectionDelta !== undefined) {
-							state = {
-								...state,
-								affection: Math.max(0, Math.min(1000, state.affection + timeUpdates.affectionDelta))
-							};
-						}
-						if (timeUpdates.trustDelta !== undefined) {
-							state = {
-								...state,
-								trust: Math.max(0, Math.min(100, state.trust + timeUpdates.trustDelta))
-							};
-						}
-						if (timeUpdates.moodChange) {
-							state = {
-								...state,
-								mood: {
-									...state.mood,
-									primary: timeUpdates.moodChange.emotion,
-									intensity: Math.max(
-										0,
-										Math.min(100, state.mood.intensity + (timeUpdates.moodChange.intensityDelta ?? 0))
-									),
-									causes: timeUpdates.moodChange.cause
-										? [...state.mood.causes.slice(-4), timeUpdates.moodChange.cause]
-										: state.mood.causes
-								}
-							};
-						}
-						// Save the recovered state (use $state.snapshot to strip Proxy)
-						const plainState = $state.snapshot(state);
-						await saveCharacterState({ ...plainState, updatedAt: new Date() });
-					}
-				}
+			// Apply time-based recovery/decay based on time since last interaction.
+			// Energy recovers every load; affection/trust/mood decay applies once per
+			// absence so a refresh or second window can't re-deduct it (see helper).
+			const decay = resolveTimeDecayOnLoad(state, Date.now());
+			if (decay.changed) {
+				state = { ...state, ...decay.next };
+				// Save the recovered state (use $state.snapshot to strip Proxy)
+				const plainState = $state.snapshot(state);
+				await saveCharacterState({ ...plainState, updatedAt: new Date() });
 			}
 
 			isReady = true;
@@ -248,16 +208,6 @@ function createCharacterStore() {
 		save();
 	}
 
-	// Set mood directly
-	function setMood(mood: MoodState): void {
-		state = {
-			...state,
-			mood,
-			updatedAt: new Date()
-		};
-		save();
-	}
-
 	// Set relationship stage
 	function setRelationshipStage(stage: RelationshipStage): void {
 		state = {
@@ -283,12 +233,21 @@ function createCharacterStore() {
 				updatedAt: new Date()
 			};
 		} else {
-			// Restore to dating sim - calculate stage from current stats
+			// Restore to dating sim. Prefer the stage saved when Companion Mode was
+			// entered so time spent there (and any decay during it) can't silently
+			// downgrade a hard-won stage; still allow an upgrade if stats have since
+			// grown past it.
 			const calculatedStage = calculateStage(state, state.completedEvents || []);
+			const saved = state.savedDatingSimStage;
+			const restoredStage =
+				saved && STAGE_ORDER.indexOf(saved) > STAGE_ORDER.indexOf(calculatedStage)
+					? saved
+					: calculatedStage;
 			state = {
 				...state,
 				appMode: mode,
-				relationshipStage: calculatedStage,
+				relationshipStage: restoredStage,
+				savedDatingSimStage: undefined,
 				updatedAt: new Date()
 			};
 		}
@@ -296,12 +255,21 @@ function createCharacterStore() {
 		save();
 	}
 
-	// Mark event as completed
+	// Mark event as completed. Also accepts synthetic choice-outcome markers
+	// (a choice's nextSceneId, e.g. 'confession_accepted') that gate later stages.
 	function markEventCompleted(eventId: string): void {
 		if (!state.completedEvents.includes(eventId)) {
+			const completedEvents = [...state.completedEvents, eventId];
+			// A gating event can unlock the next relationship stage right away.
+			// Companion mode has no dating-sim ladder, so leave its stage locked.
+			const relationshipStage =
+				state.appMode === 'companion'
+					? state.relationshipStage
+					: calculateStage(state, completedEvents);
 			state = {
 				...state,
-				completedEvents: [...state.completedEvents, eventId],
+				completedEvents,
+				relationshipStage,
 				updatedAt: new Date()
 			};
 			save();
@@ -313,10 +281,19 @@ function createCharacterStore() {
 		return state?.completedEvents.includes(eventId) ?? false;
 	}
 
+	// Format a date as local YYYY-MM-DD (toISOString would use UTC day boundaries,
+	// which breaks streaks for anyone chatting across a UTC midnight)
+	function localDateKey(date: Date): string {
+		const y = date.getFullYear();
+		const m = String(date.getMonth() + 1).padStart(2, '0');
+		const d = String(date.getDate()).padStart(2, '0');
+		return `${y}-${m}-${d}`;
+	}
+
 	// Update streak (call on session start)
 	function updateStreak(): void {
-		const today = new Date().toISOString().split('T')[0];
-		const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+		const today = localDateKey(new Date());
+		const yesterday = localDateKey(new Date(Date.now() - 86400000));
 
 		let newStreak = state.currentStreak;
 		let newLongest = state.longestStreak;
@@ -482,9 +459,6 @@ function createCharacterStore() {
 		get affectionPercent() {
 			return affectionPercent;
 		},
-		get overallHealth() {
-			return overallHealth;
-		},
 		get appMode() {
 			return state.appMode;
 		},
@@ -505,7 +479,6 @@ function createCharacterStore() {
 		save,
 		updatePersona,
 		applyUpdates,
-		setMood,
 		setRelationshipStage,
 		setAppMode,
 		markEventCompleted,

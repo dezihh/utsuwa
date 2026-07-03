@@ -65,6 +65,7 @@ function buildTimeSense(ctx: PromptContext): string {
 	return parts.join(' ');
 }
 
+
 // Prompt context for building
 export interface PromptContext {
 	persona: PersonaCard;
@@ -1269,3 +1270,4 @@ function truncateMessagesToContext(
 		totalHistoryTokens += tokens;
 	}
 }
+
