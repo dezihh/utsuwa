@@ -13,6 +13,7 @@ Output ONLY valid JSON in this exact format:
 Rules:
 - Extract only clear, persistent facts about the user (preferences, personal info, goals, shared experiences).
 - Do NOT extract temporary states ("user seemed tired today").
+- Do NOT extract vocabulary lists, translations, flashcards, or other language-learning content.
 - importance: 80-100 core personal facts (name, job, family), 50-79 preferences/interests, 20-49 minor details.
 - If nothing notable, return {"facts": []}.
 - Output ONLY the JSON object. No markdown, no explanations, no code blocks.`;
