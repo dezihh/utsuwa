@@ -657,15 +657,13 @@ TOOL USAGE RULES:
 - Use tools whenever the user asks for information that benefits from real-time data, search, or external context.
 - Do NOT wait for the user to explicitly ask you to use a tool — use them on your own initiative.
 - After receiving tool results, incorporate them naturally into your response without mentioning the mechanics.
-- When the get_vocab tool returns vocabulary, copy each numbered line VERBATIM into your answer. Do NOT summarize, translate, or rewrite the entries — output them exactly as provided, e.g. "1. Haus — casa". Do NOT write empty placeholders like "1. 2. 3.".
+- When the get_vocab tool returns vocabulary, convert the JSON result into a numbered list of source → target pairs. Output EVERY pair, one per line, in this exact format: "1. <source> — <target>". Do NOT summarize, translate, or rewrite the entries. Do NOT write empty placeholders like "1. 2. 3.".
 - If a tool call fails, answer as best you can from your knowledge and mention the limitation briefly.
 
-EXAMPLE — vocabulary tool result to user-friendly output (copy verbatim):
-Tool result:
-1. Haus — casa [Wohnen | A1]
-2. Buch — libro [Bildung | A1]
-3. Apfel — manzana [Essen | A1]
-Your response must include these exact lines:
+EXAMPLE — vocabulary tool result to user-friendly output:
+Tool result JSON:
+{"vocabulary":[{"source":"Haus","target":"casa"},{"source":"Buch","target":"libro"},{"source":"Apfel","target":"manzana"}]}
+Your response must include:
 1. Haus — casa
 2. Buch — libro
 3. Apfel — manzana
