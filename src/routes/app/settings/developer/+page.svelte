@@ -2,6 +2,7 @@
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 	import VrmScene from '$lib/components/vrm/VrmScene.svelte';
 	import { Icon } from '$lib/components/ui';
+	import MemoryInspectorModal from '$lib/components/memory/MemoryInspectorModal.svelte';
 	import * as THREE from 'three';
 	import localforage from 'localforage';
 	import { debugEventsStore, testEvents } from '$lib/stores/debugEvents.svelte';
@@ -25,6 +26,7 @@
 	];
 
 	let currentDebugMode = $state('none');
+	let showMemoryInspector = $state(false);
 
 	// Apply debug mode to all MToon materials in the VRM
 	function setMaterialDebugMode(mode: string) {
@@ -435,9 +437,20 @@
 	<div class="dev-header">
 		<div>
 			<h2>Developer Tools</h2>
-			<p class="description">Test and debug VRM facial expressions and animations.</p>
+			<p class="description">Test and debug VRM facial expressions, animations, and memory storage.</p>
 		</div>
 	</div>
+
+	<section class="section memory-inspector-section">
+		<h3>Memory Inspector</h3>
+		<p class="hint">
+			Inspect raw memory records, sessions, and stored facts. This is a low-level debugging tool.
+		</p>
+		<button class="action-btn" onclick={() => (showMemoryInspector = true)}>
+			<Icon name="database" size={18} />
+			<span>Open Memory Inspector</span>
+		</button>
+	</section>
 
 	<div class="dev-layout">
 		<!-- Viewport -->
@@ -843,6 +856,10 @@
 				</section>
 			{/if}
 		</div>
+
+		{#if showMemoryInspector}
+			<MemoryInspectorModal onClose={() => (showMemoryInspector = false)} />
+		{/if}
 	</div>
 </div>
 
