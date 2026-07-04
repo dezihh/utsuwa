@@ -472,7 +472,9 @@ export function validateStateUpdates(updates: Partial<StateUpdates>): {
 	};
 }
 
-// Extract potential facts from response (for memory system)
+// Extract potential facts from the user's own statements.
+// Assistant-provided content (examples, lists, explanations, translations, etc.)
+// is intentionally ignored so it is never turned into long-term memory.
 export function extractPotentialFacts(dialogue: string, userMessage: string): string[] {
 	const facts: string[] = [];
 
@@ -494,21 +496,7 @@ export function extractPotentialFacts(dialogue: string, userMessage: string): st
 		}
 	}
 
-	// AI perspective patterns (from dialogue)
-	const aiPerspectivePatterns = [
-		/you (?:are|work as|live in|like|love|enjoy|hate|prefer|have)\s+([^.!?]+)/gi,
-		/your (?:name|job|favorite|hobby|family|home|work)\s+(?:is|are)\s+([^.!?]+)/gi,
-		/you (?:said|mentioned|told me)\s+(?:that\s+)?([^.!?]+)/gi
-	];
-
-	for (const pattern of aiPerspectivePatterns) {
-		let match;
-		while ((match = pattern.exec(dialogue)) !== null) {
-			facts.push(match[1].trim());
-		}
-	}
-
-	// Detect category-list format: "Category: value" or "- Category: value"
+	// Detect category-list format in the user's own message: "Category: value" or "- Category: value"
 	const categoryPatterns = [
 		/^[-•*]?\s*(?:vorlieben?|preferences?|likes?|hobbys?|hobbies|interessen?|interests?|beruf|job|arbeit|work)\s*:\s*(.+)$/gim,
 		/^[-•*]?\s*(?:name|alter|age|wohnort|location|ziel|goal|geburtstag|birthday)\s*:\s*(.+)$/gim
@@ -516,26 +504,10 @@ export function extractPotentialFacts(dialogue: string, userMessage: string): st
 
 	for (const pattern of categoryPatterns) {
 		let match;
-		while ((match = pattern.exec(dialogue)) !== null) {
+		while ((match = pattern.exec(userMessage)) !== null) {
 			const value = match[1].trim();
 			if (value.length > 2 && value.length < 200) {
 				facts.push(`User: ${value}`);
-			}
-		}
-	}
-
-	// Look for companion statements about remembering
-	const rememberPatterns = [
-		/I(?:'ll)? remember (?:that )?([^.!?]+)/gi,
-		/I(?:'ll)? keep that in mind[.!]?\s*([^.!?]*)/gi,
-		/noted[!.]?\s*([^.!?]*)/gi
-	];
-
-	for (const pattern of rememberPatterns) {
-		let match;
-		while ((match = pattern.exec(dialogue)) !== null) {
-			if (match[1].trim()) {
-				facts.push(match[1].trim());
 			}
 		}
 	}
