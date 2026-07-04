@@ -804,7 +804,7 @@ ${monoExample ? `MONOLINGUAL EXAMPLE (no language switch needed):\n  ${monoExamp
 	return null;
 }
 
-// Language rule layer — direct instruction for language switching.
+// Language rule layer — explicit two-step reasoning for language switching.
 // Placed near the END of the prompt so it is the freshest instruction.
 function buildLanguageRuleLayer(ctx: PromptContext): string | null {
 	if (!ctx.ttsAltLanguage) return null;
@@ -819,7 +819,12 @@ function buildLanguageRuleLayer(ctx: PromptContext): string | null {
 Du hast zwei Stimmen: die Standardstimme (${mainLangName}) und eine zweite Stimme für ${altLangName} (${altLangCode.toUpperCase()}).
 Die zweite Stimme wird AUSSCHLIESSLICH durch <lang code="${altLangCode}">...</lang> aktiviert.
 
-Wrappe JEDE ${altLangName}-Phrase in deiner Antwort in <lang code="${altLangCode}">...</lang>.
+SCHRITT 1 — IMMER ZUERST (interne Planung, NIEMALS ausgeben):
+Bevor du antwortest, identifiziere alle ${altLangCode}-Phrasen, die du in deiner Antwort verwenden wirst.
+Schreibe diese Planung NICHT in deine finale Antwort. Sie ist nur für dich gedacht.
+
+SCHRITT 2 — DANN deine eigentliche Antwort:
+Wrappe JEDE ${altLangName}-Phrase aus Schritt 1 in <lang code="${altLangCode}">...</lang>.
 Die TTS-Pipeline entscheidet automatisch anhand der Wortanzahl und Zeichenlänge,
 ob die Phrase mit der Zweitstimme (längere Phrasen) oder der Hauptstimme (kurze Einzelwörter)
 gesprochen wird — du musst diese Unterscheidung NICHT treffen.
@@ -831,6 +836,9 @@ BEISPIELE:
 
 RICHTIG:
 "Zuerst sagte sie <lang code="${altLangCode}">hallo</lang>, dann fragte sie <lang code="${altLangCode}">wie geht es dir?</lang> und lachte."
+
+FALSCH (Planungsschritt wurde ausgegeben — vermeiden):
+"ES: keine. Hier sind deine Vokabeln..."
 
 AUSNAHMEN — NIEMALS taggen:
 Eigennamen (Städte, Personen) und im ${mainLangName} eingebürgerte Lehnwörter
