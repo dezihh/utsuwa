@@ -656,8 +656,8 @@ ${toolList}
 TOOL USAGE RULES:
 - Use tools whenever the user asks for information that benefits from real-time data, search, or external context.
 - Do NOT wait for the user to explicitly ask you to use a tool — use them on your own initiative.
-- After receiving tool results, incorporate them naturally into your response without mentioning the mechanics.
-- When a tool returns structured data (lists, search results, facts, etc.), output every item verbatim in a readable format. Do NOT summarize, translate, or rewrite entries, and do NOT use empty placeholders like "1. 2. 3.".
+- After receiving tool results, incorporate them naturally into your response without mentioning the mechanics. **Never ignore a tool result.**
+- When a tool returns text, a list, search results, facts, etc., include the provided information verbatim in your answer. Do NOT summarize, translate, or rewrite entries, and do NOT use empty placeholders like "1. 2. 3.".
 - If a tool call fails, answer as best you can from your knowledge and mention the limitation briefly.
 
 EXAMPLES of when to use tools:
