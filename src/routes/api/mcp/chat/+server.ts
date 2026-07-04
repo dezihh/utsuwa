@@ -55,37 +55,6 @@ function logMcp(event: string, details: Record<string, unknown>) {
 
 const MAX_TOOL_ROUNDS = 5;
 
-/** If the LLM emitted empty numbered placeholders like "1. 2. 3." for a
- *  vocabulary tool result, splice the actual vocabulary entries into the text.
- *  This works around local models that see the tool result but fail to copy
- *  the items into the numbered list. */
-function repairEmptyVocabList(text: string, toolResults: Array<{ name: string; content: string }>): string {
-	const vocabResult = toolResults.find((r) => r.name === 'get_vocab');
-	if (!vocabResult) return text;
-
-	// Extract numbered source → target pairs from the tool result.
-	const entries: string[] = [];
-	for (const line of vocabResult.content.split('\n')) {
-		const m = line.match(/^\s*(\d+)\.\s*(\S.*\S)\s*$/);
-		if (m) {
-			// Strip category/level tags like " [Bildung | A1]" for cleaner output.
-			const pair = m[2].replace(/\s*\[[^\]]+\]\s*$/g, '').trim();
-			if (pair) entries.push(`${m[1]}. ${pair}`);
-		}
-	}
-	if (entries.length === 0) return text;
-
-	// Match sequences of empty numbered placeholders: "1. 2. 3." (with optional spaces/newlines)
-	return text.replace(/(\d+\.\s*)+(?=(?:\d+\.\s*)*|$)/g, (match) => {
-		// Only replace if the match consists solely of empty placeholders.
-		const hasContent = /\d+\.\s*\S/.test(match);
-		if (hasContent) return match;
-		const count = (match.match(/\d+\./g) || []).length;
-		if (count !== entries.length) return match;
-		return entries.join('\n') + '\n';
-	});
-}
-
 /** Try to extract a base64 image from an MCP tool result.
  *  Supports tools that return JSON like {"success":true,"mime_type":"image/png","data":"iVBORw0KGgo..."}.
  */
@@ -254,7 +223,6 @@ Already written (do not repeat):
 	];
 
 	let finalText = '';
-	const allToolResults: Array<{ name: string; content: string }> = [];
 
 	try {
 	logMcp('chat start', { model, toolCount: tools.length, serverCount: servers.length });
@@ -314,7 +282,6 @@ Already written (do not repeat):
 			})
 		);
 
-		allToolResults.push(...toolResults);
 		logMcp('chat tool results', { round, results: toolResults.map((r) => ({ name: r.name, content: r.content.slice(0, 500) })) });
 
 		// Add tool results to message history
@@ -361,7 +328,6 @@ Already written (do not repeat):
 		finalText = 'I was unable to complete the request after using the available tools.';
 	}
 
-	finalText = repairEmptyVocabList(finalText, allToolResults);
 	} catch (err) {
 		return new Response(
 			JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
