@@ -98,11 +98,16 @@ function toolsToOpenAI(tools: McpTool[]) {
 		// Only send the fields the OpenAI tools schema expects.
 		const parameters: Record<string, unknown> = { ...t.inputSchema };
 		delete parameters['outputSchema'];
+		// Strip system-prompt injection markers; they are appended to the system
+		// prompt separately and should not appear in the tool description.
+		const cleanDescription = t.description
+			.replace(/\[utsuwa-system-injection\][\s\S]*?\[\/utsuwa-system-injection\]/gi, '')
+			.trim();
 		return {
 			type: 'function' as const,
 			function: {
 				name: t.name,
-				description: t.description,
+				description: cleanDescription,
 				parameters
 			}
 		};
@@ -238,8 +243,12 @@ Already written (do not repeat):
 		systemPrompt ??
 		'You are a helpful AI assistant. Use the available tools when they help answer the question.';
 	const toolInjections = extractToolSystemInjections(tools);
+	// Injections are placed right after the base system prompt so models see the
+	// tool-specific formatting rules before the continue-mode instructions.
 	const systemContent =
-		baseSystem + continueLayer + (toolInjections ? '\n\n' + toolInjections : '');
+		baseSystem +
+		(toolInjections ? '\n\n' + toolInjections : '') +
+		continueLayer;
 	const llmMessages: ChatMessage[] = [
 		{ role: 'system', content: systemContent },
 		...messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
