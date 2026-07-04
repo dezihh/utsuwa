@@ -27,36 +27,10 @@ export interface EmotionActionRule {
 
 // ── Sensible defaults (subtle, not intrusive) ──────────────────────────────
 
-export const DEFAULT_EMOTION_ACTION_RULES: EmotionActionRule[] = [
-	{ emotionTag: 'laugh',     actionId: 'shake',    probability: 0.6, cooldownMs: 4000, enabled: true },
-	{ emotionTag: 'giggle',    actionId: 'shake',    probability: 0.5, cooldownMs: 4000, enabled: true },
-	{ emotionTag: 'chuckle',   actionId: 'shake',    probability: 0.4, cooldownMs: 4000, enabled: true },
-	{ emotionTag: 'excited',   actionId: 'jump',     probability: 0.4, cooldownMs: 6000, enabled: true },
-	{ emotionTag: 'surprised', actionId: 'jump',     probability: 0.5, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'shocked',   actionId: 'jump',     probability: 0.7, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'gasp',      actionId: 'jump',     probability: 0.5, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'sad',       actionId: 'sad-pose', probability: 0.5, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'sigh',      actionId: 'sad-pose', probability: 0.4, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'cry',       actionId: 'sad-pose', probability: 0.6, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'lonely',    actionId: 'sad-pose', probability: 0.4, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'angry',     actionId: 'shake',    probability: 0.6, cooldownMs: 4000, enabled: true },
-	{ emotionTag: 'frustrated',actionId: 'shake',    probability: 0.5, cooldownMs: 4000, enabled: true },
-	{ emotionTag: 'annoyed',   actionId: 'shake',    probability: 0.4, cooldownMs: 4000, enabled: true },
-	{ emotionTag: 'happy',     actionId: 'wave',     probability: 0.3, cooldownMs: 6000, enabled: true },
-	{ emotionTag: 'proud',     actionId: 'wave',     probability: 0.3, cooldownMs: 6000, enabled: true },
-	{ emotionTag: 'love',      actionId: 'wave',     probability: 0.3, cooldownMs: 6000, enabled: true },
-	{ emotionTag: 'flirty',    actionId: 'wave',     probability: 0.3, cooldownMs: 6000, enabled: true },
-	{ emotionTag: 'dramatic',  actionId: 'lookaround', probability: 0.4, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'confused',  actionId: 'think',    probability: 0.4, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'unsure',    actionId: 'think',    probability: 0.3, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'nervous',   actionId: 'think',    probability: 0.3, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'shy',       actionId: 'blush',    probability: 0.5, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'calm',      actionId: 'relax',    probability: 0.3, cooldownMs: 6000, enabled: true },
-	{ emotionTag: 'relaxed',   actionId: 'relax',    probability: 0.3, cooldownMs: 6000, enabled: true },
-	{ emotionTag: 'sleepy',    actionId: 'sleepy',   probability: 0.5, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'yawn',      actionId: 'sleepy',   probability: 0.5, cooldownMs: 5000, enabled: true },
-	{ emotionTag: 'scream',    actionId: 'surprised-pose', probability: 0.6, cooldownMs: 4000, enabled: true }
-];
+// Default rules are intentionally empty: the stock animation set only contains
+// the VRoid Motion Pack clips (VRMA_01–VRMA_07). Users can add custom VRMA
+// animations and configure emotion-to-action mappings in Settings > TTS Emotions.
+export const DEFAULT_EMOTION_ACTION_RULES: EmotionActionRule[] = [];
 
 // ── Runtime state (session-only, not persisted) ────────────────────────────
 

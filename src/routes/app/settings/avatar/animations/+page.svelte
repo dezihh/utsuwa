@@ -174,7 +174,7 @@
 									{/if}
 								</td>
 								<td class="col-type">
-									<span class="type-badge" class:custom={!anim.id.startsWith('VRMA_') && !['angry','blush','clapping','goodbye','jump','lookaround','relax','sad-pose','sleepy','surprised-pose','thinking-pose','wave','nod','shake','bow','think','clap','dance'].includes(anim.id)}>
+									<span class="type-badge" class:custom={anim.id.startsWith('anim-')}>
 										{anim.id.startsWith('anim-') ? 'Custom' : 'Built-in'}
 									</span>
 								</td>

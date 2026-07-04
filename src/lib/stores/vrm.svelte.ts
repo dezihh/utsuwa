@@ -139,33 +139,13 @@ function createVrmStore() {
 
 	const STATIC_ANIMATIONS: AnimationEntry[] = [
 		// Motion clips — VRoid Motion Pack (pixiv Inc. VRoid Project)
-		{ id: 'VRMA_01', name: 'Show Full Body', url: '/animations/VRMA_01.vrma' },
-		{ id: 'VRMA_02', name: 'Greeting', url: '/animations/VRMA_02.vrma' },
-		{ id: 'VRMA_03', name: 'Peace Sign', url: '/animations/VRMA_03.vrma' },
-		{ id: 'VRMA_04', name: 'Shoot', url: '/animations/VRMA_04.vrma' },
-		{ id: 'VRMA_05', name: 'Spin', url: '/animations/VRMA_05.vrma' },
-		{ id: 'VRMA_06', name: 'Model Pose', url: '/animations/VRMA_06.vrma' },
-		{ id: 'VRMA_07', name: 'Squat', url: '/animations/VRMA_07.vrma' },
-		// Emotion / pose VRMAs — tk256ailab/vrm-viewer (demo animations)
-		{ id: 'angry', name: 'Angry', url: '/animations/Angry.vrma' },
-		{ id: 'blush', name: 'Blush', url: '/animations/Blush.vrma' },
-		{ id: 'clapping', name: 'Clapping', url: '/animations/Clapping.vrma' },
-		{ id: 'goodbye', name: 'Goodbye', url: '/animations/Goodbye.vrma' },
-		{ id: 'lookaround', name: 'Look Around', url: '/animations/LookAround.vrma' },
-		{ id: 'relax', name: 'Relax', url: '/animations/Relax.vrma' },
-		{ id: 'sad-pose', name: 'Sad', url: '/animations/Sad.vrma' },
-		{ id: 'sleepy', name: 'Sleepy', url: '/animations/Sleepy.vrma' },
-		{ id: 'surprised-pose', name: 'Surprised', url: '/animations/Surprised.vrma' },
-		{ id: 'thinking-pose', name: 'Thinking', url: '/animations/Thinking.vrma' },
-		// Actions mapped to available VRMA files (LLM [action:xxx] tags)
-		{ id: 'wave', name: 'Wave', url: '/animations/Goodbye.vrma', description: 'Wave hello or goodbye' },
-		{ id: 'nod', name: 'Nod', url: '/animations/nod.vrma', missing: true, description: 'Nod in agreement' },
-		{ id: 'shake', name: 'Shake Head', url: '/animations/shake.vrma', missing: true, description: 'Shake head in disagreement' },
-		{ id: 'jump', name: 'Jump', url: '/animations/Jump.vrma', description: 'Jump for joy or excitement' },
-		{ id: 'bow', name: 'Bow', url: '/animations/bow.vrma', missing: true, description: 'Bow in thanks or apology' },
-		{ id: 'think', name: 'Think', url: '/animations/Thinking.vrma', description: 'Strike a thinking pose' },
-		{ id: 'clap', name: 'Clap', url: '/animations/Clapping.vrma', description: 'Applaud or clap hands' },
-		{ id: 'dance', name: 'Dance', url: '/animations/dance.vrma', missing: true, description: 'Dance happily' }
+		{ id: 'VRMA_01', name: 'Show Full Body', url: '/animations/VRMA_01.vrma', description: 'Step back and present the full avatar body' },
+		{ id: 'VRMA_02', name: 'Greeting', url: '/animations/VRMA_02.vrma', description: 'Greet with a polite bowing motion' },
+		{ id: 'VRMA_03', name: 'Peace Sign', url: '/animations/VRMA_03.vrma', description: 'Make a peace sign with the fingers' },
+		{ id: 'VRMA_04', name: 'Shoot', url: '/animations/VRMA_04.vrma', description: 'Point finger forward like shooting' },
+		{ id: 'VRMA_05', name: 'Spin', url: '/animations/VRMA_05.vrma', description: 'Spin around once' },
+		{ id: 'VRMA_06', name: 'Model Pose', url: '/animations/VRMA_06.vrma', description: 'Strike a confident model pose' },
+		{ id: 'VRMA_07', name: 'Squat', url: '/animations/VRMA_07.vrma', description: 'Squat down briefly' }
 	];
 
 	// User-uploaded custom VRMA animations (persisted in IndexedDB)
