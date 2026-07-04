@@ -309,10 +309,12 @@ Already written (do not repeat):
 					]
 				});
 			} else {
+				// Present non-image tool results as a user-side note.
+				// Some local/SLIM models handle this better than the strict
+				// OpenAI "tool" role and are less likely to ignore the result.
 				llmMessages.push({
-					role: 'tool',
-					tool_call_id: r.tool_call_id,
-					content: r.content
+					role: 'user',
+					content: `[Tool result from ${r.name}]\n${r.content}`
 				});
 			}
 		}
