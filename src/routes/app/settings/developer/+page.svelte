@@ -4,7 +4,6 @@
 	import { Icon } from '$lib/components/ui';
 	import MemoryInspectorModal from '$lib/components/memory/MemoryInspectorModal.svelte';
 	import * as THREE from 'three';
-	import localforage from 'localforage';
 	import { debugEventsStore, testEvents } from '$lib/stores/debugEvents.svelte';
 	import { debugStore } from '$lib/stores/debug.svelte';
 	import { goto } from '$app/navigation';
@@ -319,23 +318,6 @@
 		vrmStore.triggerAction(action);
 	}
 
-	// Clear all VRM storage (IndexedDB)
-	let clearingStorage = $state(false);
-	async function clearVrmStorage() {
-		clearingStorage = true;
-		try {
-			const vrmStorage = localforage.createInstance({
-				name: 'utsuwa-vrm',
-				storeName: 'models'
-			});
-			await vrmStorage.clear();
-			// Reload to reset state
-			window.location.reload();
-		} catch (e) {
-			console.error('Failed to clear VRM storage:', e);
-		}
-		clearingStorage = false;
-	}
 
 	// Trigger a test event
 	async function triggerEvent(event: typeof testEvents[0]) {
@@ -422,15 +404,6 @@
 		}
 	}
 
-	// Clear all character data
-	async function clearCharacterData() {
-		try {
-			indexedDB.deleteDatabase('utsuwa-db');
-			window.location.reload();
-		} catch (e) {
-			console.error('Failed to clear character data:', e);
-		}
-	}
 </script>
 
 <div class="developer-settings">
@@ -694,22 +667,8 @@
 						</button>
 					{/each}
 				</div>
-			</section>
 
-			<!-- Storage -->
-			<section class="section">
-				<h3>Storage</h3>
-				<p class="hint">Clear cached data from browser storage.</p>
-				<div class="quick-actions">
-					<button class="action-btn reset" onclick={clearVrmStorage} disabled={clearingStorage}>
-						{clearingStorage ? 'Clearing...' : 'Clear VRM Storage'}
-					</button>
-					<button class="action-btn reset" onclick={clearCharacterData}>
-						Reset Character Data
-					</button>
-				</div>
 			</section>
-
 			<!-- Debug Logging -->
 			<section class="section">
 				<h3>Debug Logging</h3>
@@ -772,8 +731,21 @@
 					<label class="debug-toggle">
 						<input
 							type="checkbox"
+							checked={debugStore.settings.logSSE}
+							onchange={(e) => debugStore.updateSetting('logSSE', e.currentTarget.checked)}
 						/>
-						<span class="debug-toggle-desc">Tool calls, responses, and errors from MCP servers</span>
+						<span class="debug-toggle-label">Log SSE Stream</span>
+						<span class="debug-toggle-desc">Raw server-sent event lines from the LLM</span>
+					</label>
+					<label class="debug-toggle">
+						<input
+							type="checkbox"
+							checked={debugStore.settings.logChat}
+							onchange={(e) => debugStore.updateSetting('logChat', e.currentTarget.checked)}
+						/>
+						<span class="debug-toggle-label">Log Chat Processing</span>
+						<span class="debug-toggle-desc">Final, cleaned and display response text</span>
+					</label>
 				</div>
 			</section>
 

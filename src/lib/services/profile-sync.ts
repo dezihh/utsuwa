@@ -3,7 +3,7 @@
  * Communicates with /api/profile to save/load the full profile.
  */
 
-import type { SaveFile } from '$lib/db/export';
+import type { SaveFile, ExportOptions } from '$lib/db/export';
 import { exportSave, importSave } from '$lib/db/export';
 
 export interface SyncStatus {
@@ -19,9 +19,9 @@ export async function getSyncStatus(): Promise<SyncStatus> {
 }
 
 /** Push current state to server. If newPin is provided it replaces the current PIN. */
-export async function pushProfile(pin: string, newPin?: string): Promise<{ ok: boolean; error?: string }> {
+export async function pushProfile(pin: string, newPin?: string, options?: ExportOptions): Promise<{ ok: boolean; error?: string }> {
 	try {
-		const saveFile = await exportSave();
+		const saveFile = await exportSave(options);
 		const params = new URLSearchParams({ pin });
 		if (newPin) params.set('newPin', newPin);
 

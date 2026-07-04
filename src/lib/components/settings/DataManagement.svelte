@@ -10,9 +10,15 @@
 		downloadSaveFile,
 		clearAllData,
 		resetMemory,
+		resetCharacterData,
 		type SaveFile,
 		type SaveFilePreview,
-		type LegacySaveFile
+		type LegacySaveFile,
+	type ExportOptions,
+	type ExportSizeEstimate,
+	DEFAULT_EXPORT_OPTIONS,
+	estimateExportSizes
+
 	} from '$lib/db/export';
 	import {
 		getSyncStatus,
@@ -28,9 +34,15 @@
 	let isExporting = $state(false);
 	let isImporting = $state(false);
 	let isClearing = $state(false);
+	// Export options (VRM models, animations, keepsakes can be large)
+	let exportOptions = $state<ExportOptions>({ ...DEFAULT_EXPORT_OPTIONS });
+	let exportSizes = $state<ExportSizeEstimate | null>(null);
+
 	let showClearConfirm = $state(false);
 	let isResetting = $state(false);
 	let showResetConfirm = $state(false);
+	let isResettingCharacter = $state(false);
+	let showResetCharacterConfirm = $state(false);
 
 	let importFile = $state<File | null>(null);
 	let importPreview = $state<SaveFilePreview | null>(null);
@@ -47,13 +59,20 @@
 	let syncError = $state<string | null>(null);
 	let syncSuccess = $state<string | null>(null);
 	let isSyncing = $state(false);
+	async function loadExportSizes() {
+		exportSizes = await estimateExportSizes();
+	}
+
 	let showPinSetup = $state(false);
 	let showSyncPull = $state(false);
 
 	onMount(async () => {
 		syncStatus = await getSyncStatus();
+		await loadExportSizes();
 		if (syncStatus.enabled) {
 			syncPin = getSessionPin();
+			// Keep server profiles small by default
+			exportOptions.includeKeepsakes = false;
 		}
 	});
 
@@ -62,7 +81,7 @@
 		syncSuccess = null;
 		isSyncing = true;
 		try {
-			const result = await pushProfile(syncPin, showPinSetup ? syncNewPin : undefined);
+			const result = await pushProfile(syncPin, showPinSetup ? syncNewPin : undefined, exportOptions);
 			if (!result.ok) {
 				syncError = result.error ?? 'Save failed';
 			} else {
@@ -71,6 +90,7 @@
 				showPinSetup = false;
 				syncNewPin = '';
 				syncStatus = await getSyncStatus();
+		await loadExportSizes();
 			}
 		} finally {
 			isSyncing = false;
@@ -98,7 +118,7 @@
 	async function handleExport() {
 		isExporting = true;
 		try {
-			const saveFile = await exportSave();
+			const saveFile = await exportSave(exportOptions);
 			downloadSaveFile(saveFile);
 		} catch (e) {
 			console.error('Export failed:', e);
@@ -196,6 +216,10 @@
 		try {
 			await clearAllData();
 			showClearConfirm = false;
+			// Flag onboarding for the fresh start after reload
+			if (typeof sessionStorage !== 'undefined') {
+				sessionStorage.setItem('utsuwa-show-onboarding', '1');
+			}
 			// Refresh to reset stores
 			setTimeout(() => {
 				window.location.reload();
@@ -228,6 +252,34 @@
 		}
 	}
 
+	async function handleResetCharacterData() {
+		if (!showResetCharacterConfirm) {
+			showResetCharacterConfirm = true;
+			return;
+		}
+
+		isResettingCharacter = true;
+		try {
+			await resetCharacterData();
+			showResetCharacterConfirm = false;
+			// Refresh to reset stores
+			setTimeout(() => {
+				window.location.reload();
+			}, 500);
+		} catch (e) {
+			console.error('Reset character data failed:', e);
+		} finally {
+			isResettingCharacter = false;
+		}
+	}
+	function formatBytes(bytes: number): string {
+		if (bytes === 0) return '0 B';
+		const units = ['B', 'KB', 'MB', 'GB'];
+		const i = Math.min(units.length - 1, Math.floor(Math.log10(bytes) / 3));
+		const value = bytes / Math.pow(1000, i);
+		return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+	}
+
 	function formatDate(date: Date): string {
 		return date.toLocaleDateString(undefined, {
 			year: 'numeric',
@@ -254,9 +306,47 @@
 				<h3>Export Save</h3>
 			</div>
 			<p class="action-description">
-				Download all your data as a JSON file. Includes character states, memories, conversation
-				history, milestones, settings, and VRM models.
+				Download your data as a JSON file. Memory, character, and settings are always included.
+				Large optional items can be toggled below.
 			</p>
+
+			<div class="export-options">
+				<label class="export-option">
+					<input
+						type="checkbox"
+						bind:checked={exportOptions.includeVrmModels}
+					/>
+					<span class="export-option-label">VRM Models</span>
+					<span class="export-option-size">{formatBytes(exportSizes?.vrmModels ?? 0)}</span>
+				</label>
+				<label class="export-option">
+					<input
+						type="checkbox"
+						bind:checked={exportOptions.includeVrmAnimations}
+					/>
+					<span class="export-option-label">VRMA Animations</span>
+					<span class="export-option-size">{formatBytes(exportSizes?.vrmAnimations ?? 0)}</span>
+				</label>
+				<label class="export-option">
+					<input
+						type="checkbox"
+						bind:checked={exportOptions.includeKeepsakes}
+					/>
+					<span class="export-option-label">Keepsakes / Photos</span>
+					<span class="export-option-size">{formatBytes(exportSizes?.keepsakes ?? 0)}</span>
+				</label>
+				<div class="export-option-total">
+					<span>Selected optional total:</span>
+					<span>
+						{formatBytes(
+							(exportOptions.includeVrmModels ? (exportSizes?.vrmModels ?? 0) : 0) +
+							(exportOptions.includeVrmAnimations ? (exportSizes?.vrmAnimations ?? 0) : 0) +
+							(exportOptions.includeKeepsakes ? (exportSizes?.keepsakes ?? 0) : 0)
+						)}
+					</span>
+				</div>
+			</div>
+
 			<Button onclick={handleExport} disabled={isExporting}>
 				{#snippet children()}
 					{#if isExporting}
@@ -376,7 +466,7 @@
 				<h3>Reset Memory</h3>
 			</div>
 			<p class="action-description">
-				Wipe only conversation history, facts, sessions, and the fact library. Keeps your
+				Reset memory only: clears conversation history, facts, sessions, events, and the fact library. Keeps your
 				character profile, settings, VRM models, and expression mappings intact — perfect
 				for starting a new game with the same companion.
 			</p>
@@ -384,7 +474,7 @@
 			{#if showResetConfirm}
 				<div class="confirm-message">
 					<Icon name="warning" size={16} />
-					This clears all memory but keeps your character and settings. Continue?
+					This clears all memory but keeps your current character state and settings. Continue?
 				</div>
 				<div class="confirm-actions">
 					<Button variant="secondary" onclick={() => (showResetConfirm = false)}>
@@ -405,6 +495,46 @@
 					{#snippet children()}
 						<Icon name="brain" size={16} />
 						Reset Memory
+					{/snippet}
+				</Button>
+			{/if}
+		</div>
+		<!-- Reset Character Data -->
+		<div class="action-card warning">
+			<div class="action-header">
+				<Icon name="user" size={20} />
+				<h3>Reset Character Data</h3>
+			</div>
+			<p class="action-description">
+				Reset your companion's current state (mood, energy, relationship) and wipe all memory.
+				Keeps your settings, VRM model, and expression mappings intact — useful for a fresh start
+				with the same avatar and config.
+			</p>
+
+			{#if showResetCharacterConfirm}
+				<div class="confirm-message">
+					<Icon name="warning" size={16} />
+					This resets the character state and clears all memory, but keeps settings and VRM. Continue?
+				</div>
+				<div class="confirm-actions">
+					<Button variant="secondary" onclick={() => (showResetCharacterConfirm = false)}>
+						{#snippet children()}Cancel{/snippet}
+					</Button>
+					<Button variant="danger" onclick={handleResetCharacterData} disabled={isResettingCharacter}>
+						{#snippet children()}
+							{#if isResettingCharacter}
+								Resetting...
+							{:else}
+								Yes, Reset Character Data
+							{/if}
+						{/snippet}
+					</Button>
+				</div>
+			{:else}
+				<Button variant="danger" onclick={handleResetCharacterData}>
+					{#snippet children()}
+						<Icon name="user" size={16} />
+						Reset Character Data
 					{/snippet}
 				</Button>
 			{/if}
@@ -464,6 +594,11 @@
 					{#if !syncStatus.pinSet}
 						<strong>No PIN set yet</strong> — set one below to protect your profile.
 					{/if}
+				</p>
+				<p class="action-hint">
+					<Icon name="info" size={14} />
+					Cloud sync uses the same options as Export Save. Keepsakes/Photos are excluded by default
+					to keep server profiles small.
 				</p>
 
 				{#if syncError}
@@ -831,5 +966,67 @@
 		display: flex;
 		gap: 0.75rem;
 		flex-wrap: wrap;
+	}
+
+	/* Export options */
+	.export-options {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-bottom: 1rem;
+		padding: 0.75rem;
+		background: var(--bg-secondary);
+		border-radius: var(--radius-md);
+		border: 1px solid var(--border-light);
+	}
+
+	.export-option {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.875rem;
+		color: var(--text-primary);
+		cursor: pointer;
+	}
+
+	.export-option input[type="checkbox"] {
+		margin: 0;
+		accent-color: var(--accent);
+	}
+
+	.export-option-label {
+		flex: 1;
+	}
+
+	.export-option-size {
+		font-size: 0.8rem;
+		color: var(--text-tertiary);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.export-option-total {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--text-secondary);
+		border-top: 1px solid var(--border-light);
+		padding-top: 0.5rem;
+		margin-top: 0.25rem;
+	}
+
+	.action-hint {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.4rem;
+		font-size: 0.8rem;
+		color: var(--text-tertiary);
+		margin-bottom: 1rem;
+		line-height: 1.4;
+	}
+
+	.action-hint :global(svg) {
+		flex-shrink: 0;
+		margin-top: 0.1rem;
 	}
 </style>

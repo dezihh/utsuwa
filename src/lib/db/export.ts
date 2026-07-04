@@ -12,12 +12,23 @@ import type {
 } from '$lib/types/character';
 import type { Fact, SessionSummary, ConversationTurn, FactLibraryEntry } from '$lib/types/memory';
 import type { CompletedEventRecord } from '$lib/types/events';
+import type { KeepsakeRecord } from '$lib/services/storage/keepsakes';
 
-export const SAVE_FILE_VERSION = '3.2';
+export const SAVE_FILE_VERSION = '3.3';
 
 // Localforage instance for VRM storage (mirrors vrm.svelte.ts)
 const vrmStorage = browser
 	? localforage.createInstance({ name: 'utsuwa-vrm', storeName: 'models' })
+	: null;
+
+// Localforage instance for custom VRMA animations (mirrors vrm.svelte.ts)
+const animationStorage = browser
+	? localforage.createInstance({ name: 'utsuwa-vrm', storeName: 'animations' })
+	: null;
+
+// Localforage instance for keepsakes / photo memories
+const keepsakeStorage = browser
+	? localforage.createInstance({ name: 'utsuwa-keepsakes', storeName: 'images' })
 	: null;
 
 // Localforage instance for large background images that don't fit in localStorage
@@ -30,12 +41,42 @@ const BG_STORAGE_KEY = 'utsuwa-bg-v1';
 /** localforage key for background images too large for localStorage */
 const BG_CUSTOM_URL_KEY = 'custom-url';
 
+export interface ExportOptions {
+	/** Include custom VRM models (can be large) */
+	includeVrmModels: boolean;
+	/** Include custom VRMA animations */
+	includeVrmAnimations: boolean;
+	/** Include keepsakes / photo memories (can be large) */
+	includeKeepsakes: boolean;
+}
+
+export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
+	includeVrmModels: true,
+	includeVrmAnimations: true,
+	includeKeepsakes: true
+};
+
 export interface ExportedVrmModel {
 	id: string;
 	name: string;
 	blob: string; // base64-encoded binary
 	mimeType: string;
 	previewUrl?: string; // base64 thumbnail
+}
+
+export interface ExportedVrmAnimation {
+	id: string;
+	name: string;
+	blob: string; // base64-encoded binary
+	mimeType: string;
+	description?: string;
+	llmEnabled?: boolean;
+}
+
+export interface ExportedKeepsake {
+	record: KeepsakeRecord;
+	blob: string; // base64-encoded binary
+	mimeType: string;
 }
 
 export interface ExportedSettings {
@@ -45,6 +86,10 @@ export interface ExportedSettings {
 	moduleSettings: Record<string, string>;
 	/** Custom VRM models (non-default), blobs encoded as base64 */
 	vrmModels: ExportedVrmModel[];
+	/** Custom VRMA animations, blobs encoded as base64 (v3.3+) */
+	vrmAnimations?: ExportedVrmAnimation[];
+	/** Keepsakes / photo memories (v3.3+) */
+	keepsakes?: ExportedKeepsake[];
 	/** Per-avatar emotion expression mappings */
 	expressionProfilesByModel: Record<string, Record<string, EmotionMapping>>;
 	/** Theme preference (not prefixed with utsuwa-) */
@@ -100,13 +145,17 @@ export interface SaveFilePreview {
 		completedEvents: number;
 		factLibraryEntries?: number;
 		vrmModels?: number;
+		vrmAnimations?: number;
+		keepsakes?: number;
 		expressionProfiles?: number;
 	};
 	characterName: string;
 	hasSettings: boolean;
 }
 
-export async function exportSave(): Promise<SaveFile> {
+export async function exportSave(options: Partial<ExportOptions> = {}): Promise<SaveFile> {
+	const opts = { ...DEFAULT_EXPORT_OPTIONS, ...options };
+
 	const [characterStates, facts, sessions, conversationTurns, completedEvents, factLibraryEntries] =
 		await Promise.all([
 			db.characterStates.toArray(),
@@ -133,7 +182,7 @@ export async function exportSave(): Promise<SaveFile> {
 	) as FactLibraryEntry[];
 
 	// Collect settings from localStorage and localforage
-	const settings = await collectSettings();
+	const settings = await collectSettings(opts);
 
 	return {
 		version: SAVE_FILE_VERSION,
@@ -151,8 +200,74 @@ export async function exportSave(): Promise<SaveFile> {
 	};
 }
 
+/** Estimate the size of each optional export category in bytes. */
+export interface ExportSizeEstimate {
+	vrmModels: number;
+	vrmAnimations: number;
+	keepsakes: number;
+	total: number;
+}
+
+export async function estimateExportSizes(): Promise<ExportSizeEstimate> {
+	let vrmModels = 0;
+	let vrmAnimations = 0;
+	let keepsakes = 0;
+
+	if (vrmStorage) {
+		try {
+			const modelList = await vrmStorage.getItem<Array<{ id: string; name: string; isDefault?: boolean }>>('model-list');
+			if (modelList) {
+				for (const model of modelList.filter((m) => !m.isDefault)) {
+					const blob = await vrmStorage.getItem<Blob>(`model-blob-${model.id}`);
+					const preview = await vrmStorage.getItem<string>(`model-preview-${model.id}`);
+					if (blob) vrmModels += blob.size;
+					if (preview) vrmModels += preview.length * 0.75; // base64 ~ 3/4 binary size
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	if (animationStorage) {
+		try {
+			const animList = await animationStorage.getItem<Array<{ id: string; name: string }>>('custom-animation-list');
+			if (animList) {
+				for (const anim of animList) {
+					const blob = await animationStorage.getItem<Blob>(`animation-blob-${anim.id}`);
+					if (blob) vrmAnimations += blob.size;
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	if (keepsakeStorage) {
+		try {
+			const index = await keepsakeStorage.getItem<KeepsakeRecord[]>('keepsake-index');
+			if (index) {
+				for (const record of index) {
+					const blob = await keepsakeStorage.getItem<Blob>(`keepsake-blob-${record.id}`);
+					if (blob) keepsakes += blob.size;
+					if (record.thumb) keepsakes += record.thumb.length * 0.75;
+				}
+			}
+		} catch {
+			// ignore
+		}
+	}
+
+	return {
+		vrmModels,
+		vrmAnimations,
+		keepsakes,
+		total: vrmModels + vrmAnimations + keepsakes
+	};
+}
+
 /** Collect all settings from localStorage and localforage */
-async function collectSettings(): Promise<ExportedSettings> {
+async function collectSettings(options: ExportOptions = DEFAULT_EXPORT_OPTIONS): Promise<ExportedSettings> {
 	const localStorage_: Record<string, string> = {};
 	const moduleSettings: Record<string, string> = {};
 
@@ -184,7 +299,7 @@ async function collectSettings(): Promise<ExportedSettings> {
 	let expressionProfilesByModel: Record<string, Record<string, EmotionMapping>> = {};
 	let activeModelId: string | undefined;
 
-	if (vrmStorage) {
+	if (vrmStorage && options.includeVrmModels) {
 		try {
 			const modelList = await vrmStorage.getItem<Array<{ id: string; name: string; isDefault?: boolean }>>('model-list');
 			if (modelList) {
@@ -221,6 +336,71 @@ async function collectSettings(): Promise<ExportedSettings> {
 		}
 	}
 
+	// Always export expression profiles (small) even if models are skipped,
+	// so settings are not lost when the user toggles models off.
+	if (vrmStorage && !options.includeVrmModels) {
+		try {
+			const savedProfiles =
+				await vrmStorage.getItem<Record<string, Record<string, EmotionMapping>>>(
+					'expression-profiles-by-model'
+				);
+			if (savedProfiles && typeof savedProfiles === 'object') {
+				expressionProfilesByModel = savedProfiles;
+			}
+		} catch (e) {
+			console.warn('Failed to export expression profiles:', e);
+		}
+	}
+
+	// Custom VRMA animations
+	const vrmAnimations: ExportedVrmAnimation[] = [];
+	if (animationStorage && options.includeVrmAnimations) {
+		try {
+			const animList = await animationStorage.getItem<Array<{ id: string; name: string }>>('custom-animation-list');
+			const metadata = await animationStorage.getItem<Record<string, { description?: string; llmEnabled?: boolean }>>('animation-metadata');
+			if (animList) {
+				for (const anim of animList) {
+					const blob = await animationStorage.getItem<Blob>(`animation-blob-${anim.id}`);
+					if (blob) {
+						const meta = metadata?.[anim.id];
+						vrmAnimations.push({
+							id: anim.id,
+							name: anim.name,
+							blob: await blobToBase64(blob),
+							mimeType: blob.type || 'application/octet-stream',
+							description: meta?.description,
+							llmEnabled: meta?.llmEnabled
+						});
+					}
+				}
+			}
+		} catch (e) {
+			console.warn('Failed to export VRM animations:', e);
+		}
+	}
+
+	// Keepsakes / photo memories
+	const keepsakes: ExportedKeepsake[] = [];
+	if (keepsakeStorage && options.includeKeepsakes) {
+		try {
+			const index = await keepsakeStorage.getItem<KeepsakeRecord[]>('keepsake-index');
+			if (index) {
+				for (const record of index) {
+					const blob = await keepsakeStorage.getItem<Blob>(`keepsake-blob-${record.id}`);
+					if (blob) {
+						keepsakes.push({
+							record,
+							blob: await blobToBase64(blob),
+							mimeType: record.mimeType || blob.type || 'image/jpeg'
+						});
+					}
+				}
+			}
+		} catch (e) {
+			console.warn('Failed to export keepsakes:', e);
+		}
+	}
+
 	// Background fallback from localforage
 	let bgCustomUrlFromForage: string | undefined;
 	if (bgStorage) {
@@ -232,7 +412,7 @@ async function collectSettings(): Promise<ExportedSettings> {
 		}
 	}
 
-	return {
+	const result: ExportedSettings = {
 		localStorage: localStorage_,
 		moduleSettings,
 		vrmModels,
@@ -241,6 +421,11 @@ async function collectSettings(): Promise<ExportedSettings> {
 		activeModelId,
 		bgCustomUrlFromForage
 	};
+
+	if (options.includeVrmAnimations) result.vrmAnimations = vrmAnimations;
+	if (options.includeKeepsakes) result.keepsakes = keepsakes;
+
+	return result;
 }
 
 function blobToBase64(blob: Blob): Promise<string> {
@@ -453,6 +638,14 @@ async function restoreSettings(settings: ExportedSettings, mode: 'merge' | 'repl
 		if (vrmStorage) {
 			await vrmStorage.clear();
 		}
+		// Clear animation storage
+		if (animationStorage) {
+			await animationStorage.clear();
+		}
+		// Clear keepsake storage
+		if (keepsakeStorage) {
+			await keepsakeStorage.clear();
+		}
 		// Clear background localforage
 		if (bgStorage) {
 			await bgStorage.clear();
@@ -545,6 +738,70 @@ async function restoreSettings(settings: ExportedSettings, mode: 'merge' | 'repl
 		await vrmStorage.setItem('expression-profiles-by-model', mergedProfiles);
 	}
 
+	// Restore VRM animations
+	if (animationStorage && settings.vrmAnimations && settings.vrmAnimations.length > 0) {
+		const existingList = await animationStorage.getItem<Array<{ id: string; name: string }>>('custom-animation-list') ?? [];
+		const existingIds = new Set(existingList.map((a) => a.id));
+		const existingMetadata = await animationStorage.getItem<Record<string, { description?: string; llmEnabled?: boolean }>>('animation-metadata') ?? {};
+
+		const newEntries: Array<{ id: string; name: string }> = [];
+		const newMetadata: Record<string, { description?: string; llmEnabled?: boolean }> = { ...existingMetadata };
+
+		for (const anim of settings.vrmAnimations) {
+			if (mode === 'merge' && existingIds.has(anim.id)) continue;
+
+			const binaryStr = atob(anim.blob);
+			const bytes = new Uint8Array(binaryStr.length);
+			for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+			const blob = new Blob([bytes], { type: anim.mimeType });
+
+			await animationStorage.setItem(`animation-blob-${anim.id}`, blob);
+			newEntries.push({ id: anim.id, name: anim.name });
+			if (anim.description !== undefined || anim.llmEnabled !== undefined) {
+				newMetadata[anim.id] = {
+					description: anim.description,
+					llmEnabled: anim.llmEnabled
+				};
+			}
+		}
+
+		if (newEntries.length > 0) {
+			const updatedList = mode === 'replace'
+				? newEntries
+				: [...existingList, ...newEntries];
+			await animationStorage.setItem('custom-animation-list', updatedList);
+		}
+
+		await animationStorage.setItem('animation-metadata', newMetadata);
+	}
+
+	// Restore keepsakes
+	if (keepsakeStorage && settings.keepsakes && settings.keepsakes.length > 0) {
+		const existingList = await keepsakeStorage.getItem<KeepsakeRecord[]>('keepsake-index') ?? [];
+		const existingIds = new Set(existingList.map((k) => k.id));
+
+		const newEntries: KeepsakeRecord[] = [];
+
+		for (const keepsake of settings.keepsakes) {
+			if (mode === 'merge' && existingIds.has(keepsake.record.id)) continue;
+
+			const binaryStr = atob(keepsake.blob);
+			const bytes = new Uint8Array(binaryStr.length);
+			for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+			const blob = new Blob([bytes], { type: keepsake.mimeType });
+
+			await keepsakeStorage.setItem(`keepsake-blob-${keepsake.record.id}`, blob);
+			newEntries.push(keepsake.record);
+		}
+
+		if (newEntries.length > 0) {
+			const updatedList = mode === 'replace'
+				? newEntries
+				: [...existingList, ...newEntries];
+			await keepsakeStorage.setItem('keepsake-index', updatedList);
+		}
+	}
+
 	// Restore background from localforage
 	if (bgStorage && settings.bgCustomUrlFromForage) {
 		await bgStorage.setItem(BG_CUSTOM_URL_KEY, settings.bgCustomUrlFromForage);
@@ -617,6 +874,8 @@ export function getSaveFilePreview(saveFile: SaveFile | LegacySaveFile): SaveFil
 			completedEvents: saveFile.data.completedEvents?.length ?? 0,
 			factLibraryEntries: (saveFile as SaveFile).data.factLibraryEntries?.length,
 			vrmModels: v3Settings?.vrmModels.length,
+			vrmAnimations: v3Settings?.vrmAnimations?.length,
+			keepsakes: v3Settings?.keepsakes?.length,
 			expressionProfiles: v3Settings ? Object.keys(v3Settings.expressionProfilesByModel ?? {}).length : undefined
 		},
 		characterName,
@@ -655,6 +914,21 @@ export async function resetMemory(): Promise<void> {
 	]);
 }
 
+/**
+ * Reset character state and memory, but keep settings and VRM models.
+ * Useful when you want to start fresh with the same avatar and companion config.
+ */
+export async function resetCharacterData(): Promise<void> {
+	await Promise.all([
+		db.characterStates.clear(),
+		db.facts.clear(),
+		db.sessions.clear(),
+		db.conversationTurns.clear(),
+		db.completedEvents.clear(),
+		db.factLibrary.clear()
+	]);
+}
+
 export async function clearAllData(): Promise<void> {
 	await Promise.all([
 		db.characterStates.clear(),
@@ -679,6 +953,16 @@ export async function clearAllData(): Promise<void> {
 	// Clear VRM storage
 	if (vrmStorage) {
 		await vrmStorage.clear();
+	}
+
+	// Clear animation storage
+	if (animationStorage) {
+		await animationStorage.clear();
+	}
+
+	// Clear keepsake storage
+	if (keepsakeStorage) {
+		await keepsakeStorage.clear();
 	}
 
 	// Clear large background image fallback from localforage

@@ -15,7 +15,7 @@
 		{ href: localPath('app', '/settings/avatar/animations'), label: 'Animations', icon: 'layers' },
 		{ href: localPath('app', '/settings/data'), label: 'Data', icon: 'database' },
 		{ href: localPath('app', '/settings/developer'), label: 'Developer', icon: 'code' },
-		{ href: localPath('app', '/settings/mcp'), label: 'MCP Tools', icon: 'tool' }
+		{ href: localPath('app', '/settings/mcp'), label: 'MCP Tools', icon: 'modules' }
 	]);
 
 	const currentIcon = $derived(

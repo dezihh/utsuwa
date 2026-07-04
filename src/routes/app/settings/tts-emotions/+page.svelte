@@ -4,8 +4,9 @@
 	import type { TTSEmotionProvider, TTSEmotionConfig } from '$lib/types/tts-emotion';
 	import { EMOTION_TAGS } from '$lib/utils/sentences';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
+	import { modulesStore } from '$lib/stores/modules.svelte';
 
-	const providers: TTSEmotionProvider[] = ['chatterbox', 'omnivoice', 'alltalk', 'elevenlabs', 'openai-tts', 'local-tts'];
+	const allProviders: TTSEmotionProvider[] = ['chatterbox', 'omnivoice', 'alltalk', 'elevenlabs', 'openai-tts', 'local-tts'];
 	const providerLabels: Record<TTSEmotionProvider, string> = {
 		chatterbox: 'Chatterbox',
 		omnivoice: 'OmniVoice',
@@ -15,7 +16,20 @@
 		'local-tts': 'Local TTS'
 	};
 
+	const speechSettings = $derived(modulesStore.getModuleSettings('speech'));
+	const activeTTSProvider = $derived(speechSettings.activeProvider as TTSEmotionProvider | undefined);
+	const providers = $derived(
+		activeTTSProvider && allProviders.includes(activeTTSProvider) ? [activeTTSProvider] : allProviders
+	);
+
 	let activeProvider = $state<TTSEmotionProvider>('chatterbox');
+
+	$effect(() => {
+		const p = activeTTSProvider && allProviders.includes(activeTTSProvider) ? activeTTSProvider : null;
+		if (p) {
+			activeProvider = p;
+		}
+	});
 	let testingTag = $state<string | null>(null);
 
 	const emotionEntries = $derived(
@@ -55,24 +69,34 @@
 <div class="page">
 	<header class="page-header">
 		<h2>TTS Emotions</h2>
-		<p>Configure how each emotion tag sounds per TTS provider.</p>
+		<p>
+			Configure how each emotion tag sounds per TTS provider. These settings control the
+			<strong>voice</strong> and optional <strong>body animations</strong> — not the avatar's facial expression.
+			For the face, use <em>Settings &gt; Character &gt; Expression Mapping</em>.
+		</p>
 	</header>
 
 	<div class="sections">
 		<!-- Provider Tabs -->
 		<section class="section">
 			<h3>Provider</h3>
-			<div class="mode-selector">
-				{#each providers as provider}
-					<button
-						class="mode-option"
-						class:active={activeProvider === provider}
-						onclick={() => (activeProvider = provider)}
-					>
-						{providerLabels[provider]}
-					</button>
-				{/each}
-			</div>
+			{#if providers.length === 1}
+				<div class="active-provider-label">
+					{providerLabels[providers[0]]}
+				</div>
+			{:else}
+				<div class="mode-selector">
+					{#each providers as provider}
+						<button
+							class="mode-option"
+							class:active={activeProvider === provider}
+							onclick={() => (activeProvider = provider)}
+						>
+							{providerLabels[provider]}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</section>
 
 		<!-- Emotion Table -->
@@ -350,6 +374,30 @@
 			inset 0 1px 0 rgba(255, 255, 255, 0.9);
 	}
 
+
+	.active-provider-label {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.5rem 0.875rem;
+		background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 10px;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		box-shadow:
+			0 2px 6px rgba(0, 0, 0, 0.06),
+			inset 0 1px 0 rgba(255, 255, 255, 0.9);
+	}
+
+	:global(.dark) .active-provider-label {
+		background: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
+		border-color: rgba(255, 255, 255, 0.08);
+		box-shadow:
+			0 2px 6px rgba(0, 0, 0, 0.2),
+			inset 0 1px 0 rgba(255, 255, 255, 0.05);
+	}
+
 	/* Mode Selector - Skeuomorphic */
 	.mode-selector {
 		display: flex;
@@ -566,24 +614,57 @@
 
 	.slider-group.native-tag select {
 		flex: 1;
-		padding: 0.35rem 0.5rem;
+		min-width: 0;
+		padding: 0.35rem 2rem 0.35rem 0.5rem;
 		background: linear-gradient(180deg, #f8f8f8 0%, #f0f0f0 100%);
+		background-clip: padding-box;
 		border: 1px solid rgba(0, 0, 0, 0.1);
 		border-radius: 8px;
 		font-size: 0.8125rem;
+		font-family: inherit;
 		color: var(--text-primary);
+		color-scheme: light;
 		box-shadow:
 			inset 0 1px 2px rgba(0, 0, 0, 0.05),
 			0 1px 0 rgba(255, 255, 255, 0.8);
 		cursor: pointer;
+		transition: all 0.15s ease-out;
+		appearance: none;
+		-webkit-appearance: none;
+		-moz-appearance: none;
 	}
 
 	:global(.dark) .slider-group.native-tag select {
 		background: linear-gradient(180deg, #222 0%, #1a1a1a 100%);
 		border-color: rgba(255, 255, 255, 0.1);
+		color-scheme: dark;
 		box-shadow:
 			inset 0 1px 2px rgba(0, 0, 0, 0.3),
 			0 1px 0 rgba(255, 255, 255, 0.05);
+	}
+
+	.slider-group.native-tag select option {
+		color: var(--text-primary);
+		background: var(--bg-secondary);
+	}
+
+	:global(.dark) .slider-group.native-tag select option {
+		color: var(--text-primary);
+		background: var(--bg-secondary);
+	}
+
+	.slider-group.native-tag select:focus {
+		outline: none;
+		border-color: #01B2FF;
+		box-shadow:
+			inset 0 1px 2px rgba(0, 0, 0, 0.05),
+			0 0 0 3px rgba(1, 178, 255, 0.15);
+	}
+
+	:global(.dark) .slider-group.native-tag select:focus {
+		box-shadow:
+			inset 0 1px 2px rgba(0, 0, 0, 0.3),
+			0 0 0 3px rgba(1, 178, 255, 0.15);
 	}
 
 	.slider-label {

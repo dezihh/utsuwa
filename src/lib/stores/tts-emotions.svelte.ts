@@ -141,6 +141,21 @@ function buildDefaultProviderProfile(provider: TTSEmotionProvider): Record<strin
 	return emotions;
 }
 
+
+function buildOmniVoiceDescriptor(cfg: { omnivoiceDefaultVoiceType?: 'internal' | 'clone'; omnivoiceDefaultCloneId?: string; omnivoiceDefaultGender?: string; omnivoiceDefaultAge?: string; omnivoiceDefaultPitch?: string }, isAlt = false): string {
+	const type = isAlt ? undefined : cfg.omnivoiceDefaultVoiceType;
+	if (type === 'clone') {
+		return cfg.omnivoiceDefaultCloneId || '';
+	}
+	// 'internal' or undefined → design mode with text descriptor.
+	const gender = cfg.omnivoiceDefaultGender || 'female';
+	const age = cfg.omnivoiceDefaultAge || 'young adult';
+	const pitch = cfg.omnivoiceDefaultPitch || 'moderate pitch';
+	const parts = [gender, age, pitch].filter(Boolean);
+	const desc = parts.length > 0 ? parts.join(', ') : 'female';
+	return `instruct:${desc}`;
+}
+
 function createTTSEmotionsStore() {
 	let providerOverrides = $state<Partial<Record<TTSEmotionProvider, Record<string, Partial<TTSEmotionConfig>>>>>({});
 	let bodyActionRules = $state<TTSBodyActionRule[]>([...DEFAULT_BODY_ACTION_RULES]);
@@ -232,9 +247,13 @@ function createTTSEmotionsStore() {
 		const providerConfig = settingsStore.getProviderConfig(provider);
 		const testText = config.ttsText || `This is a test of the ${tag} emotion.`;
 
+		const voiceId = provider === 'omnivoice'
+			? (buildOmniVoiceDescriptor(providerConfig) || providerConfig.voiceId)
+			: providerConfig.voiceId;
+
 		const options = {
 			provider,
-			voiceId: providerConfig.voiceId,
+			voiceId,
 			baseUrl: providerConfig.baseUrl,
 			apiKey: providerConfig.apiKey,
 			speed: config.speed,

@@ -156,7 +156,14 @@ async function llmRequest(
 	model: string,
 	messages: ChatMessage[],
 	tools: McpTool[],
-	apiKey?: string
+	apiKey?: string,
+	options?: {
+		llmTemperature?: number;
+		llmTopP?: number;
+		llmMaxTokens?: number;
+		llmPresencePenalty?: number;
+		llmFrequencyPenalty?: number;
+	}
 ): Promise<LLMResponse> {
 	const headers: Record<string, string> = {
 		'Content-Type': 'application/json'
@@ -168,6 +175,11 @@ async function llmRequest(
 		body.tools = toolsToOpenAI(tools);
 		body.tool_choice = 'auto';
 	}
+	if (options?.llmTemperature !== undefined) body.temperature = options.llmTemperature;
+	if (options?.llmTopP !== undefined) body.top_p = options.llmTopP;
+	if (options?.llmMaxTokens !== undefined) body.max_tokens = options.llmMaxTokens;
+	if (options?.llmPresencePenalty !== undefined) body.presence_penalty = options.llmPresencePenalty;
+	if (options?.llmFrequencyPenalty !== undefined) body.frequency_penalty = options.llmFrequencyPenalty;
 
 	const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
 	if (!res.ok) {
@@ -177,7 +189,16 @@ async function llmRequest(
 	return res.json() as Promise<LLMResponse>;
 }
 
+const MCP_ENABLED = process.env.UTSUWA_MCP_ENABLED === 'true';
+
 export const POST: RequestHandler = async ({ request }) => {
+	if (!MCP_ENABLED) {
+		return new Response(JSON.stringify({ error: 'MCP is disabled on this server' }), {
+			status: 403,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
+
 	const {
 		messages,
 		provider,
@@ -188,7 +209,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		tools,
 		servers,
 		continueMode,
-		continueFromText
+		continueFromText,
+		llmTemperature,
+		llmTopP,
+		llmMaxTokens,
+		llmPresencePenalty,
+		llmFrequencyPenalty
 	} = (await request.json()) as {
 		messages: Array<{ role: 'user' | 'assistant'; content: string }>;
 		provider: string;
@@ -200,6 +226,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		servers: McpServerConfig[];
 		continueMode?: boolean;
 		continueFromText?: string;
+		llmTemperature?: number;
+		llmTopP?: number;
+		llmMaxTokens?: number;
+		llmPresencePenalty?: number;
+		llmFrequencyPenalty?: number;
 	};
 
 	// Resolve the OpenAI-compatible /chat/completions URL the same way /api/chat does
@@ -260,7 +291,13 @@ Already written (do not repeat):
 	logMcp('chat start', { model, toolCount: tools.length, serverCount: servers.length });
 	// Agentic loop
 	for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-		const response = await llmRequest(chatUrl, model, llmMessages, tools, apiKey);
+		const response = await llmRequest(chatUrl, model, llmMessages, tools, apiKey, {
+			llmTemperature,
+			llmTopP,
+			llmMaxTokens,
+			llmPresencePenalty,
+			llmFrequencyPenalty
+		});
 		const choice = response.choices[0];
 
 		if (!choice) throw new Error('Empty LLM response');

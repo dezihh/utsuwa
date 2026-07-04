@@ -359,6 +359,12 @@
 							</button>
 						</div>
 
+						<p class="expression-intro">
+							These mappings control the <strong>avatar's face</strong>. When the text contains an emotion tag
+							like <code>[laugh]</code> or <code>[sad]</code>, the selected VRM expression is blended onto the model.
+							This is independent of <em>Settings &gt; TTS Emotions</em>, which controls voice and body animations.
+						</p>
+
 						{#if vrmStore.availableExpressions.length === 0}
 							<p class="expression-empty">
 								No expressions detected yet. Select the avatar and wait until it loads in the main scene.
@@ -1171,6 +1177,20 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 0.35rem;
+	}
+
+	.expression-intro {
+		font-size: 0.85rem;
+		color: var(--text-secondary);
+		line-height: 1.5;
+		margin-bottom: 1rem;
+	}
+
+	.expression-intro code {
+		font-size: 0.8rem;
+		background: var(--bg-tertiary);
+		padding: 0.1rem 0.3rem;
+		border-radius: 4px;
 	}
 
 	.expression-hint,

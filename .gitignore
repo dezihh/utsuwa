@@ -42,6 +42,17 @@ utsuwa-save-*.json
 data/profile.json
 data/profile-pin.hash
 
+# Local docker files
+docker/docker-compose.yaml
+docker/docker-compose.override.yml
+docker/docker-compose.override.yaml
+docker/anmerkungen*
+
+# Editor swap/backup files
+*.swp
+*.swo
+*~
+
 # User audio recordings
 *.wav
 

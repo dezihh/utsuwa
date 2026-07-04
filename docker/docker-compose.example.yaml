@@ -1,0 +1,61 @@
+# Example Docker Compose setup for Utsuwa.
+# Copy this file to `docker-compose.yaml` and adjust it to your local needs.
+# Docker Compose automatically merges `docker-compose.override.yaml` if it exists.
+name: utsuwa
+
+services:
+  # ── Development Server ────────────────────────────────────
+  # Live-reload dev server. Mounts the repo root into the container.
+  utsuwa-dev:
+    image: node:22-bookworm-slim
+    container_name: utsuwa-dev
+    # `network_mode: host` lets Utsuwa reach local LLM/TTS/STT services on
+    # localhost without extra port mappings. Remove this and expose ports if
+    # you prefer an isolated Docker network.
+    network_mode: host
+    working_dir: /app
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm dev --host 0.0.0.0"
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+      PNPM_HOME: /pnpm
+      # Where server-side data (profile sync backups) is stored inside the
+      # container. Mount a volume or host path here to persist it.
+      UTSUWA_DATA_DIR: "/tmp/utsuwa-data"
+      # Allow the browser to reach providers running on localhost/private IPs.
+      ALLOW_LOCAL_PROVIDER_HOSTS: "true"
+      # Enable cloud profile sync endpoints (`/api/profile/*`). Users can then
+      # back up / restore their profile via PIN. Set to "false" to disable.
+      UTSUWA_PROFILE_SYNC_ENABLED: "false"
+      # Enable MCP tool endpoints (`/api/mcp/*`). MCP requests run server-side,
+      # so only enable this if you trust the configured MCP servers.
+      # UTSUWA_MCP_ENABLED: "true"
+    volumes:
+      - ..:/app
+      - utsuwa-node-modules:/app/node_modules
+      - pnpm-store:/pnpm
+
+  # ── Production Server ─────────────────────────────────────
+  # Built image served by `Dockerfile.prod`.
+  utsuwa-prod:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prod
+    container_name: utsuwa-prod
+    network_mode: host
+    environment:
+      PORT: "3001"
+      NODE_ENV: production
+      UTSUWA_PROFILE_SYNC_ENABLED: "false"
+      UTSUWA_DATA_DIR: "/data"
+      # Max request body size in bytes (200 MB). Increase this if users upload
+      # large VRM models or background images.
+      BODY_SIZE_LIMIT: "209715200"
+    volumes:
+      - utsuwa-prod-data:/data
+    restart: unless-stopped
+
+volumes:
+  utsuwa-node-modules:
+  pnpm-store:
+  utsuwa-prod-data:

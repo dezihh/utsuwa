@@ -273,8 +273,12 @@ if (typeof window !== 'undefined') {
 	$effect(() => {
 		if (characterStore.isReady && !onboardingDismissed) {
 			const forced = browser && new URLSearchParams(window.location.search).has('onboarding');
+			const freshStart = browser && sessionStorage.getItem('utsuwa-show-onboarding') === '1';
+			if (freshStart) {
+				sessionStorage.removeItem('utsuwa-show-onboarding');
+			}
 			const { lastInteraction, totalInteractions } = characterStore.state;
-			showOnboarding = forced || (lastInteraction === null && totalInteractions === 0);
+			showOnboarding = forced || freshStart || (lastInteraction === null && totalInteractions === 0);
 		}
 	});
 
@@ -361,16 +365,18 @@ if (typeof window !== 'undefined') {
 		const baselineUpdates = calculateBaselineUpdates(userMessage, state);
 
 		const parsed = parseResponse(companionResponse);
-		debugStore.addLog({
-			category: 'memory',
-			title: 'Raw LLM Response',
-			content: companionResponse.slice(0, 2000) + (companionResponse.length > 2000 ? '\n... (truncated)' : '')
-		});
-		debugStore.addLog({
-			category: 'memory',
-			title: 'Memory Parse Result',
-			content: `JSON detected: ${!!parsed.stateUpdates}\nnew_memory: ${parsed.stateUpdates?.newMemory ?? 'none'}\nstructured_fact: ${parsed.stateUpdates?.structuredFactSeen ? `${parsed.stateUpdates.structuredFactSeen.type}/${parsed.stateUpdates.structuredFactSeen.key}=${parsed.stateUpdates.structuredFactSeen.value}` : 'none'}\nmood_change: ${parsed.stateUpdates?.moodChange ? `${parsed.stateUpdates.moodChange.emotion} (${parsed.stateUpdates.moodChange.intensityDelta})` : 'none'}\nparseError: ${parsed.parseError ?? 'none'}`
-		});
+		if (debugStore.settings.logMemoryRetrieval) {
+			debugStore.addLog({
+				category: 'memory',
+				title: 'Raw LLM Response',
+				content: companionResponse.slice(0, 2000) + (companionResponse.length > 2000 ? '\n... (truncated)' : '')
+			});
+			debugStore.addLog({
+				category: 'memory',
+				title: 'Memory Parse Result',
+				content: `JSON detected: ${!!parsed.stateUpdates}\nnew_memory: ${parsed.stateUpdates?.newMemory ?? 'none'}\nstructured_fact: ${parsed.stateUpdates?.structuredFactSeen ? `${parsed.stateUpdates.structuredFactSeen.type}/${parsed.stateUpdates.structuredFactSeen.key}=${parsed.stateUpdates.structuredFactSeen.value}` : 'none'}\nmood_change: ${parsed.stateUpdates?.moodChange ? `${parsed.stateUpdates.moodChange.emotion} (${parsed.stateUpdates.moodChange.intensityDelta})` : 'none'}\nparseError: ${parsed.parseError ?? 'none'}`
+			});
+		}
 		const { queries: imageQueries, shouldClose: shouldCloseImages, cleanedText: imageCleaned } = extractImageSearchTags(parsed.dialogue);
 		let dialogue = imageCleaned;
 		let llmUpdates = parsed.stateUpdates;
@@ -551,11 +557,13 @@ if (typeof window !== 'undefined') {
 
 		// Extract facts
 		const potentialFacts = extractPotentialFacts(dialogue, userMessage);
-		debugStore.addLog({
-			category: 'memory',
-			title: 'Heuristic Facts Extracted',
-			content: `Found ${potentialFacts.length}\n${potentialFacts.slice(0, 5).join('\n')}`
-		});
+		if (debugStore.settings.logMemoryRetrieval) {
+			debugStore.addLog({
+				category: 'memory',
+				title: 'Heuristic Facts Extracted',
+				content: `Found ${potentialFacts.length}\n${potentialFacts.slice(0, 5).join('\n')}`
+			});
+		}
 		for (const factContent of potentialFacts.slice(0, 2)) {
 			try {
 				const userAnalysis = analyzeMessage(userMessage);
@@ -984,14 +992,18 @@ if (typeof window !== 'undefined') {
 							model: selectedModel,
 							apiKey: apiKey || undefined,
 							baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
-							systemPrompt
+							systemPrompt,
+							llmTemperature: providerConfig.llmTemperature,
+							llmTopP: providerConfig.llmTopP,
+							llmMaxTokens: providerConfig.llmMaxTokens,
+							llmPresencePenalty: providerConfig.llmPresencePenalty,
+							llmFrequencyPenalty: providerConfig.llmFrequencyPenalty
 						},
 						(text) => {
 							fullContent += text;
 							chatStore.updateLastMessage(stripAllTags(fullContent), stripForApiContext(fullContent));
 							const { cleaned, removed } = stripForSpeech(text);
 							if (removed.length > 0) {
-								console.debug('[TTS] Filtered artifacts:', removed);
 								debugStore.logSpeechArtifact(removed);
 							}
 							speechBuffer?.feed(cleaned);
@@ -1011,7 +1023,12 @@ if (typeof window !== 'undefined') {
 					baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
 					systemPrompt,
 					continueMode: continueMode || undefined,
-					continueFromText: continueFromText || undefined
+					continueFromText: continueFromText || undefined,
+					llmTemperature: providerConfig.llmTemperature,
+					llmTopP: providerConfig.llmTopP,
+					llmMaxTokens: providerConfig.llmMaxTokens,
+					llmPresencePenalty: providerConfig.llmPresencePenalty,
+					llmFrequencyPenalty: providerConfig.llmFrequencyPenalty
 				};
 				if (mcpEnabled) {
 					chatBody.tools = mcpStore.tools;
@@ -1041,15 +1058,13 @@ if (typeof window !== 'undefined') {
 				if (!reader) throw new Error('No response body');
 
 				const processMessage = (line: string) => {
-					// eslint-disable-next-line no-console
-					console.log('[SSE] raw line:', line);
+					debugStore.logSSE(line);
 					if (line.startsWith('0:')) {
 						const text = JSON.parse(line.slice(2));
 						fullContent += text;
 						chatStore.updateLastMessage(stripAllTags(fullContent), stripForApiContext(fullContent));
 						const { cleaned, removed } = stripForSpeech(text);
 						if (removed.length > 0) {
-							console.debug('[TTS] Filtered artifacts:', removed);
 							debugStore.logSpeechArtifact(removed);
 						}
 						speechBuffer?.feed(cleaned);
@@ -1092,13 +1107,11 @@ if (typeof window !== 'undefined') {
 				baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl
 			});
 			const displayText = stripAllTags(cleanedResponse);
-			// eslint-disable-next-line no-console
-			console.log('[CHAT] final fullContent:', fullContent);
-			// eslint-disable-next-line no-console
-			console.log('[CHAT] cleanedResponse:', cleanedResponse);
-			// eslint-disable-next-line no-console
-			console.log('[CHAT] displayText:', displayText);
 			chatStore.updateLastMessage(displayText, stripForApiContext(cleanedResponse));
+
+			debugStore.logChat('final fullContent', fullContent);
+			debugStore.logChat('cleanedResponse', cleanedResponse);
+			debugStore.logChat('displayText', displayText);
 
 			if (ttsEnabled && !ttsStarted && cleanedResponse) {
 				// LLM response was too short to trigger speech buffer during streaming —

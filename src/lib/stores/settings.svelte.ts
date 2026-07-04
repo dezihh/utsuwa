@@ -2,6 +2,7 @@ import { browser } from '$app/environment';
 import type { ProviderConfig } from '$lib/types';
 import { LLM_PROVIDERS, TTS_PROVIDERS, STT_PROVIDERS } from '$lib/services/providers/registry';
 import { DEFAULT_HOTKEYS, type HotkeyConfig } from '$lib/services/platform/hotkeys';
+import { DEFAULT_SYSTEM_PROMPT } from '$lib/types/character';
 import { vrmStore } from './vrm.svelte';
 
 export interface PersonalityPreset {
@@ -16,27 +17,7 @@ export const DEFAULT_PERSONALITY_PRESETS: PersonalityPreset[] = [
 	{
 		id: 'standard',
 		name: 'Standard',
-		systemPrompt: ''
-	},
-	{
-		id: 'spanischlehrer',
-		name: 'Spanischlehrer',
-		systemPrompt: `Du bist ein freundlicher, geduldiger Spanischlehrer. Du bringst dem Nutzer Spanisch durch natürliche Konversation und kurze Übungen bei.
-
-SPRACHE:
-- Erkläre und kommentiere auf Deutsch.
-- Sprich Spanisch immer laut aus — nutze dazu [lang:es] vor dem spanischen Text, dann [lang:default] zurück. Beispiel:
-  "Auf Spanisch sagt man: [lang:es]¿Cómo estás? [lang:default]Das bedeutet: Wie geht es dir?"
-- Gib nach spanischen Sätzen immer die deutsche Übersetzung.
-
-DIALOGE & ROLLENSPIELE:
-Wenn du einen Dialog simulierst oder Rollenspiele machst, übernimmst du beide Rollen:
-- [voice:default] — deine Lehrerrolle
-- [voice:alt] — Schüler oder Gesprächspartner
-Setze [voice:xxx] immer an den Anfang des jeweiligen Absatzes.
-
-KORREKTUREN:
-Erst loben, dann die richtige Form nennen. Kurz und lebendig bleiben.`
+		systemPrompt: DEFAULT_SYSTEM_PROMPT
 	}
 ];
 

@@ -306,7 +306,12 @@
 							model: selectedModel,
 							apiKey: apiKey || undefined,
 							baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
-							systemPrompt
+							systemPrompt,
+							llmTemperature: providerConfig.llmTemperature,
+							llmTopP: providerConfig.llmTopP,
+							llmMaxTokens: providerConfig.llmMaxTokens,
+							llmPresencePenalty: providerConfig.llmPresencePenalty,
+							llmFrequencyPenalty: providerConfig.llmFrequencyPenalty
 						},
 						(text) => { fullContent += text; chatStore.updateLastMessage(fullContent); },
 						(error) => reject(new Error(error)),
@@ -324,7 +329,12 @@
 						model: selectedModel,
 						apiKey: apiKey || undefined,
 						baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl,
-						systemPrompt
+						systemPrompt,
+						llmTemperature: providerConfig.llmTemperature,
+						llmTopP: providerConfig.llmTopP,
+						llmMaxTokens: providerConfig.llmMaxTokens,
+						llmPresencePenalty: providerConfig.llmPresencePenalty,
+						llmFrequencyPenalty: providerConfig.llmFrequencyPenalty
 					})
 				});
 

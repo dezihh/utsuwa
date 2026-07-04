@@ -13,17 +13,23 @@ export interface DebugSettings {
 	logSpeechArtifacts: boolean;
 	/** Log each TTS segment with language and assigned voice */
 	logTtsSegments: boolean;
+	/** Log raw SSE stream lines */
+	logSSE: boolean;
+	/** Log chat response processing */
+	logChat: boolean;
 }
 
 const STORAGE_KEY = 'utsuwa-debug-settings';
 
 const DEFAULT_SETTINGS: DebugSettings = {
-	logSystemPrompts: true,
-	logMemoryRetrieval: true,
-	logSessionLifecycle: true,
-	logFactLibrary: true,
-	logSpeechArtifacts: true,
-	logTtsSegments: true
+	logSystemPrompts: false,
+	logMemoryRetrieval: false,
+	logSessionLifecycle: false,
+	logFactLibrary: false,
+	logSpeechArtifacts: false,
+	logTtsSegments: false,
+	logSSE: false,
+	logChat: false
 };
 
 function createDebugStore() {
@@ -129,6 +135,16 @@ function createDebugStore() {
 	}
 
 
+	function logSSE(line: string) {
+		if (!settings.logSSE) return;
+		addLog({ category: 'SSE', title: 'raw line', content: line });
+	}
+
+	function logChat(title: string, content: string) {
+		if (!settings.logChat) return;
+		addLog({ category: 'CHAT', title, content });
+	}
+
 	return {
 		// Settings
 		get settings() { return settings; },
@@ -143,6 +159,8 @@ function createDebugStore() {
 		logSpeechArtifact,
 		logTTSSegment,
 		logTTSRequest,
+		logSSE,
+		logChat,
 	};
 }
 

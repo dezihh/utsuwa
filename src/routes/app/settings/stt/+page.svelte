@@ -63,31 +63,33 @@
 						/>
 						<span class="api-key-label">Model ID</span>
 					</div>
-					<div class="vad-sensitivity-row">
-						<span class="vad-sensitivity-label">
-							Mic Sensitivity
-							<span class="vad-value">{Math.round((1 - ((settingsStore.getProviderConfig('whisper-local').vadThreshold ?? 0.015) - 0.005) / 0.045) * 100)}%</span>
-						</span>
-						<input
-							type="range"
-							class="vad-slider"
-							min="5"
-							max="45"
-							step="1"
-							value={Math.round((1 - ((settingsStore.getProviderConfig('whisper-local').vadThreshold ?? 0.015) - 0.005) / 0.045) * 100)}
-							oninput={(e) => {
-								const pct = Number(e.currentTarget.value) / 100;
-								const threshold = +(0.05 - pct * 0.045).toFixed(4);
-								settingsStore.setProviderConfig('whisper-local', { vadThreshold: threshold });
-							}}
-						/>
-						<div class="vad-hint">Higher = detects quieter speech. Lower = ignores background noise.</div>
-					</div>
 				{:else if settingsStore.getProviderConfig('stt-config').activeProvider === 'web-speech'}
 					<p class="stt-hint">Browser built-in speech recognition. Works in Chrome/Edge without any API key. Not available in Tauri desktop builds.</p>
 				{:else}
 					<p class="stt-hint">Select a voice input provider above. Local Whisper uses your Docker service on port 8000 — no API key needed.</p>
 				{/if}
+
+				<!-- Duplex VAD threshold: shared across all STT providers -->
+				<div class="vad-sensitivity-row">
+					<span class="vad-sensitivity-label">
+						Duplex VAD Sensitivity
+						<span class="vad-value">{Math.round((1 - ((settingsStore.getProviderConfig('whisper-local').vadThreshold ?? 0.015) - 0.005) / 0.045) * 100)}%</span>
+					</span>
+					<input
+						type="range"
+						class="vad-slider"
+						min="0"
+						max="100"
+						step="1"
+						value={Math.round((1 - ((settingsStore.getProviderConfig('whisper-local').vadThreshold ?? 0.015) - 0.005) / 0.045) * 100)}
+						oninput={(e) => {
+							const pct = Number(e.currentTarget.value) / 100;
+							const threshold = +(0.05 - pct * 0.045).toFixed(4);
+							settingsStore.setProviderConfig('whisper-local', { vadThreshold: threshold });
+						}}
+					/>
+					<div class="vad-hint">Controls how easily Duplex / VOX mode detects speech. Higher = detects quieter speech; lower = ignores more background noise.</div>
+				</div>
 			</div>
 		</section>
 	</div>

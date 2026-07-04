@@ -63,7 +63,7 @@
 - **LLM Integration**: Support for OpenAI, Anthropic, OpenRouter, and any **Custom Endpoint** (Ollama, LM Studio, llama.cpp, LiteLLM, Google Gemini, DeepSeek, xAI, vLLM, or other OpenAI-compatible proxies)
 - **Dynamic Model Discovery**: Fetch available models directly from OpenRouter or any OpenAI-compatible custom endpoint, with one-click refresh
 - **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, AllTalk, Chatterbox, OmniVoice, and local OpenAI-compatible voices (Kokoro-FastAPI, openedai-speech) (with per-segment language + expression tags)
-- **Provider-Specific TTS Emotions**: Configure emotion tags per TTS provider under **Settings > TTS Emotions**. Each provider has its own emotion table with adjustable speed, pitch, volume, and provider-specific settings (exaggeration for Chatterbox, native sound tags for OmniVoice). Includes body-action mapping rules with probability and cooldown controls, plus live test buttons.
+- **Provider-Specific TTS Emotions**: Configure emotion tags per TTS provider under **Settings > TTS Emotions**. For each emotion tag you can set the spoken preview text, enable or disable the tag, and adjust speed, pitch, and volume. Provider-specific extras include exaggeration for Chatterbox and native sound tags such as `[laughter]` or `[surprise-oh]` for OmniVoice. You can also map each emotion to a VRMA body animation with adjustable trigger probability and cooldown, and preview the result instantly with the play button.
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
 - **Animations**: 18 built-in VRMA motion clips (idle, talking, emotions, actions) with automatic blinking. Upload your own `.vrma` files under **Settings > Animations**. Each animation has an editable description that the LLM sees in its prompt, plus a toggle to enable/disable it for LLM use — so you control which animations the companion can suggest.
 - **Character Customization**: Customize your companion's name, personality, and system prompt with saveable presets
@@ -403,6 +403,8 @@ Voice input is accessed via the microphone button in the chat bar. Groq STT uses
 
 Local Whisper responses are filtered on `verbose_json` quality metrics (`no_speech_prob` and segment `avg_logprob`) to suppress silence, background noise, and low-confidence hallucinations (e.g. random non-speech tokens) without affecting normal bilingual speech.
 
+**Duplex VAD Sensitivity**: Under **Settings > STT Providers**, the *Duplex VAD Sensitivity* slider controls the base speech-detection threshold for **Duplex / VOX mode**. It applies regardless of which STT provider is active (Groq, Local Whisper, or Web Speech). Higher values make the hands-free mode react to quieter speech; lower values ignore more background noise. For normal push-to-talk transcription, filtering happens via the STT provider itself (e.g. Whisper's `no_speech_prob` and `avg_logprob` quality metrics).
+
 ### Duplex / VOX Mode
 
 Hands-free, continuous conversation without pressing any buttons:
@@ -412,7 +414,7 @@ Hands-free, continuous conversation without pressing any buttons:
 3. When speech is detected, it records, transcribes (via your configured STT provider), generates a response, and speaks it aloud (via your configured TTS provider)
 4. It then returns to listening — fully automatic loop
 5. Background noise is automatically filtered; a toast notification appears when ambient noise is detected
-6. Use the **−/+** buttons next to the headset icon to adjust mic sensitivity in real time (1–10 scale)
+6. Use the **−/+** buttons next to the headset icon to adjust Duplex VAD sensitivity in real time (1–10 scale). This controls how readily the hands-free mode switches from "listening" to "speech detected". It does **not** change the *Mic Sensitivity* slider in **Settings > STT Providers**.
 
 Duplex mode requires both an STT provider and a TTS provider to be configured.
 
@@ -567,6 +569,45 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 pnpm tauri dev
 ```
 
+#### Docker
+
+You can also run Utsuwa with Docker. The files in the `docker/` directory are focused on the Utsuwa app only — they do **not** start Ollama, TTS, STT, or other AI services. Those are expected to run elsewhere (for example in the parent stack) and Utsuwa connects to them via URLs you configure in the app.
+
+Files in this directory:
+
+| File | Purpose |
+| --- | --- |
+| `Dockerfile.prod` | Multi-stage production build. |
+| `docker-compose.example.yaml` | Shared template. Copy this to `docker-compose.yaml` and adjust it for your setup. |
+| `docker-compose.override.yml` | Optional local-only tweaks. Created automatically by Docker Compose and ignored by git. |
+
+Quick start:
+
+```bash
+cd docker
+cp docker-compose.example.yaml docker-compose.yaml
+# edit docker-compose.yaml if you want to change defaults
+docker compose up
+```
+
+The development container mounts the repository root and runs `pnpm dev`. It uses `network_mode: host` so the app server can reach local LLM/TTS/STT services on `localhost` without extra port mappings. The app is then available at `http://localhost:5173`.
+
+##### Docker environment variables
+
+These variables can be set per service in `docker-compose.yaml`:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `UTSUWA_PROFILE_SYNC_ENABLED` | `false` | Enables the cloud profile sync endpoints (`/api/profile/*`) so users can back up or restore their profile via PIN. Only enable this if you want profile data stored on the server. |
+| `UTSUWA_MCP_ENABLED` | `false` | Enables MCP tool endpoints (`/api/mcp/*`). MCP tool calls are executed server-side, so only enable this if you trust the configured MCP servers. When disabled, MCP functionality is hidden in the client and requests are rejected with HTTP 403. |
+| `UTSUWA_DATA_DIR` | `/tmp/utsuwa-data` (dev) / `/data` (prod) | Directory where server-side data (profile sync backups) is stored. Mount a volume or host path here to persist it. |
+| `ALLOW_LOCAL_PROVIDER_HOSTS` | `false` | Allows the browser to reach providers on `localhost` or private IPs. Enable this when you run local models such as Ollama, LM Studio, or llama.cpp. |
+| `BODY_SIZE_LIMIT` | `209715200` (prod) | Maximum request body size in bytes. Increase this if users upload large VRM models or background images. |
+| `PORT` | `3001` (prod) | Port the production container listens on. |
+| `CHOKIDAR_USEPOLLING` | `true` (dev) | Enables polling file watching inside the dev container. Keep enabled when the source directory is mounted from a host filesystem. |
+
+If you need local-only changes (for example enabling MCP or pointing `UTSUWA_DATA_DIR` to a host path), put them in `docker/docker-compose.override.yml` instead of editing the tracked example file. Docker Compose merges the override automatically when it exists.
+
 #### Configuration
 
 1. Click the **Settings** (gear icon) in the sidebar
@@ -581,6 +622,39 @@ pnpm tauri dev
    - Configure voice settings
 
 All API keys are stored locally on your device and are never sent to any server except the respective API providers.
+
+#### Environment Variables
+
+The following environment variables can be set on the server when self-hosting the web version:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `UTSUWA_PROFILE_SYNC_ENABLED` | `false` | Enables the cloud profile sync endpoints (`/api/profile/*`) for import/export via PIN. Only enable this if you want users to be able to back up their profile to the server. |
+| `UTSUWA_MCP_ENABLED` | `false` | Enables MCP tool endpoints (`/api/mcp/*`). MCP requests are executed server-side, so this should only be enabled when you trust the configured MCP servers and want the feature available. When `false`, MCP tool calls are rejected with HTTP 403 and the client hides MCP functionality. |
+
+#### LLM Model Settings
+
+Under **Settings > LLM Model** you can tune the active chat model:
+
+| Setting | What it does |
+| --- | --- |
+| **Context Window** | Maximum token budget for the whole request (system prompt + memories + chat history + response). The app trims older history and limits injected memories to stay within this budget. Larger values keep more conversation context; smaller values reduce cost and latency. |
+| **Max Tokens** | Hard limit for the number of tokens the model may generate in its response. If the model hits this limit, it stops mid-sentence. Leave empty to use the provider default. |
+| **Temperature** | Controls randomness. Lower values (e.g. 0.3) produce more focused, deterministic answers; higher values (e.g. 1.0) produce more creative and varied output. |
+| **Top P** | Nucleus sampling: only tokens whose cumulative probability reaches this value are considered. 1.0 disables it. |
+| **Presence Penalty** | Penalizes tokens that have already appeared in the text, regardless of frequency. Positive values reduce repetition of topics/phrases. |
+| **Frequency Penalty** | Penalizes tokens based on how often they have already appeared. Higher values reduce repetition more strongly. |
+
+##### Unfiltered Mode (NSFW)
+
+The **Unfiltered Mode (NSFW)** toggle injects a special preamble into the system prompt that instructs the model to generate immersive, uncensored prose without moralizing, apologizing, or fading to black.
+
+- **Function:** It removes content-filtering guardrails *on the prompt level*. The model is told to stay in character and describe explicit or dark narrative elements if the scene calls for it.
+- **Scope:** It only affects **Dating Sim mode**. In **Companion mode** the toggle has no effect.
+- **Risks:**
+  - The toggle only changes the prompt; it cannot bypass hard filters built into the model or provider. Cloud providers (OpenAI, Anthropic, etc.) may still refuse or truncate explicit output despite the preamble.
+  - It is intended for **local or explicitly uncensored models** where no external content policy is enforced.
+  - Generated content is purely fictional text; the user is responsible for ensuring their use complies with local laws and the terms of the chosen model/provider.
 
 #### Custom Endpoint URL Format
 
@@ -644,14 +718,47 @@ Utsuwa provides a per-avatar mapping table under **Settings > Avatar > Expressio
 
 Mappings are stored per model and loaded automatically when you switch avatars.
 
+> **Note:** Expression Mapping controls the **avatar's face**. It is independent of **TTS Emotions** (Settings > TTS Emotions), which control the **voice and body animations**. Both use the same emotion tags, so you can combine them: `[laugh]` can make the avatar smile *and* sound amused at the same time.
+
+#### Expression Mapping vs. TTS Emotions
+
+Both features react to the same emotion tags (e.g. `[laugh]`, `[sad]`, `[excited]`), but they control different output channels:
+
+| Feature | Location | Controls | If disabled |
+|---|---|---|---|
+| **Expression Mapping** | Settings > Character > Expression Mapping | Avatar facial expressions (VRM blendshapes) | Face stays neutral |
+| **TTS Emotions** | Settings > TTS Emotions | Voice modulation (speed, pitch, volume, native tags) and VRMA body animations | Voice stays neutral, no body animation triggered |
+
+Use Expression Mapping to make the avatar smile, frown, or look surprised. Use TTS Emotions to make the spoken response sound happy, sad, or excited, and to trigger body gestures. They work best together.
+
 #### Data Management
 
-Your companion data is stored locally on your device. To back up or transfer your data:
+Your companion data is stored locally on your device. The **Settings > Data** page lets you back up, restore, or reset your data:
 
-1. Go to **Settings > Data**
-2. Click **Export Save** to download a JSON file with all your data
-3. To restore, click **Import Save** and select your save file
-4. Choose **Replace** (wipe and restore) or **Merge** (add to existing)
+### Back up / Transfer
+
+**Export Save** downloads your data as a JSON file. **Cloud Sync** saves the same JSON to the server and protects it with a PIN. You can choose which large items to include:
+
+| Option | Included by default | Typical size |
+|---|---|---|
+| Memory + Character + Settings | always | small (KB) |
+| VRM Models | yes | can be large (MB–GB) |
+| VRMA Animations | yes | small–medium (KB–MB) |
+| Keepsakes / Photos | yes (Export) / no (Cloud Sync) | can be large (MB–GB) |
+
+The estimated size is shown next to each option. For **Cloud Sync**, Keepsakes/Photos are excluded by default to keep server profiles small, but you can enable them if desired.
+
+**Import Save** restores data from a previously exported JSON file. Choose **Replace** (wipe existing first) or **Merge** (add to existing). Missing optional parts (e.g. VRM models you did not export) are simply skipped.
+
+### Reset options
+
+| Action | What it does | What is kept |
+|---|---|---|
+| **Reset Memory** | Clears conversation history, facts, sessions, completed events, and the fact library | Character state (mood, energy, relationship), settings, VRM model, expression mappings |
+| **Reset Character Data** | Resets character state (mood, energy, relationship) **and** clears all memory | Settings, VRM model, expression mappings |
+| **Clear All Data** | Permanently deletes everything stored locally | Nothing |
+
+> **Tip:** Use **Reset Memory** to start a new story with the same companion. Use **Reset Character Data** when you want a completely fresh companion while keeping your settings and avatar. Use **Clear All Data** only when you want to wipe the app completely.
 
 ## Project Structure
 

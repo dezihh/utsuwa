@@ -109,176 +109,192 @@
 	</header>
 
 	<div class="sections">
-		<!-- Server list -->
-		<section class="section">
-			<div class="section-header">
-				<h3>Connected Servers</h3>
-				<button class="add-btn" onclick={() => showForm && !isEditing ? resetForm() : openAddForm()}>
-					{showForm && !isEditing ? '✕ Cancel' : '＋ Add Server'}
-				</button>
-			</div>
-
-			{#if showForm}
-				<div class="form-card">
-					<div class="form-title">{isEditing ? 'Edit Server' : 'New Server'}</div>
-					<div class="form-row">
-						<label class="form-label" for="mcp-name">Name</label>
-						<input id="mcp-name" class="form-input" bind:value={formName} placeholder="My MCP Server" />
-					</div>
-
-					<div class="form-row">
-						<label class="form-label" for="mcp-transport">Transport</label>
-						<div class="transport-toggle" id="mcp-transport">
-							<button
-								class="transport-opt"
-								class:active={formTransport === 'http'}
-								onclick={() => (formTransport = 'http')}
-							>HTTP / SSE</button>
-							<button
-								class="transport-opt"
-								class:active={formTransport === 'stdio'}
-								onclick={() => (formTransport = 'stdio')}
-							>stdio</button>
-						</div>
-					</div>
-
-					{#if formTransport === 'http'}
-						<div class="form-row">
-							<label class="form-label" for="mcp-url">URL</label>
-							<input
-								id="mcp-url"
-								class="form-input"
-								bind:value={formUrl}
-								placeholder="http://localhost:3000/mcp"
-								type="url"
-							/>
-						</div>
-					{:else}
-						<div class="form-row">
-							<label class="form-label" for="mcp-command">Command</label>
-							<input id="mcp-command" class="form-input" bind:value={formCommand} placeholder="npx" />
-						</div>
-						<div class="form-row">
-							<label class="form-label" for="mcp-args">Arguments</label>
-							<input id="mcp-args" class="form-input" bind:value={formArgs} placeholder="-y @modelcontextprotocol/server-filesystem /path" />
-						</div>
-						<div class="form-row">
-							<label class="form-label" for="mcp-env">
-								Env Vars
-								<span class="form-hint">KEY=value per line</span>
-							</label>
-							<textarea
-								id="mcp-env"
-								class="form-input form-textarea"
-								bind:value={formEnv}
-								placeholder="SEARXNG_URL=http://192.168.10.4:8090"
-								rows="3"
-							></textarea>
-						</div>
-					{/if}
-
-					{#if formError}
-						<p class="form-error">{formError}</p>
-					{/if}
-					<div class="form-row form-row-inline">
-						<label class="form-label">
-							<input type="checkbox" bind:checked={formInjectResultsAsUser} />
-							<span>Inject text tool results as user messages</span>
-						</label>
-						<span class="form-hint">Helps with local/SLIM models that ignore strict tool-role messages.</span>
-					</div>
-
-					<div class="form-actions">
-						{#if isEditing}
-							<button class="cancel-edit-btn" onclick={resetForm}>Cancel</button>
-						{/if}
-						<button class="save-btn" onclick={submitForm}>
-							{isEditing ? 'Save Changes' : 'Add Server'}
-						</button>
-					</div>
+		<!-- Server-side status -->
+		{#if !mcpStore.serverEnabled}
+			<section class="section">
+				<div class="server-disabled-notice">
+					<strong>MCP disabled on server</strong>
+					<span>MCP tools are currently disabled by the server administrator. No MCP requests will be sent.</span>
 				</div>
-			{/if}
+			</section>
+		{/if}
 
-			{#if mcpStore.servers.length === 0 && !showForm}
-				<p class="empty-hint">No servers configured. Add one above to get started.</p>
-			{/if}
+		{#if mcpStore.serverEnabled}
+			<!-- Server list -->
+			<section class="section">
+				<div class="section-header">
+					<h3>Connected Servers</h3>
+					<button
+						class="add-btn"
+						disabled={!mcpStore.serverEnabled}
+						onclick={() => showForm && !isEditing ? resetForm() : openAddForm()}
+					>
+						{showForm && !isEditing ? '✕ Cancel' : '＋ Add Server'}
+					</button>
+				</div>
 
-			<ul class="server-list">
-				{#each mcpStore.servers as server}
-					<li class="server-card">
-						<div class="server-main">
-							<div class="server-info">
-								<span class="server-name">{server.name}</span>
-								<span class="server-meta">
-									{server.transport === 'http' ? server.url : `${server.command} ${(server.args ?? []).join(' ')}`}
-								</span>
-								<span class="server-badge transport-{server.transport}">{server.transport}</span>
-							</div>
-							<div class="server-actions">
+				{#if showForm}
+					<div class="form-card">
+						<div class="form-title">{isEditing ? 'Edit Server' : 'New Server'}</div>
+						<div class="form-row">
+							<label class="form-label" for="mcp-name">Name</label>
+							<input id="mcp-name" class="form-input" bind:value={formName} placeholder="My MCP Server" />
+						</div>
+
+						<div class="form-row">
+							<label class="form-label" for="mcp-transport">Transport</label>
+							<div class="transport-toggle" id="mcp-transport">
 								<button
-									class="toggle-btn"
-									class:enabled={server.enabled}
-									onclick={() => mcpStore.toggleServer(server.id)}
-									title={server.enabled ? 'Disable' : 'Enable'}
-								>
-									{server.enabled ? 'On' : 'Off'}
-								</button>
+									class="transport-opt"
+									class:active={formTransport === 'http'}
+									onclick={() => (formTransport = 'http')}
+								>HTTP / SSE</button>
 								<button
-									class="edit-btn"
-									onclick={() => openEditForm(server)}
-									title="Edit server"
-								>✎</button>
-								<button
-									class="remove-btn"
-									onclick={() => mcpStore.removeServer(server.id)}
-									title="Remove server"
-								>✕</button>
+									class="transport-opt"
+									class:active={formTransport === 'stdio'}
+									onclick={() => (formTransport = 'stdio')}
+								>stdio</button>
 							</div>
 						</div>
-					</li>
-				{/each}
-			</ul>
-		</section>
 
-		<!-- Available tools -->
-		<section class="section">
-			<div class="section-header">
-				<h3>Available Tools</h3>
-				<button
-					class="refresh-btn"
-					onclick={() => mcpStore.refreshTools()}
-					disabled={mcpStore.isLoadingTools}
-				>
-					{mcpStore.isLoadingTools ? '⟳ Loading…' : '⟳ Refresh'}
-				</button>
-			</div>
-
-			{#if mcpStore.toolsError}
-				<p class="tools-error">{mcpStore.toolsError}</p>
-			{/if}
-
-			{#if mcpStore.tools.length === 0 && !mcpStore.isLoadingTools}
-				<p class="empty-hint">
-					{mcpStore.enabledServers.length === 0
-						? 'Enable a server above to see its tools.'
-						: 'No tools found. Check that your MCP servers are running.'}
-				</p>
-			{:else}
-				<ul class="tool-list">
-					{#each mcpStore.tools as tool}
-						<li class="tool-card">
-							<div class="tool-header">
-								<span class="tool-name">🔧 {tool.name}</span>
-								<span class="tool-server">{tool.serverName}</span>
+						{#if formTransport === 'http'}
+							<div class="form-row">
+								<label class="form-label" for="mcp-url">URL</label>
+								<input
+									id="mcp-url"
+									class="form-input"
+									bind:value={formUrl}
+									placeholder="http://localhost:3000/mcp"
+									type="url"
+								/>
 							</div>
-							{#if tool.description}
-								<p class="tool-desc">{tool.description}</p>
+						{:else}
+							<div class="form-row">
+								<label class="form-label" for="mcp-command">Command</label>
+								<input id="mcp-command" class="form-input" bind:value={formCommand} placeholder="npx" />
+							</div>
+							<div class="form-row">
+								<label class="form-label" for="mcp-args">Arguments</label>
+								<input id="mcp-args" class="form-input" bind:value={formArgs} placeholder="-y @modelcontextprotocol/server-filesystem /path" />
+							</div>
+							<div class="form-row">
+								<label class="form-label" for="mcp-env">
+									Env Vars
+									<span class="form-hint">KEY=value per line</span>
+								</label>
+								<textarea
+									id="mcp-env"
+									class="form-input form-textarea"
+									bind:value={formEnv}
+									placeholder="SEARXNG_URL=http://192.168.10.4:8090"
+									rows="3"
+								></textarea>
+							</div>
+						{/if}
+
+						{#if formError}
+							<p class="form-error">{formError}</p>
+						{/if}
+						<div class="form-row form-row-inline">
+							<label class="form-label">
+								<input type="checkbox" bind:checked={formInjectResultsAsUser} />
+								<span>Inject text tool results as user messages</span>
+							</label>
+							<span class="form-hint">Helps with local/SLIM models that ignore strict tool-role messages.</span>
+						</div>
+
+						<div class="form-actions">
+							{#if isEditing}
+								<button class="cancel-edit-btn" onclick={resetForm}>Cancel</button>
 							{/if}
+							<button class="save-btn" onclick={submitForm}>
+								{isEditing ? 'Save Changes' : 'Add Server'}
+							</button>
+						</div>
+					</div>
+				{/if}
+
+				{#if mcpStore.servers.length === 0 && !showForm}
+					<p class="empty-hint">No servers configured. Add one above to get started.</p>
+				{/if}
+
+				<ul class="server-list">
+					{#each mcpStore.servers as server}
+						<li class="server-card">
+							<div class="server-main">
+								<div class="server-info">
+									<span class="server-name">{server.name}</span>
+									<span class="server-meta">
+										{server.transport === 'http' ? server.url : `${server.command} ${(server.args ?? []).join(' ')}`}
+									</span>
+									<span class="server-badge transport-{server.transport}">{server.transport}</span>
+								</div>
+								<div class="server-actions">
+									<button
+										class="toggle-btn"
+										class:enabled={server.enabled}
+										onclick={() => mcpStore.toggleServer(server.id)}
+										title={server.enabled ? 'Disable' : 'Enable'}
+									>
+										{server.enabled ? 'On' : 'Off'}
+									</button>
+									<button
+										class="edit-btn"
+										onclick={() => openEditForm(server)}
+										title="Edit server"
+									>✎</button>
+									<button
+										class="remove-btn"
+										onclick={() => mcpStore.removeServer(server.id)}
+										title="Remove server"
+									>✕</button>
+								</div>
+							</div>
 						</li>
 					{/each}
 				</ul>
-			{/if}
-		</section>
+			</section>
+
+			<!-- Available tools -->
+			<section class="section">
+				<div class="section-header">
+					<h3>Available Tools</h3>
+					<button
+						class="refresh-btn"
+						onclick={() => mcpStore.refreshTools()}
+						disabled={mcpStore.isLoadingTools}
+					>
+						{mcpStore.isLoadingTools ? '⟳ Loading…' : '⟳ Refresh'}
+					</button>
+				</div>
+
+				{#if mcpStore.toolsError}
+					<p class="tools-error">{mcpStore.toolsError}</p>
+				{/if}
+
+				{#if mcpStore.tools.length === 0 && !mcpStore.isLoadingTools}
+					<p class="empty-hint">
+						{mcpStore.enabledServers.length === 0
+							? 'Enable a server above to see its tools.'
+							: 'No tools found. Check that your MCP servers are running.'}
+					</p>
+				{:else}
+					<ul class="tool-list">
+						{#each mcpStore.tools as tool}
+							<li class="tool-card">
+								<div class="tool-header">
+									<span class="tool-name">🔧 {tool.name}</span>
+									<span class="tool-server">{tool.serverName}</span>
+								</div>
+								{#if tool.description}
+									<p class="tool-desc">{tool.description}</p>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+		{/if}
 	</div>
 </div>
 
@@ -309,7 +325,36 @@
 		font-size: 0.875rem;
 	}
 
-	.sections {
+	.server-disabled-notice {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.875rem 1rem;
+		background: linear-gradient(180deg, #fff8e6 0%, #fff3d1 100%);
+		border: 1px solid rgba(230, 162, 21, 0.3);
+		border-radius: 12px;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+		color: var(--text-primary);
+	}
+
+	:global(.dark) .server-disabled-notice {
+		background: linear-gradient(180deg, #3a2e0f 0%, #2b220b 100%);
+		border-color: rgba(230, 162, 21, 0.25);
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+	}
+
+	.server-disabled-notice strong {
+		font-size: 0.9375rem;
+		font-weight: 600;
+	}
+
+	.server-disabled-notice span {
+		font-size: 0.8125rem;
+		color: var(--text-secondary);
+		line-height: 1.4;
+	}
+
+		.sections {
 		display: flex;
 		flex-direction: column;
 		gap: 2rem;
@@ -355,7 +400,8 @@
 		background: var(--bg-tertiary);
 	}
 
-	.refresh-btn:disabled {
+	.refresh-btn:disabled,
+	.add-btn:disabled {
 		opacity: 0.5;
 		cursor: default;
 	}
