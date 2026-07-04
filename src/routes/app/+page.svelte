@@ -1049,10 +1049,8 @@ if (typeof window !== 'undefined') {
 				if (!reader) throw new Error('No response body');
 
 				const processMessage = (line: string) => {
-					console.log("[SSE] raw line:", line);
 					if (line.startsWith('0:')) {
 						const text = JSON.parse(line.slice(2));
-					console.log("[SSE] parsed text:", text);
 						fullContent += text;
 						chatStore.updateLastMessage(stripAllTags(fullContent), stripForApiContext(fullContent));
 						const { cleaned, removed } = stripForSpeech(text);
@@ -1101,8 +1099,6 @@ if (typeof window !== 'undefined') {
 			});
 			const displayText = stripAllTags(cleanedResponse);
 			chatStore.updateLastMessage(displayText, stripForApiContext(cleanedResponse));
-				console.log("[CHAT] cleanedResponse:", cleanedResponse);
-				console.log("[CHAT] displayText:", displayText);
 
 			if (ttsEnabled && !ttsStarted && cleanedResponse) {
 				// LLM response was too short to trigger speech buffer during streaming —
