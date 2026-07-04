@@ -397,6 +397,13 @@ Already written (do not repeat):
 			let last = 0;
 			let match: RegExpExecArray | null;
 			while ((match = sentenceRe.exec(finalText)) !== null) {
+				// Emit any non-sentence text (e.g. vocabulary lists, code fences)
+				// that appeared before this sentence so nothing is dropped.
+				const prefix = finalText.slice(last, match.index);
+				if (prefix.trim()) {
+					controller.enqueue(encoder.encode(`0:${JSON.stringify(prefix)}\n\n`));
+					await yield_();
+				}
 				const chunk = match[0];
 				if (chunk.trim()) {
 					controller.enqueue(encoder.encode(`0:${JSON.stringify(chunk)}\n\n`));
