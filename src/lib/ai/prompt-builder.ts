@@ -804,7 +804,7 @@ ${monoExample ? `MONOLINGUAL EXAMPLE (no language switch needed):\n  ${monoExamp
 	return null;
 }
 
-// Language rule layer — explicit two-step reasoning for language switching.
+// Language rule layer — direct instruction for language switching.
 // Placed near the END of the prompt so it is the freshest instruction.
 function buildLanguageRuleLayer(ctx: PromptContext): string | null {
 	if (!ctx.ttsAltLanguage) return null;
@@ -819,13 +819,7 @@ function buildLanguageRuleLayer(ctx: PromptContext): string | null {
 Du hast zwei Stimmen: die Standardstimme (${mainLangName}) und eine zweite Stimme für ${altLangName} (${altLangCode.toUpperCase()}).
 Die zweite Stimme wird AUSSCHLIESSLICH durch <lang code="${altLangCode}">...</lang> aktiviert.
 
-SCHRITT 1 — IMMER ZUERST:
-Bevor du antwortest, liste alle ${altLangCode}-Phrasen auf, die du in deiner Antwort verwenden wirst:
-${altLangCode.toUpperCase()}: <phrase1>, <phrase2>
-Falls keine ${altLangCode}-Phrasen vorkommen, schreibe: ${altLangCode.toUpperCase()}: keine
-
-SCHRITT 2 — DANN deine eigentliche Antwort:
-Wrappe JEDE ${altLangName}-Phrase aus Schritt 1 in <lang code="${altLangCode}">...</lang>.
+Wrappe JEDE ${altLangName}-Phrase in deiner Antwort in <lang code="${altLangCode}">...</lang>.
 Die TTS-Pipeline entscheidet automatisch anhand der Wortanzahl und Zeichenlänge,
 ob die Phrase mit der Zweitstimme (längere Phrasen) oder der Hauptstimme (kurze Einzelwörter)
 gesprochen wird — du musst diese Unterscheidung NICHT treffen.
@@ -844,6 +838,7 @@ zählen NICHT als ${altLangName}-Tag-Kandidaten.
 
 WICHTIG: Verwende <lang code="${altLangCode}"> NUR für ${altLangName} (${altLangCode.toUpperCase()}). Alle anderen Sprachen
 werden automatisch von der Standardstimme korrekt ausgesprochen — kein Tag nötig.
+Gib keine Planungsschritte, Listen oder Meta-Kommentare aus — nur deine finale Antwort.
 </lang_rule>
 ##############################################`;
 }
