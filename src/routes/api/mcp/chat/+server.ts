@@ -73,40 +73,6 @@ function extractImageFromToolResult(content: string): { mimeType: string; data: 
 	return null;
 }
 
-/** Best-effort formatter for structured JSON tool results.
- *  Converts arrays/objects into a plain-text list so the LLM can echo them
- *  without having to invent a format. Applies to any tool result that is
- *  parseable JSON; non-JSON content is returned unchanged.
- */
-function formatToolResultForLlm(content: string): string {
-	try {
-		const parsed = JSON.parse(content);
-		if (parsed === null || typeof parsed !== 'object') return content;
-		const formatted = formatJsonValue(parsed);
-		// Only use the formatted version if it actually expanded something.
-		return formatted.length >= content.length ? content : formatted;
-	} catch {
-		return content;
-	}
-}
-
-function formatJsonValue(value: unknown): string {
-	if (Array.isArray(value)) {
-		if (value.length === 0) return '(empty list)';
-		return value.map((item, i) => `${i + 1}. ${formatJsonValue(item)}`).join('\n');
-	}
-	if (value && typeof value === 'object') {
-		const entries = Object.entries(value);
-		// If the object is a single-key wrapper around an array, use the key as a heading.
-		if (entries.length === 1 && Array.isArray(entries[0][1])) {
-			const [key, arr] = entries[0];
-			return `${key}:\n${formatJsonValue(arr)}`;
-		}
-		return entries.map(([k, v]) => `${k}: ${formatJsonValue(v)}`).join('\n');
-	}
-	return String(value);
-}
-
 function toolsToOpenAI(tools: McpTool[]) {
 	return tools.map((t) => {
 		// Only send the fields the OpenAI tools schema expects.
@@ -346,7 +312,7 @@ Already written (do not repeat):
 				llmMessages.push({
 					role: 'tool',
 					tool_call_id: r.tool_call_id,
-					content: formatToolResultForLlm(r.content)
+					content: r.content
 				});
 			}
 		}
