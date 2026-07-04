@@ -404,7 +404,7 @@
 						aria-label={isDuplexActive ? 'Stop voice conversation' : 'Start voice conversation'}
 						title={isDuplexActive ? 'Stop voice conversation' : 'Start voice conversation'}
 					>
-						<Icon name="mic" size={20} />
+						<Icon name="headset" size={20} />
 					</button>
 				{/if}
 				<textarea
