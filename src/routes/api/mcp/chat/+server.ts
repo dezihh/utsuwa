@@ -348,10 +348,11 @@ Already written (do not repeat):
 			} else if (r.injectAsUser) {
 				// Opt-in compatibility mode: present the tool result as a user-side
 				// note. Some local/SLIM models ignore strict OpenAI tool-role
-				// messages and respond better to this format.
+				// messages and respond better to this format. Phrase the note as a
+				// direct instruction so the model repeats the data verbatim.
 				llmMessages.push({
 					role: 'user',
-					content: `[Tool result from ${r.name}]\n${r.content}`
+					content: `Tool result from ${r.name}. Quote the following result exactly in your answer, preserving every item and all formatting:\n\n${r.content}`
 				});
 			} else {
 				llmMessages.push({

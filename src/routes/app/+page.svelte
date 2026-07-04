@@ -1049,6 +1049,8 @@ if (typeof window !== 'undefined') {
 				if (!reader) throw new Error('No response body');
 
 				const processMessage = (line: string) => {
+					// eslint-disable-next-line no-console
+					console.log('[SSE] raw line:', line);
 					if (line.startsWith('0:')) {
 						const text = JSON.parse(line.slice(2));
 						fullContent += text;
@@ -1098,6 +1100,12 @@ if (typeof window !== 'undefined') {
 				baseURL: providerConfig.baseUrl || providerMeta?.defaultBaseUrl
 			});
 			const displayText = stripAllTags(cleanedResponse);
+			// eslint-disable-next-line no-console
+			console.log('[CHAT] final fullContent:', fullContent);
+			// eslint-disable-next-line no-console
+			console.log('[CHAT] cleanedResponse:', cleanedResponse);
+			// eslint-disable-next-line no-console
+			console.log('[CHAT] displayText:', displayText);
 			chatStore.updateLastMessage(displayText, stripForApiContext(cleanedResponse));
 
 			if (ttsEnabled && !ttsStarted && cleanedResponse) {
