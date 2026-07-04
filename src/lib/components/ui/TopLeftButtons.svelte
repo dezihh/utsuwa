@@ -18,21 +18,21 @@
 </script>
 
 <div class="top-left-buttons" style="left: calc(1rem + {leftOffset}px)">
-	<button class="icon-btn" onclick={takeScreenshot} aria-label="Take screenshot">
+	<button class="icon-btn" onclick={takeScreenshot} aria-label="Take screenshot" title="Take screenshot">
 		<Icon name="camera" size={20} />
 	</button>
 	{#if onOpenMemoryGraph}
-		<button class="icon-btn" onclick={onOpenMemoryGraph} aria-label="Open memory graph">
+		<button class="icon-btn" onclick={onOpenMemoryGraph} aria-label="Open memory graph" title="Memory graph">
 			<Icon name="brain" size={20} />
 		</button>
 	{/if}
 	{#if onOpenFactLibrary}
-		<button class="icon-btn" onclick={onOpenFactLibrary} aria-label="Open fact library">
+		<button class="icon-btn" onclick={onOpenFactLibrary} aria-label="Open fact library" title="Fact library">
 			<Icon name="book" size={20} />
 		</button>
 	{/if}
 	{#if onOpenMemoryInspector}
-		<button class="icon-btn" onclick={onOpenMemoryInspector} aria-label="Open memory inspector">
+		<button class="icon-btn" onclick={onOpenMemoryInspector} aria-label="Open memory inspector" title="Memory inspector">
 			<Icon name="database" size={20} />
 		</button>
 	{/if}

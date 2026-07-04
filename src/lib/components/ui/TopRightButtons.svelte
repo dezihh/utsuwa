@@ -129,10 +129,10 @@
 		</button>
 	{/if}
 
-	<button class="icon-btn" onclick={onInfoClick} aria-label="App info">
+	<button class="icon-btn" onclick={onInfoClick} aria-label="App info" title="App info">
 		<Icon name="info" size={20} />
 	</button>
-	<button class="icon-btn" onclick={() => goto(localPath('app', '/settings'))} aria-label="Settings">
+	<button class="icon-btn" onclick={() => goto(localPath('app', '/settings'))} aria-label="Settings" title="Settings">
 		<Icon name="settings" size={20} />
 	</button>
 </div>
