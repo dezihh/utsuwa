@@ -73,6 +73,26 @@ function extractImageFromToolResult(content: string): { mimeType: string; data: 
 	return null;
 }
 
+/** Extract optional system-prompt injections from tool descriptions.
+ *  Tools can include a block like:
+ *    [utsuwa-system-injection]
+ *    When this tool is used, always do X.
+ *    [/utsuwa-system-injection]
+ *  This lets MCP servers influence the system prompt without changing Utsuwa code.
+ */
+function extractToolSystemInjections(tools: McpTool[]): string {
+	const injections: string[] = [];
+	const marker = /\[utsuwa-system-injection\]([\s\S]*?)\[\/utsuwa-system-injection\]/gi;
+	for (const tool of tools) {
+		let match: RegExpExecArray | null;
+		while ((match = marker.exec(tool.description)) !== null) {
+			const text = match[1].trim();
+			if (text) injections.push(text);
+		}
+	}
+	return injections.join('\n\n');
+}
+
 function toolsToOpenAI(tools: McpTool[]) {
 	return tools.map((t) => {
 		// Only send the fields the OpenAI tools schema expects.
@@ -217,8 +237,11 @@ Already written (do not repeat):
 	const baseSystem =
 		systemPrompt ??
 		'You are a helpful AI assistant. Use the available tools when they help answer the question.';
+	const toolInjections = extractToolSystemInjections(tools);
+	const systemContent =
+		baseSystem + continueLayer + (toolInjections ? '\n\n' + toolInjections : '');
 	const llmMessages: ChatMessage[] = [
-		{ role: 'system', content: baseSystem + continueLayer },
+		{ role: 'system', content: systemContent },
 		...messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 	];
 
