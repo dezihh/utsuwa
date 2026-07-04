@@ -1048,18 +1048,27 @@ if (typeof window !== 'undefined') {
 				const decoder = new TextDecoder();
 				if (!reader) throw new Error('No response body');
 
-				const processLine = (line: string) => {
+				const processMessage = (line: string) => {
 					if (line.startsWith('0:')) {
 						const text = JSON.parse(line.slice(2));
 						fullContent += text;
-						chatStore.updateLastMessage(fullContent);
+						chatStore.updateLastMessage(stripAllTags(fullContent), stripForApiContext(fullContent));
+						const { cleaned, removed } = stripForSpeech(text);
+						if (removed.length > 0) {
+							console.debug('[TTS] Filtered artifacts:', removed);
+							debugStore.logSpeechArtifact(removed);
+						}
+						speechBuffer?.feed(cleaned);
 					} else if (line.startsWith('e:')) {
 						const { error } = JSON.parse(line.slice(2));
 						throw new Error(error);
 					}
 				};
 
-				// Buffer partial lines so a delta split across network chunks doesn't break JSON.parse
+				// SSE messages are separated by a newline followed by the next message prefix.
+				// A message may itself contain newlines (e.g. a multi-line vocabulary list),
+				// so we cannot simply split on every \n. Instead, accumulate chunks and emit
+				// a message whenever we see \n0: or \ne: (the start of the next message).
 				let streamBuffer = '';
 				while (true) {
 					if (llmAbortController.signal.aborted) break;
@@ -1067,27 +1076,17 @@ if (typeof window !== 'undefined') {
 					const { done, value } = await reader.read();
 					if (done) break;
 
-					const chunk = decoder.decode(value, { stream: true });
-					for (const line of chunk.split('\n')) {
-						if (line.startsWith('0:')) {
-							const text = JSON.parse(line.slice(2));
-							fullContent += text;
-							chatStore.updateLastMessage(stripAllTags(fullContent), stripForApiContext(fullContent));
-							const { cleaned, removed } = stripForSpeech(text);
-							if (removed.length > 0) {
-								console.debug('[TTS] Filtered artifacts:', removed);
-								debugStore.logSpeechArtifact(removed);
-							}
-							speechBuffer?.feed(cleaned);
-						} else if (line.startsWith('e:')) {
-							const { error } = JSON.parse(line.slice(2));
-							throw new Error(error);
-						}
-
+					streamBuffer += decoder.decode(value, { stream: true });
+					let boundary = streamBuffer.search(/\n[0e]:/);
+					while (boundary !== -1) {
+						const line = streamBuffer.slice(0, boundary);
+						streamBuffer = streamBuffer.slice(boundary + 1);
+						if (line) processMessage(line);
+						boundary = streamBuffer.search(/\n[0e]:/);
 					}
 				}
 				streamBuffer += decoder.decode();
-				if (streamBuffer) processLine(streamBuffer);
+				if (streamBuffer.trim()) processMessage(streamBuffer.trim());
 			}
 
 			speechBuffer?.flush();

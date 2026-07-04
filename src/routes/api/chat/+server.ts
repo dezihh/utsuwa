@@ -105,18 +105,18 @@ async function streamOpenAICompatibleChat(
 			try {
 				await parseSSEStream(reader, {
 					onChunk: (text) => {
-						controller.enqueue(encoder.encode(`0:${JSON.stringify(text)}\n`));
+						controller.enqueue(encoder.encode(`0:${JSON.stringify(text)}\n\n`));
 					},
 					onDone: () => controller.close(),
 					onError: (errorMessage) => {
-						controller.enqueue(encoder.encode(`e:${JSON.stringify({ error: errorMessage })}\n`));
+						controller.enqueue(encoder.encode(`e:${JSON.stringify({ error: errorMessage })}\n\n`));
 						controller.close();
 					}
 				});
 			} catch (error) {
 				console.error('Stream error:', error);
 				const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-				controller.enqueue(encoder.encode(`e:${JSON.stringify({ error: errorMessage })}\n`));
+				controller.enqueue(encoder.encode(`e:${JSON.stringify({ error: errorMessage })}\n\n`));
 				controller.close();
 			} finally {
 				reader.releaseLock();
@@ -282,7 +282,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					reader = textStream.getReader();
 				} catch (err) {
 					const msg = err instanceof Error ? err.message : 'Failed to start stream';
-					controller.enqueue(encoder.encode(`e:${JSON.stringify({ error: msg })}\n`));
+					controller.enqueue(encoder.encode(`e:${JSON.stringify({ error: msg })}\n\n`));
 					controller.close();
 					return;
 				}
@@ -291,14 +291,14 @@ export const POST: RequestHandler = async ({ request }) => {
 					while (true) {
 						const { done, value } = await reader.read();
 						if (done) break;
-						const data = `0:${JSON.stringify(value)}\n`;
+						const data = `0:${JSON.stringify(value)}\n\n`;
 						controller.enqueue(encoder.encode(data));
 					}
 					controller.close();
 				} catch (error) {
 					console.error('Stream error:', error);
 					const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-					controller.enqueue(encoder.encode(`e:${JSON.stringify({ error: errorMessage })}\n`));
+					controller.enqueue(encoder.encode(`e:${JSON.stringify({ error: errorMessage })}\n\n`));
 					controller.close();
 				} finally {
 					reader.releaseLock();

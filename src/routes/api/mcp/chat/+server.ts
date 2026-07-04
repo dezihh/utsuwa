@@ -353,7 +353,7 @@ Already written (do not repeat):
 			while ((match = sentenceRe.exec(finalText)) !== null) {
 				const chunk = match[0];
 				if (chunk.trim()) {
-					controller.enqueue(encoder.encode(`0:${JSON.stringify(chunk)}\n`));
+					controller.enqueue(encoder.encode(`0:${JSON.stringify(chunk)}\n\n`));
 					await yield_();
 				}
 				last = match.index + chunk.length;
@@ -361,7 +361,7 @@ Already written (do not repeat):
 			// Remaining text (e.g. a sentence without terminal punctuation)
 			const tail = finalText.slice(last);
 			if (tail.trim()) {
-				controller.enqueue(encoder.encode(`0:${JSON.stringify(tail)}\n`));
+				controller.enqueue(encoder.encode(`0:${JSON.stringify(tail)}\n\n`));
 			}
 			controller.close();
 		}
