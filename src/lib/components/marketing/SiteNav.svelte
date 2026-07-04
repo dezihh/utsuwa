@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import Icon from '$lib/components/ui/Icon.svelte';
-	import { sectionUrl, isSection } from '$lib/config/links';
 	import { GITHUB_REPO } from '$lib/config/site';
 	import { getSortedPosts } from '$lib/utils/blog-posts';
 	import { formatDate } from '$lib/utils/format-date';
@@ -51,7 +50,6 @@
 
 		<div class="site-nav-links">
 			<a href="/#features" class="site-nav-link" class:active={onHome}>Features</a>
-			<a href={sectionUrl('docs')} class="site-nav-link" class:active={isSection('docs')}>Docs</a>
 
 			<!-- Blog + recent-posts dropdown. Reveal is pure hover/focus-within, no
 			     click state; the Blog link itself still navigates to /blog. -->
@@ -80,10 +78,6 @@
 
 		<div class="site-nav-right">
 			<a href="/download" class="btn btn-secondary btn-sm site-nav-cta">Download</a>
-			<a href={sectionUrl('app')} class="btn btn-primary btn-sm site-nav-cta">
-				<span class="live-dot" aria-hidden="true"></span>
-				Try Live
-			</a>
 			<button
 				type="button"
 				class="site-nav-burger"
@@ -103,7 +97,6 @@
 		></button>
 		<div id="site-nav-mobile" class="site-nav-mobile">
 			<a href="/#features" class="site-nav-mobile-link" onclick={() => (menuOpen = false)}>Features</a>
-			<a href={sectionUrl('docs')} class="site-nav-mobile-link" onclick={() => (menuOpen = false)}>Docs</a>
 			<a href="/blog" class="site-nav-mobile-link" onclick={() => (menuOpen = false)}>Blog</a>
 			<a
 				href={GITHUB_REPO}
@@ -117,14 +110,6 @@
 				class="btn btn-secondary btn-block"
 				onclick={() => (menuOpen = false)}>Download</a
 			>
-			<a
-				href={sectionUrl('app')}
-				class="btn btn-primary btn-block"
-				onclick={() => (menuOpen = false)}
-			>
-				<span class="live-dot" aria-hidden="true"></span>
-				Try Live
-			</a>
 		</div>
 	{/if}
 </nav>
@@ -286,27 +271,6 @@
 		gap: 0.625rem;
 	}
 
-	/* Live indicator dot inside the Try Live button */
-	.live-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: var(--radius-full);
-		background: currentColor;
-		animation: livePulse 2.4s ease-out infinite;
-	}
-
-	@keyframes livePulse {
-		0% {
-			box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55);
-		}
-		70% {
-			box-shadow: 0 0 0 5px rgba(255, 255, 255, 0);
-		}
-		100% {
-			box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
-		}
-	}
-
 	/* Hamburger (mobile only) */
 	.site-nav-burger {
 		display: none;
@@ -422,10 +386,6 @@
 		.nav-dropdown {
 			transform: none;
 			transition: opacity 0.18s ease, visibility 0.18s ease;
-		}
-
-		.live-dot {
-			animation: none;
 		}
 	}
 </style>

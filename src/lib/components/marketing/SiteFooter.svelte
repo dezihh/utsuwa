@@ -1,7 +1,6 @@
 <script lang="ts">
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import { cycleTheme, getIconName, getLabel } from '$lib/config/docs-theme-toggle.svelte';
-	import { sectionUrl } from '$lib/config/links';
 	import { GITHUB_REPO, GITHUB_RELEASES } from '$lib/config/site';
 
 	const themeIcon = $derived(getIconName());
@@ -30,11 +29,9 @@
 					<h3>Product</h3>
 					<a href="/#features">Features</a>
 					<a href="/download">Download</a>
-					<a href={sectionUrl('app')}>Try live</a>
 				</div>
 				<div class="site-footer-col">
 					<h3>Resources</h3>
-					<a href={sectionUrl('docs')}>Docs</a>
 					<a href="/blog">Blog</a>
 					<a href={GITHUB_REPO} target="_blank" rel="noopener noreferrer">GitHub</a>
 					<a href={GITHUB_RELEASES} target="_blank" rel="noopener noreferrer">Releases</a>

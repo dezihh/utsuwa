@@ -65,3 +65,6 @@ static/animations/*.vrma
 
 # Temporary marketing-capture harness (do NOT commit)
 src/routes/(shots)/
+
+# Private deployment notes (do NOT commit)
+Readme_dz.md

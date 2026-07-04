@@ -60,13 +60,13 @@
 - **Dockable Chat Sidebar**: Collapsible sidebar showing full conversation history alongside the 3D view
 - **Voice Input**: Speech-to-text via Groq (Whisper), local Whisper server, or Web Speech API with real-time audio visualization
 - **Duplex / VOX Mode**: Hands-free conversation — the companion listens continuously, detects speech automatically using voice activity detection (VAD), transcribes, responds, and returns to listening. Includes noise rejection, background-noise toast notifications, and live sensitivity controls.
-- **LLM Integration**: Support for OpenAI, Anthropic, OpenRouter, and any **Custom Endpoint** (Ollama, LM Studio, llama.cpp, LiteLLM, Google Gemini, DeepSeek, xAI, vLLM, or other OpenAI-compatible proxies)
+- **LLM Integration**: Support for OpenAI, Anthropic, OpenRouter, and any **Custom Endpoint** (Ollama, LM Studio, llama.cpp, LiteLLM, Google Gemini, DeepSeek, xAI, vLLM, or other OpenAI-compatible proxies). Pick a model from a searchable, provider-specific list with one-click refresh.
 - **Dynamic Model Discovery**: Fetch available models directly from OpenRouter or any OpenAI-compatible custom endpoint, with one-click refresh
-- **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, AllTalk, Chatterbox, OmniVoice, and local OpenAI-compatible voices (Kokoro-FastAPI, openedai-speech) (with per-segment language + expression tags)
-- **Provider-Specific TTS Emotions**: Configure emotion tags per TTS provider under **Settings > TTS Emotions**. For each emotion tag you can set the spoken preview text, enable or disable the tag, and adjust speed, pitch, and volume. Provider-specific extras include exaggeration for Chatterbox and native sound tags such as `[laughter]` or `[surprise-oh]` for OmniVoice. You can also map each emotion to a VRMA body animation with adjustable trigger probability and cooldown, and preview the result instantly with the play button.
+- **Text-to-Speech**: Support for ElevenLabs, OpenAI TTS, AllTalk, Chatterbox-NG, OmniVoice, and local OpenAI-compatible voices (Kokoro-FastAPI, openedai-speech) (with per-segment language + expression tags)
+- **Provider-Specific TTS Emotions**: Configure emotion tags per TTS provider under **Settings > TTS Emotions**. For each emotion tag you can set the spoken preview text, enable or disable the tag, and adjust speed, pitch, and volume. Provider-specific extras include exaggeration for Chatterbox-NG and native sound tags such as `[laughter]` or `[surprise-oh]` for OmniVoice. You can also map each emotion to a VRMA body animation with adjustable trigger probability and cooldown, and preview the result instantly with the play button.
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
-- **Animations**: 18 built-in VRMA motion clips (idle, talking, emotions, actions) with automatic blinking. Upload your own `.vrma` files under **Settings > Animations**. Each animation has an editable description that the LLM sees in its prompt, plus a toggle to enable/disable it for LLM use — so you control which animations the companion can suggest.
-- **Character Customization**: Customize your companion's name, personality, and system prompt with saveable presets
+- **Animations**: 7 built-in VRMA action clips plus idle and talking loops, with automatic blinking. Upload your own `.vrma` files under **Settings > Animations**. Each animation has an editable description that the LLM sees in its prompt, plus a toggle to enable/disable it for LLM use — so you control which animations the companion can suggest.
+- **Character Customization**: Create multiple companions, each with their own name, personality, system prompt, and VRM avatar. Switch between characters and bind different avatars to different personality presets.
 - **Companion System**: Multi-axis relationship tracking with mood, events, and semantic memory
 - **Semantic Memory**: Local AI-powered memory search using Transformers.js — finds memories by meaning, not just keywords
 - **Memory Graph**: Interactive visualization showing how memories connect semantically
@@ -79,8 +79,7 @@
 - **Data Export/Import**: Download your data as a save file, restore anytime
 - **Theming**: Light and dark mode support with system preference detection
 - **Scheduled Reminders & Open Tasks**: The companion can set time-based reminders (e.g., "remind me in 5 minutes to check the coffee") using inline `[reminder:5min]...[/reminder]` tags. Reminders are stored locally per session, polled in the background, and when triggered they are injected into the LLM context as a system message so the companion can react. The trigger itself is logged in the browser console and does not appear in the visible chat history. Non-image reminders are also persisted as semantic facts with `source: open-task` so the companion keeps them in context until resolved. Upcoming reminders and open tasks are shown in a bell dropdown in the chat header, where you can also delete them.
-- **Image Search via SearxNG**: The companion can search for images on the web using SearxNG. When the user asks for pictures (e.g., "show me images of cats"), the companion outputs a `[search_image:cats]` tag and images appear in a popup modal. The companion can also close the popup with `[close_images]`. Requires a SearxNG instance (configured via `SEARXNG_URL` environment variable or MCP Tools settings).
-- **External Tools via MCP**: Expand your companion's abilities by connecting external tool servers under **Settings > MCP Servers**. For example, she can fetch an image from a URL you share and describe its contents directly, without showing technical details in chat or speech.
+- **External Tools via MCP**: Expand your companion's abilities by connecting external tool servers under **Settings > MCP Servers**. For example, she can fetch an image from a URL you share and describe its contents directly, without showing technical details in chat or speech. Image search can also be provided through a SearxNG MCP server if you configure one.
 - **Desktop App** *(beta)*: Native desktop app for macOS, Windows, and Linux with transparent overlay mode — your companion floats on your desktop
 
 ### Local-First Storage
@@ -122,7 +121,7 @@ Utsuwa stores several kinds of memory locally in IndexedDB. They differ in lifet
 
 - Your *storage* can grow large — there is no hard cap on how many facts or sessions you can save.
 - Your *prompt context* is deliberately limited. Even with thousands of stored facts, only the most relevant handful are sent to the LLM each turn. This prevents the context window from overflowing.
-- The **context size** setting in the LLM configuration (Settings > Modules > Consciousness) controls how many memories, facts, and turns are injected into each prompt. Larger models with bigger context windows get more working memory, facts, session summaries, and fact library entries.
+- The **context size** setting under **Settings > LLM Model** caps the total prompt length and scales how many recent turns, memories, facts, session summaries, and fact-library entries are injected into each prompt. Larger context windows keep more context; smaller windows reduce cost and latency.
 - Semantic search runs locally with Transformers.js embeddings, so finding relevant memories does not cost API tokens.
 
 **Fact deduplication:**
@@ -130,7 +129,7 @@ Utsuwa stores several kinds of memory locally in IndexedDB. They differ in lifet
 - The free-form **Semantic Facts** table automatically merges duplicate facts. If the same information is extracted again, the existing entry is refreshed (confidence and reference count go up) instead of creating a duplicate.
 - The **Fact Library** deduplicates by `type` + `key`. Updating an existing key overwrites the value and increases confidence.
 
-You can inspect all of this in the **Memory Inspector** (database icon in the top-left toolbar).
+You can inspect all of this in the **Memory Inspector** under **Settings > Developer**.
 
 ### Companion Mode vs Dating Sim Mode
 
@@ -145,7 +144,7 @@ Utsuwa offers two relationship modes. You choose during onboarding and can switc
 | **Status UI** | Shows energy + chat count | Shows love, trust, intimacy, comfort, energy, and respect |
 | **Prompt** | Simplified companion prompt | Full dating-sim prompt |
 
-**Important:** Companion Mode is *not* emotionless. The companion still has mood, energy, personality, memory, fact library, reminders, image search, animations, and voice — it simply does not advance the romantic relationship. If your persona prompt is affectionate or the companion's mood is warm, it can still feel emotional.
+**Important:** Companion Mode is *not* emotionless. The companion still has mood, energy, personality, memory, fact library, reminders, animations, and voice — it simply does not advance the romantic relationship. If your persona prompt is affectionate or the companion's mood is warm, it can still feel emotional.
 
 Switching modes preserves your dating-sim stage (it is saved when entering Companion Mode and restored when returning to Dating Sim Mode). Frequent switching is discouraged because it can disrupt natural progression.
 
@@ -240,14 +239,14 @@ You can manually trigger a scan of the current session at any time. This is usef
 - You had a long conversation and want to recover facts the main LLM missed.
 - You want a one-shot summary of everything memorable so far.
 
-Open the **Memory Inspector** (database icon in the top-left toolbar) and click **Extract memories**. The LLM analyzes the session transcript, extracts persistent facts, and saves new ones while skipping duplicates.
+Open the **Memory Inspector** under **Settings > Developer** and click **Extract memories**. The LLM analyzes the session transcript, extracts persistent facts, and saves new ones while skipping duplicates.
 
 **Important caveats:**
 
 - Extraction works best when the LLM follows the required memory tags. Small or local models may ignore them.
 - The automatic fallback extractor and the retroactive tagger each cost one extra LLM call when triggered.
 - You can always add important facts manually in the **Fact Library** if the LLM misses them.
-- Use the **Memory Inspector** for a unified view of all learned facts, session summaries, and the current character state.
+- Use the **Memory Inspector** under **Settings > Developer** for a unified view of all learned facts, session summaries, and the current character state.
 
 ### Desktop Application (Beta)
 
@@ -264,21 +263,21 @@ The desktop app uses the same codebase as the web version, and your save files a
 
 ## Supported Providers
 
-### LLM Providers (7)
+### LLM Providers
 
 | Category | Providers |
 |----------|-----------|
-| **Cloud** | OpenAI, Anthropic, Google Gemini, DeepSeek, xAI (Grok) |
-| **Local** | Ollama, LM Studio |
+| **Direct** | OpenAI, Anthropic, OpenRouter |
+| **Via Custom Endpoint** | Google Gemini, DeepSeek, xAI (Grok), Ollama, LM Studio, llama.cpp, LiteLLM, vLLM, or any other OpenAI-compatible server |
 
-Any provider can also be used through **Custom Endpoint** — enter a fully custom base URL for OpenAI-compatible proxies (OpenRouter, LiteLLM, vLLM, llama.cpp, or your own). Models are loaded dynamically from the endpoint and cached until you refresh the list.
+Select a provider under **Settings > LLM Model**. The **Custom Endpoint** option includes templates for the most common self-hosted and alternative cloud services; you can also enter a fully custom base URL. Available models are fetched dynamically from the endpoint and cached until you refresh the list.
 
 ### TTS Providers (3)
 
 | Category | Providers |
 |----------|-----------|
 | **Cloud** | ElevenLabs, OpenAI TTS |
-| **Local** | AllTalk, Chatterbox, OmniVoice, Local TTS (Kokoro-FastAPI, openedai-speech, any OpenAI-compatible server) |
+| **Local** | AllTalk, Chatterbox-NG, OmniVoice, Local TTS (Kokoro-FastAPI, openedai-speech, any OpenAI-compatible server) |
 
 #### OmniVoice TTS
 
@@ -290,10 +289,10 @@ OmniVoice is a local diffusion-based TTS engine with 600+ language support and r
 - **Default Voice** profile — two modes:
   - *Synthetic*: design a voice by selecting gender, age group, and pitch
   - *Voice Clone*: select a voice sample loaded from the OmniVoice server
-- **Alternative Voice** profile (enable via checkbox) — same fields as Default:
-  - Choose **Alternative Language** (e.g. "es" for Spanish). Only text tagged with `[lang:es]` triggers this voice. All other languages use the default voice.
-  - When the LLM outputs `[lang:es]`, OmniVoice switches to the alt voice with Spanish pronunciation for that word or phrase.
-  - `[lang:default]` switches back to the default voice. The LLM is prompted to use these tags automatically.
+- **Alternative Voice** profile (enable via checkbox) — a second voice with the same options as Default. Use it either as a **second native speaker** or as a **roleplay voice**:
+  - **Second native speaker:** set an **Alternative Language** (e.g. "es" for Spanish). Text tagged with `[lang:es]` is spoken with the alt voice; `[lang:default]` switches back to the primary voice.
+  - **Roleplay / dual voice:** keep the alternative language the same as the primary language and have the LLM mark another speaker's lines with `[voice:alt]` (for example a male voice for a male character while the default stays female). `[voice:default]` switches back to the main voice.
+  - The LLM is prompted to emit `[lang:…]` and `[voice:…]` tags automatically where it makes sense.
 
 ##### Voice modes: Synthetic vs. Voice Clone
 
@@ -301,15 +300,15 @@ Both the default and alternative profiles can use either a **Synthetic** (design
 
 | | Synthetic voice design | Voice Clone sample |
 |---|---|---|
-| **How it works** | Sends a text description such as `female, young adult, moderate pitch` to OmniVoice's `instruct` parameter. | Sends a clone/sample voice ID such as `lidl`, `female3`, or `female3_spain` to OmniVoice's `voice` parameter. |
+| **How it works** | Sends a text description such as `female, young adult, moderate pitch` to OmniVoice's `instruct` parameter. | Sends a clone/sample voice ID such as `woman`, `man`, or `woman_spain` to OmniVoice's `voice` parameter. |
 | **Pros** | Full control over gender, age, and pitch. No need to prepare or upload audio samples. | The same voice is generated for every request, so timbre and character stay consistent across sentences and sessions. More robust for very short words and language switching. |
 | **Cons** | Each request synthesises a *new* voice from the description, so timbre can vary noticeably between sentences and even between words. Short phrases or single words can sound noisy or clipped. Speed has little effect and may degrade quality. | You are limited to the clone samples available on your OmniVoice server. You cannot fine-tune age/gender/pitch independently of the sample. |
 | **Best for** | Prototyping, one-off lines, or when no suitable clone is available. | Conversational use, dual-language switching, and any scenario where a stable voice matters. |
 
-**Recommendation:** Use **Voice Clone** for both the default and alternative profiles when you want reliable, consistent speech — especially for language switching. A typical German/Spanish setup is:
+**Recommendation:** Use **Voice Clone** for both the default and alternative profiles when you want reliable, consistent speech — especially for language switching or roleplay. A typical German/Spanish setup is:
 
-- Default voice clone: `lidl` or `female3`
-- Alternative voice clone: `female3_spain`
+- Default voice clone: `woman` or `man`
+- Alternative voice clone: `woman_spain`
 - Alternative language: `es`
 
 If you use a **Synthetic** alt voice, you may hear inconsistent accents or degraded quality on short `[lang:es]` words. If a synthetic default and a clone alt are mixed, the contrast can be jarring.
@@ -327,8 +326,6 @@ Example LLM output with German as primary and Spanish as alt:
 ```
 → "corazón" is spoken by the alt voice with Spanish pronunciation, the rest by the default voice.
 
-The **Spanischlehrer** personality preset (Settings > Character > Personality) ships with a pre-configured dual-voice setup demonstrating this feature.
-
 #### TTS Provider Comparison (Voice Switching & Streaming)
 
 Only **OmniVoice** currently supports per-word dual-voice switching with language tags. Here is the current state and extension potential for each provider:
@@ -336,12 +333,12 @@ Only **OmniVoice** currently supports per-word dual-voice switching with languag
 | Provider | Dual-Voice | `[lang:xx]` | Chunked TTS | Extensible? |
 |---|---|---|---|---|
 | **OmniVoice** | ✓ Per-word | ✓ `[lang:es]`→alt voice | ✓ Each word = own request | Fully supported |
-| **Chatterbox** | ✗ | ✗¹ | ✓ Continuous stream | **Yes** — `streaming: true` buffers all segments via `playAllAsOneStream` using only `firstSeg.language`. Fix options: (a) set `streaming: false` (loses gapless audio), or (b) split the combined stream at `[voice:alt]` boundaries into separate requests. |
+| **Chatterbox-NG** | ✗ | ✗¹ | ✓ Continuous stream | **Yes** — `streaming: true` buffers all segments via `playAllAsOneStream` using only `firstSeg.language`. Fix options: (a) set `streaming: false` (loses gapless audio), or (b) split the combined stream at `[voice:alt]` boundaries into separate requests. |
 | **ElevenLabs** | ✗ | ✗ | ✗² | **In theory** — Cloud API supports multiple voice IDs and `language` parameter. No streaming path in the code (uses `speak()`). Could be extended via `fetchAudioBuffer`. |
 | **OpenAI TTS** | ✗ | ✗ | ✗² | **In theory** — same as ElevenLabs: voice ID + language parameter per request possible. Same limitations. |
 | **AllTalk** | ✗ | ✗ | ✗² | **Unlikely** — Single voice, language derived from voice model. No per-request voice/language parameters. |
 
-¹ Chatterbox has `multilingual: true` and processes `[lang:xx]`/`[voice:alt]` tags via `splitIntoSegments`, but `streaming: true` buffers all segments into one combined stream — voice switching is lost (same bug OmniVoice had before the fix).
+¹ Chatterbox-NG receives a single language/voice per request. The current pipeline buffers all segments of a response and sends them as one combined streaming request, so per-segment `[voice:alt]` or `[lang:xx]` switching is not effective yet.
 
 ² These providers use the legacy path (`speak()` instead of the pipeline), with no segment-based chunk processing. They would need to be migrated to `fetchAudioBuffer` with pipeline support.
 
@@ -356,11 +353,11 @@ AllTalk is configured under **Settings > TTS** and connects to your existing All
 
 AllTalk determines the spoken language from the selected voice, so no separate language field is required in Utsuwa.
 
-#### Chatterbox TTS
+#### Chatterbox-NG TTS
 
-Chatterbox is configured under **Settings > TTS** and connects to your existing Chatterbox instance (no second service started by Utsuwa).
+Chatterbox-NG is configured under **Settings > TTS** and connects to your existing Chatterbox-NG instance (no second service started by Utsuwa).
 
-- Set the **API base URL** to your local Chatterbox server, for example `http://localhost:8300/`
+- Set the **API base URL** to your local Chatterbox-NG server, for example `http://localhost:8300/`
 - Pick a **voice** from the dropdown (loaded from the server's predefined voices)
 - Optionally tune:
   - **Language** (default language hint)
@@ -368,15 +365,15 @@ Chatterbox is configured under **Settings > TTS** and connects to your existing 
   - **CFG Weight**
   - **Temperature**
 
-Utsuwa supports inline control tags for Chatterbox:
+Utsuwa supports inline control tags for Chatterbox-NG:
 
 - Language tags: `[lang:de]`, `[lang:es]`, `[lang:en]`, ...
 - Emotion/sound tags: `[laugh]`, `[giggle]`, `[chuckle]`, `[sigh]`, `[excited]`, `[sad]`, `[calm]`, `[whisper]`, `[dramatic]`, `[slow]`, `[fast]`
 - Body action tags: `[action:wave]`, `[action:nod]`, `[action:shake]`, `[action:jump]`, `[action:bow]`, `[action:think]`, `[action:clap]`, `[action:dance]`
 
 Processing rules:
-- Chatterbox mode keeps full language blocks together (only `[lang:xx]` splits), for more natural prosody.
-- Other TTS providers keep sentence-by-sentence segmentation.
+- Chatterbox-NG buffers the whole response into one streaming request for gapless playback. Per-segment `[lang:xx]` / `[voice:alt]` switching is not currently effective; emotion and action tags still work.
+- Other TTS providers process the response sentence-by-sentence, so each segment can use its own language, voice, emotion, and speed.
 - If the user asks to continue a previous answer ("weiter", "continue", "go on"), Utsuwa injects continuation guidance so the reply resumes without repeating itself.
 - Tags are interpreted for TTS/avatar control but stripped from visible chat output.
 - Action tags require matching VRMA files in `/animations/` to play.
@@ -399,7 +396,7 @@ This provider is useful for self-hosted, offline TTS without provider-specific c
 | **Local** | Whisper (local HTTP server) |
 | **Browser** | Web Speech API (no API key required) |
 
-Voice input is accessed via the microphone button in the chat bar. Groq STT uses Whisper for accurate transcription on any platform (including desktop). **Local Whisper** connects to a self-hosted whisper.cpp or faster-whisper server (tested with `deepdml/faster-whisper-large-v3-turbo-ct2` via [speaches](https://github.com/speaches-ai/speaches)) — configure the base URL under **Settings > STT Providers**. Web Speech API works without an API key in Chrome, Edge, and Safari. If a Groq API key is configured, it takes priority automatically.
+Voice input is accessed via the microphone button in the chat bar. Groq STT uses Whisper for accurate transcription on any platform (including desktop). **Local Whisper** connects to a self-hosted whisper.cpp or faster-whisper server (tested with `Systran/faster-distil-whisper-large-v3` via [speaches](https://github.com/speaches-ai/speaches)) — configure the base URL under **Settings > STT Providers**. Web Speech API works without an API key in Chrome, Edge, and Safari. If a Groq API key is configured, it takes priority automatically.
 
 Local Whisper responses are filtered on `verbose_json` quality metrics (`no_speech_prob` and segment `avg_logprob`) to suppress silence, background noise, and low-confidence hallucinations (e.g. random non-speech tokens) without affecting normal bilingual speech.
 
@@ -433,10 +430,17 @@ Choose a background for your 3D companion scene under **Settings > Display > Bac
 
 The companion avatar supports a layered animation system powered by VRMA (VRM Animation) files:
 
-- **18 built-in motion clips**: 7 from the VRoid Motion Pack (Show Full Body, Greeting, Peace Sign, Shoot, Spin, Model Pose, Squat) plus 11 emotion/pose clips (Angry, Blush, Clapping, Goodbye, Jump, Look Around, Relax, Sad, Sleepy, Surprised, Thinking)
+- **7 built-in motion clips** from the VRoid Motion Pack:
+  - `VRMA_01` — Show Full Body: step back and present the full avatar body
+  - `VRMA_02` — Greeting: greet with a polite bowing motion
+  - `VRMA_03` — Peace Sign: make a peace sign with the fingers
+  - `VRMA_04` — Shoot: point finger forward like shooting
+  - `VRMA_05` — Spin: spin around once
+  - `VRMA_06` — Model Pose: strike a confident model pose
+  - `VRMA_07` — Squat: squat down briefly
 - **Idle animations**: 5 clips cycle randomly with smooth crossfades when the avatar is not speaking
 - **Talking animation**: Loaded automatically when TTS is active
-- **Emote actions**: Triggered via the Developer Tools dropdown or LLM action tags (`[action:wave]`, `[action:jump]`, `[action:clap]`, `[action:think]`, etc.)
+- **Emote actions**: Triggered via the Developer Tools dropdown, LLM action tags that match an animation ID (e.g. `[action:jump]` if you uploaded `jump.vrma`), or emotion-to-action mappings in **Settings > TTS Emotions**
 - **Custom VRMA upload**: Upload your own `.vrma` files under **Settings > Developer Tools**. After upload you are redirected to **Settings > Animations** where you can manage all animations in a table.
 - **Animation Management**: Under **Settings > Animations** every built-in and custom animation is listed in an editable table with:
   - **Active toggle** — enable/disable per animation for LLM visibility
@@ -453,9 +457,8 @@ Save and switch between multiple system prompt configurations under **Settings >
 
 - A tab-bar above the system prompt textarea lists all saved presets
 - **Rename** a preset by double-clicking its tab; **add** with `+`; **delete** with the trash icon
-- Two built-in presets ship with Utsuwa:
-  - *Standard* — blank template, seeded from your current system prompt on first load
-  - *Spanischlehrer* — example dual-voice Spanish teacher preset demonstrating `[lang:es]` / `[lang:default]` tag usage with OmniVoice alt voice switching
+- One built-in preset ships with Utsuwa:
+  - *Standard* — default English companion prompt
 - Presets are available during the **onboarding** CharacterStep as one-click chips
 - All presets are persisted in localStorage and included in save/export files automatically
 
@@ -480,13 +483,16 @@ Under **Settings > Display > Chat Display**, control how the companion's respons
 | **Bubble** | Floating speech bubble next to the companion's head |
 | **Sidebar** | Collapsible chat history panel |
 | **Both** | Bubble and sidebar simultaneously |
-| **Aus** | Text completely hidden; only the typing indicator and voice remain active |
+| **Off** | Text completely hidden; only the typing indicator and voice remain active |
 
 **Typing Indicator Delay** — set how many seconds pass before the animated dots appear after a message is sent (0.0–10.0 s, step 0.1 s). Useful to avoid a distracting flash for short responses.
 
 **Wait tone** — optional soft audio ping (two-tone descending, 400/300 Hz) that plays while the LLM is thinking, starting after the same delay as the typing dots.
 
 ### MCP Tool Integration
+
+> [!IMPORTANT]
+> MCP must be enabled server-side with `UTSUWA_MCP_ENABLED=true`. When disabled, MCP endpoints return HTTP 403 and the client hides the MCP Tools UI. There is currently no per-user authorization or sandboxing for MCP servers — configure them only if you trust them.
 
 Connect [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers to give your companion access to external tools such as file access, web search, code execution, database queries, and more.
 
@@ -501,7 +507,7 @@ Once a server is enabled, its tools are listed immediately. During chat, if any 
 
 1. The LLM receives the tool list in OpenAI function-calling format
 2. If it decides to use a tool, the call is executed server-side
-3. The result is fed back to the LLM — up to 5 rounds
+3. The tool result is fed back to the LLM. The LLM may then call another tool or call the same tool again — this loop continues for up to 5 rounds total
 4. The final answer (and a collapsible summary of tool calls) is streamed back to you
 
 All MCP communication happens server-side through the SvelteKit proxy — no CORS issues, no browser restrictions.
@@ -537,11 +543,12 @@ If you prefer to run Utsuwa locally or host your own instance:
 
 #### Prerequisites
 
-- Node.js 22+
+- Node.js 22+ (for native installation)
 - pnpm (recommended) or npm
 - A modern browser (Chrome, Firefox, Safari, Edge) for the web version
+- Docker and Docker Compose (assumed installed; recommended as the easiest way to run Utsuwa) if you want to use the container setup
 
-#### Installation
+#### Native Installation
 
 ```bash
 # Clone the repository
@@ -555,7 +562,23 @@ pnpm install
 pnpm dev
 ```
 
-The app will be available at `http://localhost:5173`
+The app will be available at `http://localhost:5173`.
+
+#### Docker Installation
+
+The files in the `docker/` directory run only the Utsuwa app — Ollama, TTS, STT, and other AI services are expected to run elsewhere (for example in a parent stack). Utsuwa connects to them via URLs you configure in the app.
+
+```bash
+git clone https://github.com/The-Lab-by-Ordinary-Company/utsuwa.git
+cd utsuwa/docker
+cp docker-compose.example.yaml docker-compose.yaml
+# edit docker-compose.yaml if you want to change defaults
+docker compose up
+```
+
+The dev container mounts the repository root and runs `pnpm dev`. It uses `network_mode: host` so the app can reach local services on `localhost`. The app is available at `http://localhost:5173`.
+
+For local-only tweaks, use `docker/docker-compose.override.yaml`. Docker Compose merges it automatically when it exists.
 
 #### Running the Desktop App (Beta)
 
@@ -569,28 +592,17 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 pnpm tauri dev
 ```
 
-#### Docker
+#### Docker Configuration
 
-You can also run Utsuwa with Docker. The files in the `docker/` directory are focused on the Utsuwa app only — they do **not** start Ollama, TTS, STT, or other AI services. Those are expected to run elsewhere (for example in the parent stack) and Utsuwa connects to them via URLs you configure in the app.
+For the quick-start commands, see **Docker Installation** above.
 
-Files in this directory:
+Files in the `docker/` directory:
 
 | File | Purpose |
 | --- | --- |
 | `Dockerfile.prod` | Multi-stage production build. |
 | `docker-compose.example.yaml` | Shared template. Copy this to `docker-compose.yaml` and adjust it for your setup. |
-| `docker-compose.override.yml` | Optional local-only tweaks. Created automatically by Docker Compose and ignored by git. |
-
-Quick start:
-
-```bash
-cd docker
-cp docker-compose.example.yaml docker-compose.yaml
-# edit docker-compose.yaml if you want to change defaults
-docker compose up
-```
-
-The development container mounts the repository root and runs `pnpm dev`. It uses `network_mode: host` so the app server can reach local LLM/TTS/STT services on `localhost` without extra port mappings. The app is then available at `http://localhost:5173`.
+| `docker-compose.override.yaml` | Optional local-only tweaks. Created automatically by Docker Compose and ignored by git. |
 
 ##### Docker environment variables
 
@@ -606,7 +618,7 @@ These variables can be set per service in `docker-compose.yaml`:
 | `PORT` | `3001` (prod) | Port the production container listens on. |
 | `CHOKIDAR_USEPOLLING` | `true` (dev) | Enables polling file watching inside the dev container. Keep enabled when the source directory is mounted from a host filesystem. |
 
-If you need local-only changes (for example enabling MCP or pointing `UTSUWA_DATA_DIR` to a host path), put them in `docker/docker-compose.override.yml` instead of editing the tracked example file. Docker Compose merges the override automatically when it exists.
+If you need local-only changes (for example enabling MCP or pointing `UTSUWA_DATA_DIR` to a host path), put them in `docker/docker-compose.override.yaml` instead of editing the tracked example file. Docker Compose merges the override automatically when it exists.
 
 #### Configuration
 
@@ -615,11 +627,11 @@ If you need local-only changes (for example enabling MCP or pointing `UTSUWA_DAT
    - Enable Chat (LLM)
    - Select **OpenAI**, **Anthropic**, or **OpenRouter** and enter your API key, then pick a model
    - Or select **Custom Endpoint** for any OpenAI-compatible service (Ollama, LM Studio, llama.cpp, LiteLLM, vLLM, Google Gemini, DeepSeek, xAI, etc.) — choose a template or enter a base URL, provide an optional API key, and pick or type a model
-3. Configure text-to-speech in the same settings area (optional):
-   - Select a TTS provider
-   - For AllTalk, enter the local API base URL, then choose the voice and optional RVC voice
-   - Enter your API key or optional auth token if your setup needs one
-   - Configure voice settings
+3. Configure text-to-speech under **Settings > TTS** (optional):
+   - Select a TTS provider (cloud or local)
+   - Enter the API key for cloud providers, or the local base URL for self-hosted ones
+   - Pick a voice (or model) — some providers also support an optional RVC voice
+   - Fine-tune speed, pitch, volume, and language settings in **Settings > TTS Emotions** if you want per-emotion voice behavior
 
 All API keys are stored locally on your device and are never sent to any server except the respective API providers.
 
@@ -645,12 +657,14 @@ Under **Settings > LLM Model** you can tune the active chat model:
 | **Presence Penalty** | Penalizes tokens that have already appeared in the text, regardless of frequency. Positive values reduce repetition of topics/phrases. |
 | **Frequency Penalty** | Penalizes tokens based on how often they have already appeared. Higher values reduce repetition more strongly. |
 
+> 💡 **Tip:** If the companion produces unwanted or erratic spoken output, switching to a more capable model often helps. Reducing **Temperature** (e.g. to 0.3–0.5) can also make responses more focused and consistent, which reduces unexpected speech artifacts.
+
 ##### Unfiltered Mode (NSFW)
 
 The **Unfiltered Mode (NSFW)** toggle injects a special preamble into the system prompt that instructs the model to generate immersive, uncensored prose without moralizing, apologizing, or fading to black.
 
 - **Function:** It removes content-filtering guardrails *on the prompt level*. The model is told to stay in character and describe explicit or dark narrative elements if the scene calls for it.
-- **Scope:** It only affects **Dating Sim mode**. In **Companion mode** the toggle has no effect.
+- **Scope:** It affects **both Dating Sim mode and Companion mode**. The same NSFW preamble is injected into the system prompt regardless of the active mode.
 - **Risks:**
   - The toggle only changes the prompt; it cannot bypass hard filters built into the model or provider. Cloud providers (OpenAI, Anthropic, etc.) may still refuse or truncate explicit output despite the preamble.
   - It is intended for **local or explicitly uncensored models** where no external content policy is enforced.
@@ -667,19 +681,19 @@ Enter the **bare host URL** without `/v1`, for example:
 - `http://localhost:11434`
 - `http://127.0.0.1:11434`
 
-Utsuwa uses that URL to fetch the available model list and automatically adds the OpenAI-compatible `/v1` path for chat requests. If you include `/v1` in the Ollama base URL, model discovery will fail.
+Utsuwa fetches the model list via `/api/tags` on that URL and automatically appends `/v1` for chat requests. If you include `/v1` in the Ollama base URL, model discovery will fail.
 
 The **API key (optional)** field is only needed if you run Ollama behind a proxy or custom auth layer. Leave it empty for a normal local Ollama install.
 
-**llama.cpp / LM Studio / other OpenAI-compatible servers**
+**llama.cpp / LM Studio / LiteLLM / other OpenAI-compatible servers**
 
-Enter the **OpenAI-compatible base URL** for your server, for example:
+Enter the **OpenAI-compatible base URL including `/v1`**:
 
 - `http://localhost:8080/v1` (llama.cpp)
 - `http://localhost:1234/v1` (LM Studio)
-- `http://localhost:4000` (LiteLLM proxy)
+- `http://localhost:4000/v1` (LiteLLM proxy)
 
-Utsuwa uses that URL directly for model discovery and chat requests. If the server is exposed behind a proxy or auth layer, fill in the **API key (optional)** field; otherwise, leave it empty.
+Utsuwa uses that URL directly for model discovery (`/v1/models`) and chat requests (`/v1/chat/completions`). If the server is exposed behind a proxy or auth layer, fill in the **API key (optional)** field; otherwise, leave it empty.
 
 **Context size**
 
@@ -700,7 +714,7 @@ The **context size** slider (1,000–128,000 tokens) controls two things:
 - The remaining budget is filled from the **most recent** conversation turns backwards.
 - Older turns that don't fit are dropped silently.
 
-This prevents silent API errors when long soul prompts or many active features (voice tags, image search, MCP tools) push the prompt beyond the model's context limit.
+This prevents silent API errors when long soul prompts or many active features (voice tags, MCP tools) push the prompt beyond the model's context limit.
 
 #### Loading a VRM Model
 
@@ -773,7 +787,7 @@ utsuwa/
 │   │   ├── data/           # Event definitions and static data
 │   │   ├── db/             # IndexedDB database (Dexie)
 │   │   ├── engine/         # Companion engine (state, memory, events)
-│   │   ├── services/       # LLM, TTS, STT, storage services
+│   │   ├── services/       # LLM, TTS, STT, MCP, storage, VRM services
 │   │   ├── stores/         # Svelte 5 stores (state management)
 │   │   ├── styles/         # Shared CSS (prose, etc.)
 │   │   ├── types/          # TypeScript types
@@ -786,10 +800,19 @@ utsuwa/
 │       ├── api/            # API routes
 │       ├── blog/           # Blog routes
 │       ├── docs/           # Documentation site routes
-│       └── overlay/        # Desktop overlay route
-├── docker/                 # Setup as Docker Container
-├── src-tauri/               # Tauri desktop app (Rust)
+│       ├── download/       # Download route
+│       ├── overlay/        # Desktop overlay route
+│       └── sitemap.xml/    # Sitemap route
+├── docker/                 # Docker setup files
+├── src-tauri/              # Tauri desktop app (Rust)
 ├── static/
+│   ├── animations/         # VRMA animation files
+│   ├── audio/              # Default audio assets
+│   ├── blog/               # Blog images and assets
+│   ├── brand-assets/       # Brand logos and graphics
+│   ├── docs/               # Documentation images and assets
+│   ├── landing-page/       # Landing page images and assets
+│   ├── marketing/          # Marketing images and assets
 │   └── models/             # Place default VRM models here
 └── package.json
 ```
@@ -814,12 +837,12 @@ pnpm tauri build  # Build desktop app installer
 - [x] VRM model loading and display with orbit controls
 - [x] 3D speech bubbles tracking model head position
 - [x] Multi-provider LLM support (OpenAI, Anthropic, OpenRouter, and any OpenAI-compatible Custom Endpoint)
-- [x] Multi-provider TTS support (5 providers: ElevenLabs, OpenAI TTS, AllTalk, Chatterbox, OmniVoice)
+- [x] Multi-provider TTS support (5 providers: ElevenLabs, OpenAI TTS, AllTalk, Chatterbox-NG, OmniVoice)
 - [x] Multi-provider STT support (3 providers: Groq Whisper, local Whisper/speaches server, Web Speech API)
 - [x] Audio-driven lip-sync
 - [x] Sentence-by-sentence TTS streaming (responses spoken as they arrive, not after full generation)
 - [x] VRMA-based animations (idle, talking, blinking)
-- [x] 18 built-in VRMA motion clips (VRoid Motion Pack + emotion/pose clips)
+- [x] 7 built-in VRMA motion clips from the VRoid Motion Pack (custom animations can be uploaded)
 - [x] Custom VRMA upload with custom naming and IndexedDB persistence
 - [x] Animation mixer memory leak fixes and automatic action disposal
 - [x] VRMA preprocessor plugin (scene injection + weights channel filtering for external files)
@@ -860,15 +883,14 @@ pnpm tauri build  # Build desktop app installer
 - [x] **Debug Logging** — Settings > Developer toggles for Prompt / Memory / Session / Fact logging; output goes to the browser console (F12)
 - [x] **Animation Management** — Settings > Animations table with per-animation Active toggle, inline-editable LLM description, type badge, and custom upload delete
 - [x] **Emotion-to-Action Mapping** — Automatic body animation triggers from emotion tags (e.g. `[laugh]` → shoulder shake) with probability and cooldown controls
-- [x] **Voice-Tag Layer Sync** — Body action lists in Chatterbox/OmniVoice prompt layers are dynamically generated from available animations, never suggesting missing files
+- [x] **Voice-Tag Layer Sync** — Body action lists in Chatterbox-NG/OmniVoice prompt layers are dynamically generated from available animations, never suggesting missing files
 - [x] **VOX Mode AudioContext Fix** — Duplex VAD now resumes AudioContext after creation, fixing transcription failure on fresh sessions
-- [x] **TypeScript Zero Errors** — All 13 pre-existing type errors resolved; build now reports 0 errors
-- [x] **Svelte Check Zero Warnings** — All 30 pre-existing CSS vendor-prefix, accessibility, and unused-selector warnings resolved; build now reports 0 errors and 0 warnings
-
-### In Progress / Planned
-
+- [x] **TypeScript Zero Errors** — Pre-existing type errors resolved; build reports 0 errors
+- [x] **Svelte Check Cleanup** — Pre-existing CSS vendor-prefix, accessibility, and unused-selector warnings reduced; build reports 0 errors (some warnings remain from newer code)
 - [x] **LLM-based Session Summaries** — Replace heuristic summaries with real LLM-generated session summaries (2–4 sentences, key topics, emotional arc) for higher-quality episodic recall
 - [x] **Fact Library UI** — Settings page to browse, filter, edit, and delete Fact Library entries (concepts, exam facts) with confidence-based sorting
+
+### In Progress / Planned
 
 - [ ] **File, Image, and Video Uploads** - Add support for attaching files, images, and videos for multimodal LLM workflows and providers that can use richer context or web-aware tools
 - [ ] **Live2D Support** - Alternative to VRM for 2D animated avatars
@@ -917,57 +939,19 @@ Utsuwa is built on the shoulders of these excellent projects:
 
 ## Recent Updates
 
-### Consolidated LLM Provider Architecture
-The LLM provider model has been simplified and made more flexible:
+### v0.6.0 — July 2, 2026
 
-- **Four core providers** — OpenAI, Anthropic, OpenRouter, and **Custom Endpoint**.
-- **Template selector for Custom Endpoint** — one-click setup for Ollama, LM Studio, llama.cpp, LiteLLM, Google Gemini, DeepSeek, xAI, and fully custom OpenAI-compatible URLs.
-- **Dynamic model loading** — OpenRouter and Custom Endpoint fetch their model lists live and cache them; a refresh button reloads the list on demand.
-- **Context-size slider** — choose 1,000–128,000 tokens to match your model's context window.
-- **Automatic migration** — existing settings from legacy providers (Google, DeepSeek, xAI, Ollama, LM Studio, llama.cpp, OpenAI Compatible) are migrated to Custom Endpoint with the appropriate template and preserved base URL / API key.
-- **Unified code path** — Anthropic keeps its native `/messages` flow; every other provider uses a single OpenAI-compatible `/chat/completions` path, reducing duplication and simplifying maintenance.
+The latest release focuses on tighter self-hosted integration, richer avatar behavior, and safer server-side tooling:
 
-### Animation Management UI
-A new **Settings > Animations** page lists every built-in and custom VRMA animation in an editable table. You can toggle animations on/off for LLM visibility, add inline descriptions that the LLM receives in its prompt, and delete custom uploads. After uploading a `.vrma` file in Developer Tools you are automatically redirected here. The LLM only sees enabled animations — no more suggestions for missing files.
+- **Custom Endpoint provider** — One unified provider for Ollama, LM Studio, llama.cpp, LiteLLM, and any OpenAI-compatible API. Includes one-click templates, live model fetching, and automatic migration of legacy provider settings.
+- **Animation Management** — A new **Settings > Animations** page lists all built-in and custom VRMA clips, lets you toggle LLM visibility, edit descriptions, and preview animations on the loaded avatar in real time.
+- **Emotion-to-Action Mapping** — Emotion tags like `[laugh]` or `[excited]` now automatically trigger matching body animations with probability and cooldown controls.
+- **Personality Evolution** — After every N sessions the LLM suggests communication adaptations; you confirm each one before it is written into the system prompt (capped at 5 active entries).
+- **MCP Tools with admin toggle** — MCP server integration supports HTTP/SSE and stdio transports, executed server-side and gated by the `UTSUWA_MCP_ENABLED` environment variable.
 
-The page now includes a live **VRM viewport** next to the table. Click the ▶ play button on any row to preview the animation on the currently loaded avatar in real time — perfect for writing accurate descriptions and deciding which animations to enable.
+Also included: LLM-based session summaries, Fact Library UI, TTS JSON-state filtering, localized dating-sim events, temporary VRM preview in Developer Tools, and a VOX-mode AudioContext fix.
 
-### Emotion-to-Action Mapping
-Emotion tags like `[laugh]`, `[excited]`, or `[sad]` now automatically trigger matching body animations (e.g. laugh → shoulder shake, excited → jump, sad → sad pose). Each mapping uses probability and cooldown controls so the companion feels natural, not mechanical. Works in both TTS and text-only mode. Explicit `[action:xxx]` tags still take precedence.
-
-### LLM-Based Session Summaries
-Session compaction now uses the configured LLM provider to generate rich, contextual summaries including key topics and emotional arcs — replacing the previous heuristic approach. Falls back gracefully if the LLM is unavailable.
-
-### Fact Library UI
-A dedicated modal (accessible via the book icon in the top-left corner) allows browsing, searching, filtering, editing, and reviewing Fact Library entries. Entries can be sorted by confidence, date, or review count.
-
-### Personality Evolution — Full Feature Release
-Utsuwa now includes a complete personality evolution system that lets your companion grow through real conversation experience:
-
-- **LLM-powered analysis** — After every N sessions (configurable), the configured LLM analyzes session summaries and suggests concrete, reasoned communication adaptations.
-- **User confirmation** — A localized modal ("[Name] has evolved") shows each suggestion with its justification. You pick which ones to apply.
-- **Language support** — Adaptations are generated in the user's configured TTS language (e.g., German, French, Spanish) so the UI and the learned traits stay consistent.
-- **Configurable threshold** — Adjust how often evolution triggers under **Settings > Character > Personality > Evolution Threshold** (default: 10, useful range: 2–100).
-- **Persistent impact** — Accepted adaptations are written into the system prompt as *Learned communication patterns* and influence every future response. They are capped at 5 active entries.
-- **Works in both modes** — Active in Companion Mode and Dating Sim Mode alike.
-
-### TTS JSON-State Filter
-LLM state-update blocks (e.g. `{"mood_change": {"emotion": "happy"}, "trust_delta": 1}`) are now detected even when they span multiple streaming chunks and are never passed to text-to-speech. The streaming speech buffer tracks open/closed curly-brace depth and strips the entire JSON block before it reaches TTS, so you no longer hear raw JSON in the spoken response.
-
-### Dating-Sim Event Localization
-Dating-sim event popups are now fully localized:
-- **UI labels** (`Continue`, `Finish`, `You said:`, `Click anywhere to continue`) adapt to the configured TTS language.
-- **Event content** (intros, dialogue, choices, and responses) supports per-language objects. Romantic and time-based events ship with English and German texts; the structure is open for additional languages.
-- Language is derived automatically from the active TTS provider configuration.
-
-### Temporary VRM Preview in Developer Tools
-**Settings > Developer Tools** now lets you upload a `.vrm` file for temporary preview. The model loads into the viewport immediately — you can test expressions, animations, and look-at behavior. The uploaded model is **never persisted**; clicking **Restore Original** or leaving the page automatically switches back to the previously active avatar.
-
-### VOX Mode Fix
-The duplex VAD service now correctly resumes the AudioContext after creation. Previously, VOX mode appeared active but never transcribed on a fresh browser session because the AudioContext started in `suspended` state. A one-line `audioContext.resume()` fix resolves this.
-
-### TypeScript & Svelte: Zero Errors, Zero Warnings
-All 13 pre-existing TypeScript errors and 30 CSS/accessibility warnings have been fixed. The build now reports **0 errors and 0 warnings**.
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 ## License
 

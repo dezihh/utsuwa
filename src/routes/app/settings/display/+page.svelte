@@ -257,7 +257,7 @@
 						onclick={() => displayStore.setChatDisplayMode('off')}
 					>
 						<Icon name="eye-slash" size={16} />
-						<span>Aus</span>
+						<span>Off</span>
 					</button>
 				</div>
 			</div>
