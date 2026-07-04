@@ -13,6 +13,7 @@
 	let formArgs = $state('');
 	let formEnv = $state('');
 	let formError = $state('');
+	let formInjectResultsAsUser = $state(false);
 
 	const isEditing = $derived(editingId !== null);
 
@@ -22,6 +23,7 @@
 		formCommand = '';
 		formArgs = '';
 		formEnv = '';
+		formInjectResultsAsUser = false;
 		formError = '';
 		editingId = null;
 		showForm = false;
@@ -35,6 +37,8 @@
 		formCommand = '';
 		formArgs = '';
 		formEnv = '';
+		formInjectResultsAsUser = false;
+		formInjectResultsAsUser = false;
 		formError = '';
 		showForm = true;
 	}
@@ -49,6 +53,7 @@
 		formEnv = server.env
 			? Object.entries(server.env).map(([k, v]) => `${k}=${v}`).join('\n')
 			: '';
+		formInjectResultsAsUser = server.injectResultsAsUser ?? false;
 		formError = '';
 		showForm = true;
 	}
@@ -81,6 +86,7 @@
 			command: formTransport === 'stdio' ? formCommand.trim() : undefined,
 			args: formTransport === 'stdio' ? args : undefined,
 			env: formTransport === 'stdio' ? env : undefined,
+			injectResultsAsUser: formInjectResultsAsUser
 		};
 
 		if (isEditing) {
@@ -174,6 +180,13 @@
 					{#if formError}
 						<p class="form-error">{formError}</p>
 					{/if}
+					<div class="form-row form-row-inline">
+						<label class="form-label">
+							<input type="checkbox" bind:checked={formInjectResultsAsUser} />
+							<span>Inject text tool results as user messages</span>
+						</label>
+						<span class="form-hint">Helps with local/SLIM models that ignore strict tool-role messages.</span>
+					</div>
 
 					<div class="form-actions">
 						{#if isEditing}

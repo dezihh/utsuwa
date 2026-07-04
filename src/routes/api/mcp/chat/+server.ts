@@ -278,7 +278,12 @@ Already written (do not repeat):
 				} catch {}
 
 				const result = await callTool(server, tc.function.name, args);
-				return { tool_call_id: tc.id, name: tc.function.name, content: result.content };
+				return {
+					tool_call_id: tc.id,
+					name: tc.function.name,
+					content: result.content,
+					injectAsUser: server.injectResultsAsUser ?? false
+				};
 			})
 		);
 
@@ -308,13 +313,19 @@ Already written (do not repeat):
 						}
 					]
 				});
-			} else {
-				// Present non-image tool results as a user-side note.
-				// Some local/SLIM models handle this better than the strict
-				// OpenAI "tool" role and are less likely to ignore the result.
+			} else if (r.injectAsUser) {
+				// Opt-in compatibility mode: present the tool result as a user-side
+				// note. Some local/SLIM models ignore strict OpenAI tool-role
+				// messages and respond better to this format.
 				llmMessages.push({
 					role: 'user',
 					content: `[Tool result from ${r.name}]\n${r.content}`
+				});
+			} else {
+				llmMessages.push({
+					role: 'tool',
+					tool_call_id: r.tool_call_id,
+					content: r.content
 				});
 			}
 		}

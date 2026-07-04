@@ -14,6 +14,10 @@ export interface McpServerConfig {
 	args?: string[];
 	/** Optional env vars for stdio transport */
 	env?: Record<string, string>;
+	/** If true, text tool results are injected as a user message instead of the
+	 *  strict OpenAI "tool" role. Helps with local/SLIM models that ignore tool
+	 *  role messages. */
+	injectResultsAsUser?: boolean;
 	enabled: boolean;
 }
 
