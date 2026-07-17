@@ -63,9 +63,9 @@ function buildStreamingWavHeader(sampleRate: number, numChannels: number, bytesP
 
 function voiceToServerPath(voice: string): string {
 	if (voice.startsWith('ref:')) {
-		return `/app/reference_audio/${voice.slice(4)}.wav`;
+		return `reference_audio/${voice.slice(4)}.wav`;
 	}
-	return `/app/voices/${voice}.wav`;
+	return `voices/${voice}.wav`;
 }
 
 /**
