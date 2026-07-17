@@ -99,3 +99,29 @@
 	60% { transform: translateX(-3px); }
 	80% { transform: translateX(2px); }
 }
+
+.setting-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.5rem 0.75rem;
+	background: var(--bg-secondary);
+	border-radius: var(--radius-lg);
+	font-size: 0.8rem;
+	color: var(--text-primary);
+}
+
+.setting-row input[type="checkbox"] {
+	width: 16px;
+	height: 16px;
+	accent-color: var(--accent);
+	cursor: pointer;
+}
+
+.setting-label {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	cursor: pointer;
+	flex: 1;
+}

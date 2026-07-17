@@ -193,6 +193,20 @@ export const TTS_PROVIDERS: ProviderMetadata[] = [
 			{ id: 'bm_george', name: 'George (UK, male)' }
 		]
 	},
+	// Chatterbox-NG — local streaming multilingual TTS with voice cloning.
+	{
+		id: 'chatterbox-ng',
+		name: 'Chatterbox-NG',
+		description: 'Local streaming multilingual TTS (Oasi Systems fork)',
+		category: 'tts',
+		icon: '📢',
+		requiresApiKey: false,
+		isLocal: true,
+		defaultBaseUrl: 'http://localhost:8765/',
+		voices: [
+			{ id: 'default', name: 'Default voice' }
+		]
+	},
 ];
 
 // ============================================

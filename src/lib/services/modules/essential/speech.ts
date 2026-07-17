@@ -40,6 +40,34 @@ export const speechModule: ModuleDefinition = {
 				label: 'Speed',
 				description: 'Speech rate (0.5-2.0)',
 				defaultValue: 1.0
+			},
+			{
+				key: 'language',
+				type: 'text',
+				label: 'Primary language',
+				description: 'Default language for multilingual TTS (ISO 639-1 code, e.g. en, de, es)',
+				defaultValue: 'en'
+			},
+			{
+				key: 'enableAltLanguage',
+				type: 'boolean',
+				label: 'Enable alternative language',
+				description: 'Switch to a second voice when the model wraps text in <lang=xx> tags',
+				defaultValue: false
+			},
+			{
+				key: 'altLanguage',
+				type: 'text',
+				label: 'Alternative language',
+				description: 'ISO 639-1 code that triggers the alternative voice',
+				dependsOnField: 'enableAltLanguage'
+			},
+			{
+				key: 'altVoiceId',
+				type: 'text',
+				label: 'Alternative voice',
+				description: 'Voice to use for the alternative language',
+				dependsOnField: 'enableAltLanguage'
 			}
 		]
 	},

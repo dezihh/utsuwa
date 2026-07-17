@@ -125,16 +125,84 @@ function stripStateUpdateBlocks(text: string, removed: string[]): string {
 }
 
 /**
- * Split text into speech segments. For Phase 1 this is a simple wrapper around
- * sentence splitting; language/emotion tags are added in later phases.
+ * Normalize XML-style and bracket-style language tags to an internal
+ * `[lang:xx]` / `[lang:default]` representation so downstream tokenization only
+ * has to handle one syntax.
+ */
+export function normalizeLangTags(text: string): string {
+	return (
+		text
+			// XML-style with attribute: <lang code="es"> or <lang code='es'>
+			.replace(/<lang\s+code\s*=\s*["']?\s*(default|[a-z]{2,3})\s*["']?\s*>/gi, '[lang:$1]')
+			// XML-style with equals: <lang=es>
+			.replace(/<lang\s*=\s*(default|[a-z]{2,3})\s*>/gi, '[lang:$1]')
+			// XML-style plain: <lang es>
+			.replace(/<lang\s+(default|[a-z]{2,3})\s*>/gi, '[lang:$1]')
+			// XML closing tag
+			.replace(/<\/lang>/gi, '[lang:default]')
+			// Legacy closing tags
+			.replace(/\[\/lang\]/gi, '[lang:default]')
+			.replace(/\[\/lang:[a-z]{2,3}\]/gi, '[lang:default]')
+			// Bracket variants with spaces
+			.replace(/\[lang\s*=\s*(default|[a-z]{2,3})\s*\]/gi, '[lang:$1]')
+			.replace(/\[lang:\s*(default|[a-z]{2,3})\s*\]/gi, '[lang:$1]')
+	);
+}
+
+/**
+ * Strip language control tags from text. Used when the tags themselves should
+ * not be visible (e.g. chat display) while preserving the surrounding content.
+ */
+export function stripLangTags(text: string): string {
+	return normalizeLangTags(text)
+		.replace(/\[lang:(?:default|[a-z]{2,3})\]/gi, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+/**
+ * Split text into speech segments. Parses `<lang=xx>...</lang>` (and legacy
+ * bracket variants) so each segment carries the correct language for voice
+ * switching.
  */
 export function splitIntoSegments(
 	text: string,
 	defaultLanguage?: string
 ): SpeechSegment[] {
 	if (!text.trim()) return [];
-	return splitIntoSentences(text).map((sentence) => ({
-		text: sentence,
-		language: defaultLanguage
-	}));
+
+	const normalized = normalizeLangTags(text);
+	const tagRegex = /\[lang:(default|[a-z]{2,3})\]/gi;
+
+	const tokens: Array<{ type: 'text' | 'lang'; value: string }> = [];
+	let lastIdx = 0;
+	let match: RegExpExecArray | null;
+
+	while ((match = tagRegex.exec(normalized)) !== null) {
+		if (match.index > lastIdx) {
+			tokens.push({ type: 'text', value: normalized.slice(lastIdx, match.index) });
+		}
+		tokens.push({ type: 'lang', value: match[1].toLowerCase() });
+		lastIdx = match.index + match[0].length;
+	}
+	if (lastIdx < normalized.length) {
+		tokens.push({ type: 'text', value: normalized.slice(lastIdx) });
+	}
+
+	let currentLang: string | undefined = defaultLanguage;
+	const segments: SpeechSegment[] = [];
+
+	for (const token of tokens) {
+		if (token.type === 'lang') {
+			currentLang = token.value === 'default' ? defaultLanguage : token.value;
+		} else {
+			for (const sentence of splitIntoSentences(token.value)) {
+				if (sentence.trim()) {
+					segments.push({ text: sentence, language: currentLang });
+				}
+			}
+		}
+	}
+
+	return segments;
 }

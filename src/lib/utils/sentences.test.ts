@@ -57,3 +57,54 @@ test('creates segments with default language', () => {
 test('returns empty array for empty text', () => {
 	assert.deepEqual(splitIntoSegments('', 'en'), []);
 });
+
+// --- splitIntoSegments language tags ---
+
+test('splits <lang=xx> tags into segments with correct language', () => {
+	const text = 'Hello. <lang=es>Hola mundo.</lang> Goodbye.';
+	const segments = splitIntoSegments(text, 'en');
+	assert.equal(segments.length, 3);
+	assert.equal(segments[0].text, 'Hello.');
+	assert.equal(segments[0].language, 'en');
+	assert.equal(segments[1].text, 'Hola mundo.');
+	assert.equal(segments[1].language, 'es');
+	assert.equal(segments[2].text, 'Goodbye.');
+	assert.equal(segments[2].language, 'en');
+});
+
+test('supports XML attribute syntax <lang code="xx">', () => {
+	const text = '<lang code="fr">Bonjour.</lang>';
+	const segments = splitIntoSegments(text, 'en');
+	assert.equal(segments.length, 1);
+	assert.equal(segments[0].text, 'Bonjour.');
+	assert.equal(segments[0].language, 'fr');
+});
+
+test('supports legacy bracket syntax [lang:xx]', () => {
+	const text = '[lang:it]Ciao.[/lang]';
+	const segments = splitIntoSegments(text, 'en');
+	assert.equal(segments.length, 1);
+	assert.equal(segments[0].text, 'Ciao.');
+	assert.equal(segments[0].language, 'it');
+});
+
+test('falls back to default language when no tag is present', () => {
+	const text = 'Just a normal sentence.';
+	const segments = splitIntoSegments(text, 'de');
+	assert.equal(segments.length, 1);
+	assert.equal(segments[0].language, 'de');
+});
+
+test('returns empty array when text only contains language tags', () => {
+	const text = '<lang=es></lang>';
+	const segments = splitIntoSegments(text, 'en');
+	assert.deepEqual(segments, []);
+});
+
+test('preserves language across multiple sentences inside a tag', () => {
+	const text = '<lang=es>Hola. ¿Cómo estás?</lang>';
+	const segments = splitIntoSegments(text, 'en');
+	assert.equal(segments.length, 2);
+	assert.equal(segments[0].language, 'es');
+	assert.equal(segments[1].language, 'es');
+});

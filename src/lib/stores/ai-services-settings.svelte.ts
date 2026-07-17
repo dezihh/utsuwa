@@ -242,6 +242,7 @@ export function createTtsSettingsState() {
 	let ttsIsLoading = $state(false);
 	let ttsFetchError = $state<string | null>(null);
 	let ttsDynamicModels = $state<ModelInfo[] | null>(null);
+	let ttsDynamicVoices = $state<ModelInfo[] | null>(null);
 
 	const staticTTSModels = $derived.by(() => {
 		const providerId = speechSettings.activeProvider as string;
@@ -252,12 +253,29 @@ export function createTtsSettingsState() {
 
 	const ttsModels = $derived(ttsDynamicModels ?? staticTTSModels);
 
+	const ttsVoices = $derived.by(() => {
+		const providerId = speechSettings.activeProvider as string;
+		if (providerId === 'chatterbox-ng') {
+			return ttsDynamicVoices ?? [];
+		}
+		const provider = getTTSProvider(providerId);
+		return provider?.voices ?? [];
+	});
+
 	const ttsHasApiKey = $derived.by(() => {
 		const providerId = speechSettings.activeProvider as string;
 		if (!providerId) return false;
 		const provider = getTTSProvider(providerId);
 		if (!provider) return false;
 		return isProviderReadyForFetch(provider, settingsStore.getProviderConfig(providerId));
+	});
+
+	const ttsBaseUrl = $derived.by(() => {
+		const providerId = speechSettings.activeProvider as string;
+		if (!providerId) return '';
+		const provider = getTTSProvider(providerId);
+		const config = settingsStore.getProviderConfig(providerId);
+		return config.baseUrl || provider?.defaultBaseUrl || '';
 	});
 
 	async function fetchTTSModels() {
@@ -304,11 +322,39 @@ export function createTtsSettingsState() {
 
 	const debouncedFetchTTSModels = debounce(fetchTTSModels, 300);
 
+	async function fetchTTSVoices() {
+		const providerId = speechSettings.activeProvider as string;
+		if (providerId !== 'chatterbox-ng') return;
+
+		const baseUrl = ttsBaseUrl;
+		if (!baseUrl) return;
+
+		ttsIsLoading = true;
+		ttsFetchError = null;
+		try {
+			const response = await fetch(`/api/tts/chatterbox/voices?baseUrl=${encodeURIComponent(baseUrl)}`);
+			if (!response.ok) {
+				const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+				throw new Error(body.error || `HTTP ${response.status}`);
+			}
+			const data = (await response.json()) as { voices: ModelInfo[] };
+			ttsDynamicVoices = data.voices ?? [];
+		} catch (e) {
+			ttsFetchError = e instanceof Error ? e.message : 'Could not fetch voices';
+			ttsDynamicVoices = [];
+		} finally {
+			ttsIsLoading = false;
+		}
+	}
+
+	const debouncedFetchTTSVoices = debounce(fetchTTSVoices, 300);
+
 	function handleTTSProviderChange(providerId: string) {
 		modulesStore.setModuleSetting('speech', 'activeProvider', providerId);
 		const provider = getTTSProvider(providerId);
 
 		ttsDynamicModels = null;
+		ttsDynamicVoices = null;
 		ttsFetchError = null;
 		ttsIsLoading = false;
 
@@ -326,6 +372,10 @@ export function createTtsSettingsState() {
 		if (provider?.isLocal || !provider?.requiresApiKey) {
 			settingsStore.markProviderAdded(providerId);
 		}
+
+		if (providerId === 'chatterbox-ng') {
+			debouncedFetchTTSVoices();
+		}
 	}
 
 	function handleTTSModelChange(modelId: string) {
@@ -334,6 +384,42 @@ export function createTtsSettingsState() {
 
 	function handleTTSVoiceChange(voiceId: string) {
 		modulesStore.setModuleSetting('speech', 'activeVoiceId', voiceId);
+	}
+
+	function handleTTSLanguageChange(language: string) {
+		modulesStore.setModuleSetting('speech', 'language', language.trim().toLowerCase());
+	}
+
+	function handleTTSEnableAltLanguageChange(enabled: boolean) {
+		modulesStore.setModuleSetting('speech', 'enableAltLanguage', enabled);
+		if (!enabled) {
+			modulesStore.setModuleSetting('speech', 'altLanguage', '');
+			modulesStore.setModuleSetting('speech', 'altVoiceId', '');
+		}
+	}
+
+	function handleTTSAltLanguageChange(language: string) {
+		modulesStore.setModuleSetting('speech', 'altLanguage', language.trim().toLowerCase());
+	}
+
+	function handleTTSAltVoiceChange(voiceId: string) {
+		modulesStore.setModuleSetting('speech', 'altVoiceId', voiceId);
+	}
+
+	function handleTTSBaseUrlChange(providerId: string, baseUrl: string) {
+		settingsStore.setProviderConfig(providerId, { baseUrl });
+		if (providerId === 'chatterbox-ng') {
+			debouncedFetchTTSVoices();
+		}
+	}
+
+	function handleTTSNumberParam(providerId: string, key: string, value: number | undefined) {
+		if (value !== undefined && Number.isNaN(value)) return;
+		if (value === undefined) {
+			settingsStore.setProviderConfig(providerId, { [key]: undefined });
+		} else {
+			settingsStore.setProviderConfig(providerId, { [key]: value });
+		}
 	}
 
 	function handleTTSApiKeyBlur() {
@@ -371,14 +457,28 @@ export function createTtsSettingsState() {
 		get ttsModels() {
 			return ttsModels;
 		},
+		get ttsVoices() {
+			return ttsVoices;
+		},
 		get ttsHasApiKey() {
 			return ttsHasApiKey;
 		},
+		get ttsBaseUrl() {
+			return ttsBaseUrl;
+		},
 		fetchTTSModels,
 		debouncedFetchTTSModels,
+		fetchTTSVoices,
+		debouncedFetchTTSVoices,
 		handleTTSProviderChange,
 		handleTTSModelChange,
 		handleTTSVoiceChange,
+		handleTTSLanguageChange,
+		handleTTSEnableAltLanguageChange,
+		handleTTSAltLanguageChange,
+		handleTTSAltVoiceChange,
+		handleTTSBaseUrlChange,
+		handleTTSNumberParam,
 		handleTTSApiKeyBlur,
 		handleApiKeyChange,
 		toggleTTS

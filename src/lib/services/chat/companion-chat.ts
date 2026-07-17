@@ -330,7 +330,17 @@ export async function sendCompanionMessage(
 					voiceId: (speechSettings.activeVoiceId as string) || ttsConfig.voiceId,
 					model: (speechSettings.activeModel as string) || ttsConfig.modelId,
 					baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
-					speed: (speechSettings.speed as number) ?? 1
+					speed: (speechSettings.speed as number) ?? 1,
+					language: (speechSettings.language as string) || 'en',
+					altLanguage: speechSettings.enableAltLanguage
+						? (speechSettings.altLanguage as string | undefined)
+						: undefined,
+					altVoiceId: speechSettings.enableAltLanguage
+						? (speechSettings.altVoiceId as string | undefined)
+						: undefined,
+					exaggeration: ttsConfig.exaggeration,
+					cfgWeight: ttsConfig.cfgWeight,
+					temperature: ttsConfig.temperature
 				});
 			}
 		}

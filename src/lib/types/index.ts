@@ -16,7 +16,7 @@ export type LLMProvider =
 	| 'openai-compatible';
 
 // TTS Provider IDs
-export type TTSProvider = 'elevenlabs' | 'openai-tts' | 'local-tts';
+export type TTSProvider = 'elevenlabs' | 'openai-tts' | 'local-tts' | 'chatterbox-ng';
 
 // Provider configuration (stored in settings)
 export interface ProviderConfig {
@@ -29,4 +29,8 @@ export interface ProviderConfig {
 	volume?: number;
 	cachedModels?: Array<{ id: string; name: string }>;
 	modelsFetchedAt?: number;
+	// Chatterbox-NG specific parameters (only sent when set)
+	exaggeration?: number;
+	cfgWeight?: number;
+	temperature?: number;
 }

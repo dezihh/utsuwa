@@ -16,6 +16,12 @@ export interface TTSOptions {
 	altLanguage?: string;
 	/** Voice ID used when the alternative language is active. */
 	altVoiceId?: string;
+	/** Chatterbox-NG emotion intensity (only sent when set). */
+	exaggeration?: number;
+	/** Chatterbox-NG classifier-free guidance weight (only sent when set). */
+	cfgWeight?: number;
+	/** Chatterbox-NG sampling temperature (only sent when set). */
+	temperature?: number;
 }
 
 // Result from TTS speak method
@@ -82,13 +88,15 @@ export function getSharedAudioContext(): AudioContext {
 // Import individual providers
 import { ElevenLabsTTS } from './elevenlabs.ts';
 import { OpenAITTS } from './openai-tts.ts';
+import { ChatterboxTTS } from './chatterbox.ts';
 
 // Provider factory
 let currentProvider: ITTSProvider | null = null;
 let currentOptions: TTSOptions | null = null;
 
 export function getTTSProvider(options: TTSOptions): ITTSProvider {
-	// Check if we can reuse the current provider
+	// Check if we can reuse the current provider. Provider-specific parameters
+	// (exaggeration, cfgWeight, temperature for Chatterbox-NG) must match too.
 	if (
 		currentProvider &&
 		currentOptions &&
@@ -97,7 +105,10 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 		currentOptions.voiceId === options.voiceId &&
 		currentOptions.model === options.model &&
 		currentOptions.baseUrl === options.baseUrl &&
-		currentOptions.speed === options.speed
+		currentOptions.speed === options.speed &&
+		currentOptions.exaggeration === options.exaggeration &&
+		currentOptions.cfgWeight === options.cfgWeight &&
+		currentOptions.temperature === options.temperature
 	) {
 		return currentProvider;
 	}
@@ -116,6 +127,10 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 		// localhost base URL. The provider id drives URL/key/error handling.
 		case 'local-tts':
 			currentProvider = new OpenAITTS(options);
+			break;
+
+		case 'chatterbox-ng':
+			currentProvider = new ChatterboxTTS(options);
 			break;
 
 		default:

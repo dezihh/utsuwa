@@ -1,13 +1,13 @@
 ---
 title: Local TTS Setup
-description: Give your companion a voice that runs entirely on your machine using Kokoro-FastAPI or openedai-speech.
+description: Give your companion a voice that runs entirely on your machine using Kokoro-FastAPI, openedai-speech, or Chatterbox-NG.
 ---
 
 # Local TTS Setup
 
 If you already run local LLMs with Ollama or LM Studio, you can give your companion a local voice too. The audio is generated on your machine, so nothing leaves the device and there are no API keys or per-character costs.
 
-Utsuwa talks to any TTS server that exposes the OpenAI `/v1/audio/speech` endpoint. The two we recommend are **Kokoro-FastAPI** and **openedai-speech**. Lip-sync works automatically because Utsuwa animates the mouth from the audio itself, no extra data needed.
+Utsuwa talks to any TTS server that exposes the OpenAI `/v1/audio/speech` endpoint. The two we recommend are **Kokoro-FastAPI** and **openedai-speech**. For a local streaming multilingual model with voice cloning, see **[Chatterbox-NG](local-tts-setup-chatterbox-ng)**. Lip-sync works automatically because Utsuwa animates the mouth from the audio itself, no extra data needed.
 
 ## Kokoro-FastAPI (recommended)
 
