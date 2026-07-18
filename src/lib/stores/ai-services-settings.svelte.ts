@@ -377,7 +377,7 @@ export function createTtsSettingsState() {
 		}
 
 		if (providerId === 'chatterbox-ng') {
-			debouncedFetchTTSVoices();
+			fetchTTSVoices();
 		} else {
 			// Alternative language is only meaningful for providers that send an
 			// explicit language parameter (currently only Chatterbox-NG).
@@ -486,6 +486,13 @@ export function createTtsSettingsState() {
 
 	function toggleTTS() {
 		modulesStore.setModuleEnabled('speech', !isTTSEnabled);
+	}
+
+	// Pre-load voices when the settings surface opens with Chatterbox-NG already
+	// selected. Without this, returning to the page (or reloading it) leaves the
+	// voice dropdown empty until the user manually hits refresh.
+	if (speechSettings.activeProvider === 'chatterbox-ng' && ttsBaseUrl && ttsVoices.length === 0) {
+		fetchTTSVoices();
 	}
 
 	return {
