@@ -1,7 +1,10 @@
 import { modulesStore } from '$lib/stores/modules.svelte';
 import { settingsStore } from '$lib/stores/settings.svelte';
+import { ttsStore } from '$lib/stores/tts.svelte';
 import { getLLMProvider, getTTSProvider } from '$lib/services/providers/registry';
 import { defaultVoiceForProvider } from '$lib/services/tts/provider-utils';
+import { type TTSOptions } from '$lib/services/tts';
+import { type TTSProvider } from '$lib/types';
 import {
 	fetchModels,
 	getCachedModelsForProvider,
@@ -441,6 +444,46 @@ export function createTtsSettingsState() {
 		applyApiKey(providerId, apiKey);
 	}
 
+	/**
+	 * Speak a short preview phrase with the currently selected TTS configuration.
+	 * Used by the settings UI so users can verify voice, language, and parameters
+	 * without leaving the page.
+	 */
+	function speakTest(): void {
+		const providerId = speechSettings.activeProvider as TTSProvider;
+		if (!providerId) return;
+		const provider = getTTSProvider(providerId);
+		if (!provider) return;
+
+		const config = settingsStore.getProviderConfig(providerId);
+		const options: TTSOptions = {
+			provider: providerId,
+			apiKey: config.apiKey,
+			voiceId: (speechSettings.activeVoiceId as string) || config.voiceId,
+			model: (speechSettings.activeModel as string) || config.modelId,
+			baseUrl: config.baseUrl || provider.defaultBaseUrl,
+			language: (speechSettings.language as string) || 'en',
+			altLanguage: speechSettings.enableAltLanguage
+				? (speechSettings.altLanguage as string | undefined)
+				: undefined,
+			altVoiceId: speechSettings.enableAltLanguage
+				? (speechSettings.altVoiceId as string | undefined)
+				: undefined,
+			exaggeration: config.exaggeration,
+			cfgWeight: config.cfgWeight,
+			temperature: config.temperature
+		};
+
+		const phrase =
+			speechSettings.enableAltLanguage && speechSettings.altLanguage
+				? `Hello! This is the ${provider.name} voice test. <lang=${speechSettings.altLanguage}>Hola, esta es una prueba de voz alternativa.</lang>`
+				: `Hello! This is the ${provider.name} voice test.`;
+
+		ttsStore.speak(phrase, options).catch((error) => {
+			console.error('TTS preview failed:', error);
+		});
+	}
+
 	function toggleTTS() {
 		modulesStore.setModuleEnabled('speech', !isTTSEnabled);
 	}
@@ -485,6 +528,7 @@ export function createTtsSettingsState() {
 		handleTTSNumberParam,
 		handleTTSApiKeyBlur,
 		handleApiKeyChange,
+		speakTest,
 		toggleTTS
 	};
 }

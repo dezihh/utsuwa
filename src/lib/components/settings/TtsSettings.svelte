@@ -10,6 +10,12 @@
 	const provider = $derived(getTTSProvider(state.speechSettings.activeProvider as string));
 	const isChatterbox = $derived(provider?.id === 'chatterbox-ng');
 	const enableAltLanguage = $derived(!!state.speechSettings.enableAltLanguage);
+	const canTestVoice = $derived.by(() => {
+		if (!provider) return false;
+		if (provider.id === 'chatterbox-ng') return !!state.ttsBaseUrl;
+		if (provider.requiresApiKey) return !!settingsStore.getProviderConfig(provider.id).apiKey;
+		return true;
+	});
 </script>
 
 <div class="service-group">
@@ -73,52 +79,89 @@
 						disabled={!state.ttsBaseUrl}
 						disabledMessage="Enter base URL first"
 					/>
+					<button
+						class="test-voice-btn"
+						onclick={state.speakTest}
+						disabled={!canTestVoice}
+						aria-label="Test voice"
+						title={canTestVoice ? 'Play a short preview' : 'Configure provider to test'}
+					>
+						<Icon name="play" size={14} />
+						<span>Test</span>
+					</button>
 				</div>
 
-				<div class="api-key-row">
-					<input
-						type="number"
-						class="api-key-input"
-						placeholder="Exaggeration (optional, 0.0-2.0)"
-						value={settingsStore.getProviderConfig(provider.id).exaggeration ?? ''}
-						step="0.1"
-						onchange={(e) =>
-							state.handleTTSNumberParam(
-								provider.id,
-								'exaggeration',
-								e.currentTarget.value === '' ? undefined : parseFloat(e.currentTarget.value)
-							)}
-					/>
-				</div>
-				<div class="api-key-row">
-					<input
-						type="number"
-						class="api-key-input"
-						placeholder="CFG weight (optional, 0.0-2.0)"
-						value={settingsStore.getProviderConfig(provider.id).cfgWeight ?? ''}
-						step="0.1"
-						onchange={(e) =>
-							state.handleTTSNumberParam(
-								provider.id,
-								'cfgWeight',
-								e.currentTarget.value === '' ? undefined : parseFloat(e.currentTarget.value)
-							)}
-					/>
-				</div>
-				<div class="api-key-row">
-					<input
-						type="number"
-						class="api-key-input"
-						placeholder="Temperature (optional, 0.0-1.0)"
-						value={settingsStore.getProviderConfig(provider.id).temperature ?? ''}
-						step="0.1"
-						onchange={(e) =>
-							state.handleTTSNumberParam(
-								provider.id,
-								'temperature',
-								e.currentTarget.value === '' ? undefined : parseFloat(e.currentTarget.value)
-							)}
-					/>
+				<div class="param-section">
+					<div class="param-section-title">Voice tuning</div>
+
+					<div class="param-row">
+						<label class="param-label" for="chatterbox-exaggeration">Exaggeration</label>
+						<input
+							id="chatterbox-exaggeration"
+							type="number"
+							class="api-key-input param-input"
+							placeholder="0.0-2.0"
+							value={settingsStore.getProviderConfig(provider.id).exaggeration ?? ''}
+							step="0.1"
+							min="0"
+							max="2"
+							onchange={(e) =>
+								state.handleTTSNumberParam(
+									provider.id,
+									'exaggeration',
+									e.currentTarget.value === '' ? undefined : parseFloat(e.currentTarget.value)
+								)}
+						/>
+					</div>
+					<p class="param-hint">
+						Higher values make the voice more expressive; 1.0 is the default, 0.0 is flat.
+					</p>
+
+					<div class="param-row">
+						<label class="param-label" for="chatterbox-cfg">CFG weight</label>
+						<input
+							id="chatterbox-cfg"
+							type="number"
+							class="api-key-input param-input"
+							placeholder="0.0-2.0"
+							value={settingsStore.getProviderConfig(provider.id).cfgWeight ?? ''}
+							step="0.1"
+							min="0"
+							max="2"
+							onchange={(e) =>
+								state.handleTTSNumberParam(
+									provider.id,
+									'cfgWeight',
+									e.currentTarget.value === '' ? undefined : parseFloat(e.currentTarget.value)
+								)}
+						/>
+					</div>
+					<p class="param-hint">
+						Classifier-free guidance. Higher values follow the prompt/voice more closely but can sound stiffer.
+					</p>
+
+					<div class="param-row">
+						<label class="param-label" for="chatterbox-temperature">Temperature</label>
+						<input
+							id="chatterbox-temperature"
+							type="number"
+							class="api-key-input param-input"
+							placeholder="0.0-1.0"
+							value={settingsStore.getProviderConfig(provider.id).temperature ?? ''}
+							step="0.1"
+							min="0"
+							max="1"
+							onchange={(e) =>
+								state.handleTTSNumberParam(
+									provider.id,
+									'temperature',
+									e.currentTarget.value === '' ? undefined : parseFloat(e.currentTarget.value)
+								)}
+						/>
+					</div>
+					<p class="param-hint">
+						Higher values add randomness. Keep low for consistent pronunciation.
+					</p>
 				</div>
 			{:else if provider.isLocal}
 				<div class="api-key-row">
