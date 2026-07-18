@@ -179,46 +179,48 @@
 				/>
 			{/if}
 
-			<div class="api-key-row">
-				<input
-					type="text"
-					class="api-key-input"
-					placeholder="Primary language (e.g. en, de, es)"
-					value={(state.speechSettings.language as string) || 'en'}
-					onchange={(e) => state.handleTTSLanguageChange(e.currentTarget.value)}
-				/>
-			</div>
-
-			<div class="setting-row">
-				<label class="setting-label">
-					<input
-						type="checkbox"
-						checked={enableAltLanguage}
-						onchange={(e) => state.handleTTSEnableAltLanguageChange(e.currentTarget.checked)}
-					/>
-					<span>Enable alternative language</span>
-				</label>
-			</div>
-
-			{#if enableAltLanguage}
+			{#if isChatterbox}
 				<div class="api-key-row">
 					<input
 						type="text"
 						class="api-key-input"
-						placeholder="Alternative language (e.g. es, fr, it)"
-						value={(state.speechSettings.altLanguage as string) || ''}
-						onchange={(e) => state.handleTTSAltLanguageChange(e.currentTarget.value)}
+						placeholder="Primary language (e.g. en, de, es)"
+						value={(state.speechSettings.language as string) || 'en'}
+						onchange={(e) => state.handleTTSLanguageChange(e.currentTarget.value)}
 					/>
 				</div>
-				<div class="api-key-row">
-					<input
-						type="text"
-						class="api-key-input"
-						placeholder="Alternative voice ID"
-						value={(state.speechSettings.altVoiceId as string) || ''}
-						onchange={(e) => state.handleTTSAltVoiceChange(e.currentTarget.value)}
-					/>
+
+				<div class="setting-row">
+					<label class="setting-label">
+						<input
+							type="checkbox"
+							checked={enableAltLanguage}
+							onchange={(e) => state.handleTTSEnableAltLanguageChange(e.currentTarget.checked)}
+						/>
+						<span>Enable alternative language</span>
+					</label>
 				</div>
+
+				{#if enableAltLanguage}
+					<div class="api-key-row">
+						<input
+							type="text"
+							class="api-key-input"
+							placeholder="Alternative language (e.g. es, fr, it)"
+							value={(state.speechSettings.altLanguage as string) || ''}
+							onchange={(e) => state.handleTTSAltLanguageChange(e.currentTarget.value)}
+						/>
+					</div>
+					<div class="api-key-row">
+						<input
+							type="text"
+							class="api-key-input"
+							placeholder="Alternative voice ID"
+							value={(state.speechSettings.altVoiceId as string) || ''}
+							onchange={(e) => state.handleTTSAltVoiceChange(e.currentTarget.value)}
+						/>
+					</div>
+				{/if}
 			{/if}
 		{/if}
 	{/if}

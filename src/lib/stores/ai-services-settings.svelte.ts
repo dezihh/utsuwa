@@ -375,6 +375,10 @@ export function createTtsSettingsState() {
 
 		if (providerId === 'chatterbox-ng') {
 			debouncedFetchTTSVoices();
+		} else {
+			// Alternative language is only meaningful for providers that send an
+			// explicit language parameter (currently only Chatterbox-NG).
+			modulesStore.setModuleSetting('speech', 'enableAltLanguage', false);
 		}
 	}
 
