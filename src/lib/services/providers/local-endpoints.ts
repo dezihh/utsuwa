@@ -1,7 +1,7 @@
 import { DEFAULT_LOCAL_BASE_URLS as DEFAULT_BASE_URLS } from './provider-defaults.ts';
 
 const LOCAL_LLM_PROVIDERS = new Set(['ollama', 'lmstudio']);
-const LOCAL_TTS_PROVIDERS = new Set(['local-tts']);
+const LOCAL_TTS_PROVIDERS = new Set(['local-tts', 'omnivoice']);
 const LOCAL_STT_PROVIDERS = new Set(['local-stt']);
 
 function trimTrailingSlashes(url: string): string {
@@ -73,11 +73,20 @@ export function getTTSBaseUrl(providerId: string, baseUrl?: string): string {
 	return `${cleanUrl}/`;
 }
 
-export function getLocalTTSConnectionHint(baseUrl?: string, siteOrigin?: string): string {
-	const ttsBaseUrl = getTTSBaseUrl('local-tts', baseUrl);
+export function getLocalTTSConnectionHint(
+	baseUrl?: string,
+	siteOrigin?: string,
+	providerId: string = 'local-tts'
+): string {
+	const ttsBaseUrl = getTTSBaseUrl(providerId, baseUrl);
 	const originHint = siteOrigin
 		? ` If the server blocks this site (${siteOrigin}), enable CORS for that origin.`
 		: ' If the server blocks this site, enable CORS for the app origin.';
+
+	if (providerId === 'omnivoice') {
+		return `Could not reach OmniVoice at ${ttsBaseUrl}. Make sure "omnivoice-proxy" is running (python tools/omnivoice-proxy.py) and reachable from this device.${originHint}`;
+	}
+
 	return `Could not reach a local TTS server at ${ttsBaseUrl}. Make sure it is running and exposes the OpenAI /v1/audio/speech endpoint (e.g. Kokoro-FastAPI or openedai-speech).${originHint}`;
 }
 

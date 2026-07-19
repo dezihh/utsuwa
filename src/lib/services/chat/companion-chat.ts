@@ -50,6 +50,7 @@ async function buildCompanionPrompt(
 	systemEvent?: string
 ): Promise<string> {
 	const workingMemory = getWorkingMemory();
+	const speechSettings = modulesStore.getModuleSettings('speech');
 	const context: PromptContext = {
 		persona: personaStore.activeCard,
 		state: characterStore.state,
@@ -60,7 +61,8 @@ async function buildCompanionPrompt(
 		contextSize,
 		pendingReminders: reminderStore.upcoming.map((r) => ({ triggerAt: r.triggerAt, content: r.content })),
 		sessionStartedAt: workingMemory.sessionStartedAt,
-		systemEvent
+		systemEvent,
+		ttsProvider: speechSettings.activeProvider as string | undefined
 	};
 	return buildSystemPrompt(context);
 }
@@ -337,7 +339,15 @@ export async function sendCompanionMessage(
 					voiceId: (speechSettings.activeVoiceId as string) || ttsConfig.voiceId,
 					model: (speechSettings.activeModel as string) || ttsConfig.modelId,
 					baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
-					speed: (speechSettings.speed as number) ?? 1
+					speed: (speechSettings.speed as number) ?? 1,
+					instructions: (speechSettings.instructions as string) || undefined,
+					altInstructions: (speechSettings.altInstructions as string) || undefined,
+					language: (speechSettings.primaryLanguage as string) || undefined,
+					altLanguage: (speechSettings.altLanguage as string) || undefined,
+					altVoiceId: (speechSettings.altVoiceId as string) || undefined,
+					numStep: (speechSettings.numStep as number) ?? undefined,
+					positionTemperature: (speechSettings.positionTemperature as number) ?? undefined,
+					classTemperature: (speechSettings.classTemperature as number) ?? undefined
 				});
 			}
 		}

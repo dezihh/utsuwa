@@ -16,6 +16,16 @@ export interface TTSOptions {
 	altLanguage?: string;
 	/** Voice ID used when the alternative language is active. */
 	altVoiceId?: string;
+	/** Voice design instructions (OmniVoice: e.g. "female, british accent"). */
+	instructions?: string;
+	/** Voice design instructions for the alternative language. */
+	altInstructions?: string;
+	/** OmniVoice: diffusion steps (4-64). Higher = better quality, slower. Default 32. */
+	numStep?: number;
+	/** OmniVoice: voice diversity temperature (0-10). 0 = deterministic. Default 5. */
+	positionTemperature?: number;
+	/** OmniVoice: token sampling temperature (0-2). 0 = greedy. Default 0. */
+	classTemperature?: number;
 }
 
 // Result from TTS speak method
@@ -36,6 +46,10 @@ export interface StreamOptions {
 	speed?: number;
 	pitch?: number;
 	volume?: number;
+	instructions?: string;
+	numStep?: number;
+	positionTemperature?: number;
+	classTemperature?: number;
 	signal?: AbortSignal;
 }
 
@@ -115,6 +129,11 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 		// Local TTS is OpenAI-compatible, so it reuses the OpenAI client with a
 		// localhost base URL. The provider id drives URL/key/error handling.
 		case 'local-tts':
+			currentProvider = new OpenAITTS(options);
+			break;
+
+		// OmniVoice is OpenAI-compatible via tools/omnivoice-proxy.py.
+		case 'omnivoice':
 			currentProvider = new OpenAITTS(options);
 			break;
 

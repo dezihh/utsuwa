@@ -3,7 +3,8 @@ import {
 	type ITTSProvider,
 	type TTSOptions,
 	type TTSSpeakResult,
-	type StreamOptions
+	type StreamOptions,
+	type TTSCapabilities
 } from './index.ts';
 import {
 	getTTSBaseUrl,
@@ -30,22 +31,35 @@ export class OpenAITTS implements ITTSProvider {
 	private speed: number;
 	private baseUrl: string;
 	private isLocal: boolean;
-
-	readonly capabilities = {
-		streaming: false,
-		emotion: false,
-		multilingual: false
-	};
+	private providerId: string;
 
 	constructor(options: TTSOptions) {
 		this.apiKey = options.apiKey || '';
 		this.voiceId = options.voiceId || 'alloy';
 		this.model = options.model || 'tts-1';
 		this.speed = options.speed ?? 1;
+		this.providerId = options.provider;
 		this.isLocal = isLocalTTSProvider(options.provider);
 		this.baseUrl = this.isLocal
 			? getTTSBaseUrl(options.provider, options.baseUrl)
 			: ensureTrailingSlash(options.baseUrl || 'https://api.openai.com/v1/');
+	}
+
+	get capabilities(): TTSCapabilities {
+		if (this.providerId === 'omnivoice') {
+			return {
+				streaming: false,
+				emotion: true,
+				multilingual: true,
+				maxConcurrentSynthesis: 1,
+				clientSideSpeed: false
+			};
+		}
+		return {
+			streaming: false,
+			emotion: false,
+			multilingual: false
+		};
 	}
 
 	getAudioContext(): AudioContext {
@@ -64,25 +78,37 @@ export class OpenAITTS implements ITTSProvider {
 			headers.Authorization = `Bearer ${this.apiKey}`;
 		}
 
+		const isOmnivoice = this.providerId === 'omnivoice';
+		const body: Record<string, unknown> = {
+			model: this.model,
+			input: text,
+			voice: this.voiceId,
+			speed: options?.speed ?? this.speed,
+			response_format: isOmnivoice ? 'wav' : 'mp3'
+		};
+		const instructions = options?.instructions;
+		if (isOmnivoice && instructions) {
+			body.instructions = instructions;
+		}
+		if (isOmnivoice) {
+			if (options?.numStep != null) body.num_step = options.numStep;
+			if (options?.positionTemperature != null) body.position_temperature = options.positionTemperature;
+			if (options?.classTemperature != null) body.class_temperature = options.classTemperature;
+		}
+
 		let response: Response;
 		try {
 			response = await fetch(`${this.baseUrl}audio/speech`, {
 				method: 'POST',
 				headers,
-				body: JSON.stringify({
-					model: this.model,
-					input: text,
-					voice: this.voiceId,
-					speed: options?.speed ?? this.speed,
-					response_format: 'mp3'
-				}),
+				body: JSON.stringify(body),
 				signal: options?.signal
 			});
 		} catch (err) {
 			// A thrown fetch is usually a refused connection or a CORS block, which
 			// is the exact failure mode that broke local LLMs before they were fixed.
 			if (this.isLocal) {
-				throw new Error(getLocalTTSConnectionHint(this.baseUrl, getCurrentSiteOrigin()));
+				throw new Error(getLocalTTSConnectionHint(this.baseUrl, getCurrentSiteOrigin(), this.providerId));
 			}
 			throw err;
 		}

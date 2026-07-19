@@ -332,8 +332,36 @@ export function createTtsSettingsState() {
 		modulesStore.setModuleSetting('speech', 'activeModel', modelId);
 	}
 
+	function handleTTSSpeedChange(value: number) {
+		modulesStore.setModuleSetting('speech', 'speed', value);
+	}
+
 	function handleTTSVoiceChange(voiceId: string) {
 		modulesStore.setModuleSetting('speech', 'activeVoiceId', voiceId);
+	}
+
+	function handleTTSInstructionsChange(value: string) {
+		modulesStore.setModuleSetting('speech', 'instructions', value);
+	}
+
+	function handleTTSAltInstructionsChange(value: string) {
+		modulesStore.setModuleSetting('speech', 'altInstructions', value);
+	}
+
+	function handleTTSPrimaryLanguageChange(value: string) {
+		modulesStore.setModuleSetting('speech', 'primaryLanguage', value);
+	}
+
+	function handleTTSAltLanguageChange(value: string) {
+		modulesStore.setModuleSetting('speech', 'altLanguage', value);
+	}
+
+	function handleTTSAltVoiceChange(value: string) {
+		modulesStore.setModuleSetting('speech', 'altVoiceId', value);
+	}
+
+	function handleTTSEnableAltLanguage(enabled: boolean) {
+		modulesStore.setModuleSetting('speech', 'enableAltLanguage', enabled);
 	}
 
 	function handleTTSApiKeyBlur() {
@@ -378,7 +406,14 @@ export function createTtsSettingsState() {
 		debouncedFetchTTSModels,
 		handleTTSProviderChange,
 		handleTTSModelChange,
+		handleTTSSpeedChange,
 		handleTTSVoiceChange,
+		handleTTSInstructionsChange,
+		handleTTSAltInstructionsChange,
+		handleTTSPrimaryLanguageChange,
+		handleTTSAltLanguageChange,
+		handleTTSAltVoiceChange,
+		handleTTSEnableAltLanguage,
 		handleTTSApiKeyBlur,
 		handleApiKeyChange,
 		toggleTTS

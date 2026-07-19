@@ -452,6 +452,21 @@ export class VoiceOrchestrator {
 			signal
 		};
 
+		const resolvedVoiceId = streamOpts.voiceId;
+		if (this.sessionOptions?.instructions || this.sessionOptions?.altInstructions) {
+			const isAlt = resolvedVoiceId && resolvedVoiceId === this.sessionOptions?.altVoiceId;
+			const instr = isAlt
+				? this.sessionOptions?.altInstructions
+				: this.sessionOptions?.instructions;
+		if (instr) {
+				streamOpts.instructions = instr;
+			}
+		}
+
+		if (this.sessionOptions?.numStep != null) streamOpts.numStep = this.sessionOptions.numStep;
+		if (this.sessionOptions?.positionTemperature != null) streamOpts.positionTemperature = this.sessionOptions.positionTemperature;
+		if (this.sessionOptions?.classTemperature != null) streamOpts.classTemperature = this.sessionOptions.classTemperature;
+
 		if (signal.aborted) return null;
 
 		// Acquire a synthesis slot — limits parallel requests to the provider's

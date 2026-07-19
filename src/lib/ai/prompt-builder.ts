@@ -26,6 +26,9 @@ export interface PromptContext {
 	// Optional system event text (e.g. a fired reminder) delivered as an event
 	// block instead of a user turn.
 	systemEvent?: string;
+	// Active TTS provider ID. When 'omnivoice', tool-calling instructions for
+	// multilingual speech output are injected.
+	ttsProvider?: string;
 }
 
 function getContextMemoryBudget(contextSize?: number): MemoryBudget | undefined {
@@ -83,10 +86,39 @@ export function buildSystemPrompt(context: PromptContext): string {
 		buildMemoryLayer(context),
 		...(context.hasImages ? [buildBeingShownLayer()] : []),
 		buildEventLayer(context),
-		buildInstructionLayer(context)
+		buildInstructionLayer(context),
+		buildOmniVoiceLayer(context)
 	].filter((layer): layer is string => layer !== null);
 
 	return layers.join('\n\n');
+}
+
+function buildOmniVoiceLayer(ctx: PromptContext): string | null {
+	if (ctx.ttsProvider !== 'omnivoice') return null;
+	return `<speech_output_control>
+You have access to function calls for controlling speech output. Use them
+whenever you need to switch languages, add pauses, or trigger gestures.
+
+Available functions:
+
+speak({ text: "...", lang?: "de"|"en"|"es"|"fr"|... })
+  Speak the given text. Omit "lang" for the primary language.
+  Include non-verbal markers like [laughter], [sigh] in the text.
+  Keep each speak() text to 1-2 sentences.
+
+pause({ ms: number })
+  Insert a pause between speech segments (100-5000 ms).
+
+gesture({ type: "smile"|"laugh"|"surprise"|"nod"|"shake_head"|"wave" })
+  Trigger an avatar expression.
+
+Rules:
+- Always use speak() for foreign-language words or phrases.
+- Use pause() sparingly — only when a natural break helps comprehension.
+- Use gesture() sparingly — only for meaningful expressions.
+- Do NOT use inline language markup tags.
+- Never write text outside of speak() calls — your message must be exactly the sequence of function calls.
+</speech_output_control>`;
 }
 
 // Simplified prompt for Companion Mode
@@ -175,6 +207,9 @@ Examples of good new_memory values:
 
 In Companion Mode, only mood and energy change. Do NOT suggest affection, trust, intimacy, comfort, or respect changes - these relationship stats are disabled.
 </instructions>`);
+
+	const ovLayer = buildOmniVoiceLayer(ctx);
+	if (ovLayer) parts.push(ovLayer);
 
 	return parts.join('\n\n');
 }

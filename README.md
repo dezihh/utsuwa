@@ -145,12 +145,13 @@ The **Context Window** setting is available for every LLM provider. When enabled
 
 If the setting is left off, Utsuwa keeps the historical defaults (10 retrieved turns, 6 injected turns, 5 facts) and does not truncate history. This is useful when you want the provider to handle its own context management.
 
-### TTS Providers (3)
+### TTS Providers (4)
 
 | Category | Providers |
 |----------|-----------|
 | **Cloud** | ElevenLabs, OpenAI TTS |
 | **Local** | Local TTS (Kokoro-FastAPI, openedai-speech, any OpenAI-compatible server) |
+| **Local** | OmniVoice — locally run TTS with 600+ languages, voice design and voice cloning. Requires the OmniVoice proxy (`python tools/omnivoice-proxy.py --device cuda`). Voice cloning needs a reference text (ASR is disabled to avoid Whisper model dependency). |
 
 ### STT Providers (4)
 
@@ -339,8 +340,8 @@ pnpm tauri build  # Build desktop app installer
 - [ ] **File and Video Uploads** - Add support for attaching files and videos for multimodal LLM workflows and providers that can use richer context or web-aware tools (image support has shipped)
 - [ ] **Live2D Support** - Alternative to VRM for 2D animated avatars
 - [ ] **Hands-Free Voice Mode** - Full duplex conversation: speak naturally and she answers, no push-to-talk, with voice activity detection
-- [ ] **Omnivoice Local TTS** - Self-hosted voice engine support with a dual-voice setup and text chunking, so she starts speaking within moments instead of waiting for the full reply
-- [ ] **MCP Tool Calling** - Model Context Protocol support so your companion can reach beyond the chat: search the web for news, pull live data, or quiz you on Spanish vocabulary, through MCP servers you run yourself
+- [x] **Omnivoice Local TTS** — Self-hosted voice engine with 600+ languages, voice design (gender/age/pitch), voice cloning, and sentence-by-sentence streaming so she starts speaking within moments instead of waiting for the full reply
+- [ ] **MCP Tool Calling** — Model Context Protocol support so your companion can reach beyond the chat: search the web for news, pull live data, or quiz you on Spanish vocabulary, through MCP servers you run yourself
 - [ ] **Flexible Chat Layout** - Choose between the floating chat bar, a full conversation sidebar, or both at once
 
 ## Contributing

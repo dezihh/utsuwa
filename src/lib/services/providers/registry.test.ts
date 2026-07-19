@@ -21,6 +21,16 @@ test('local TTS provider is keyless, local, and ships fallback voices', () => {
 	assert.ok((localTTS?.voices?.length ?? 0) > 0, 'local-tts should seed voices for offline use');
 });
 
+test('OmniVoice is keyless, local, and ships 13 preset voices', () => {
+	const omni = getTTSProvider('omnivoice');
+
+	assert.ok(omni, 'omnivoice should be registered');
+	assert.equal(omni?.isLocal, true);
+	assert.equal(omni?.requiresApiKey, false);
+	assert.equal(omni?.voices?.length, 13, 'OmniVoice should ship 13 preset voices');
+	assert.deepEqual(omni?.models, [{ id: 'omnivoice', name: 'OmniVoice' }]);
+});
+
 test('every TTS provider declares whether it needs an API key', () => {
 	for (const provider of TTS_PROVIDERS) {
 		assert.equal(typeof provider.requiresApiKey, 'boolean', `${provider.name} must declare requiresApiKey`);

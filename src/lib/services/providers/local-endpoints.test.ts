@@ -79,6 +79,7 @@ test('provides local provider troubleshooting hints', () => {
 
 test('identifies local TTS providers', () => {
 	assert.equal(isLocalTTSProvider('local-tts'), true);
+	assert.equal(isLocalTTSProvider('omnivoice'), true);
 	assert.equal(isLocalTTSProvider('openai-tts'), false);
 	assert.equal(isLocalTTSProvider('elevenlabs'), false);
 });
@@ -100,6 +101,22 @@ test('provides local TTS troubleshooting hint with CORS guidance', () => {
 		getLocalTTSConnectionHint('http://localhost:8880', 'https://utsuwa.app'),
 		/https:\/\/utsuwa\.app/
 	);
+});
+
+test('provides OmniVoice troubleshooting hint', () => {
+	const hint = getLocalTTSConnectionHint('http://localhost:8880', undefined, 'omnivoice');
+	assert.match(hint, /OmniVoice/);
+	assert.match(hint, /omnivoice-proxy/);
+	assert.match(
+		getLocalTTSConnectionHint('http://localhost:8880', 'https://utsuwa.app', 'omnivoice'),
+		/https:\/\/utsuwa\.app/
+	);
+});
+
+test('normalizes OmniVoice TTS base URL to a trailing-slash /v1 path', () => {
+	assert.equal(getTTSBaseUrl('omnivoice', 'http://localhost:8880'), 'http://localhost:8880/v1/');
+	assert.equal(getTTSBaseUrl('omnivoice', 'http://localhost:8880/v1'), 'http://localhost:8880/v1/');
+	assert.equal(getTTSBaseUrl('omnivoice'), 'http://localhost:8880/v1/');
 });
 
 // --- ensureOpenAIPath (shared by model discovery and custom-endpoint chat) ---

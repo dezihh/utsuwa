@@ -10,6 +10,10 @@ export interface Message {
 	content: string;
 	timestamp: Date;
 	images?: ShownImage[];
+	/** Tool calls emitted by the assistant (OmniVoice multilingual mode). */
+	toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
+	/** Tool results for the above calls. */
+	toolResults?: Array<string>;
 }
 
 function createChatStore() {
