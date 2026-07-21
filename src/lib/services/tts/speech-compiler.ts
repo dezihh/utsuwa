@@ -191,10 +191,13 @@ export function compile(calls: ToolCall[], primaryLanguage: string): CompilerRes
 /**
  * Error recovery: given the original LLM output text and possibly invalid
  * tool calls, produce a single speak() segment as a graceful fallback.
- * Never throws — always returns at least one speak segment.
+ * Never throws. Returns an empty array when the input is empty to stay
+ * consistent with compileFromText().
  */
 export function recover(originalText: string, primaryLanguage: string): CompiledSegment[] {
-	return [{ type: 'speak', text: originalText.trim(), language: primaryLanguage }];
+	const trimmed = originalText.trim();
+	if (!trimmed) return [];
+	return [{ type: 'speak', text: trimmed, language: primaryLanguage }];
 }
 
 /**

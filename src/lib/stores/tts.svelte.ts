@@ -1,6 +1,7 @@
 import { type TTSOptions } from '$lib/services/tts';
 import { VoiceOrchestrator } from '$lib/services/voice-orchestrator';
 import { splitIntoSentences } from '$lib/utils/sentences';
+import { getSpeakableText } from '../utils/speech-content.ts';
 import {
 	parsePseudoToolCalls,
 	compile,
@@ -87,7 +88,7 @@ function createTTSStore() {
 
 			// Skip non-speech content early (emoji-only, empty, etc.).
 			const hasSpeakable = segments.some(
-				(s) => s.type === 'speak' && s.text?.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s\p{P}]/gu, '').trim()
+				(s) => s.type === 'speak' && getSpeakableText(s.text)
 			);
 			if (!hasSpeakable) {
 				return;

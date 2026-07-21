@@ -5,6 +5,7 @@ import {
 	type StreamOptions,
 	type ITTSProvider
 } from './tts/index.ts';
+import { getSpeakableText } from '../utils/speech-content.ts';
 
 /**
  * Metadata attached to each speech segment by the response parser.
@@ -294,11 +295,7 @@ export class VoiceOrchestrator {
 
 		// Skip segments that contain only emoji, whitespace, or punctuation — these produce
 		// no meaningful speech but still incur full TTS generation overhead.
-		const textContent = segment.text.replace(
-			/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s\p{P}]/gu,
-			''
-		);
-		if (!textContent.trim()) return;
+		if (!getSpeakableText(segment.text)) return;
 
 		// Auto-assign alt voice when the user explicitly enabled the alternative
 		// voice and configured an altVoiceId.

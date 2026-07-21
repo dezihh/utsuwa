@@ -242,12 +242,9 @@ test('recover creates a single speak segment from raw text', () => {
 	assert.equal(segments[0].language, 'en');
 });
 
-test('recover returns an empty speak segment for empty input', () => {
+test('recover returns an empty array for empty input', () => {
 	const segments = recover('', 'de');
-	assert.equal(segments.length, 1);
-	assert.equal(segments[0].type, 'speak');
-	assert.equal(segments[0].text, '');
-	assert.equal(segments[0].language, 'de');
+	assert.equal(segments.length, 0);
 });
 
 test('regression: Spanish teacher scenario — separate language segments kept separate', () => {
