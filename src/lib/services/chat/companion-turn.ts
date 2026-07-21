@@ -32,6 +32,8 @@ export interface CompanionTurnInput {
 	// specific side effects like sentiment analysis, baseline stat updates,
 	// streak/interaction counting and fact extraction from the trigger text.
 	systemEvent?: boolean;
+	// DEV-only console logging of the raw/parsed model output.
+	debug?: boolean;
 }
 
 export interface CompanionTurnResult {
@@ -51,7 +53,7 @@ export interface CompanionTurnResult {
 // extraction fallback). Page-specific side effects — showing the event modal,
 // keeping photos — stay in the pages via the return value.
 export async function processCompanionTurn(input: CompanionTurnInput): Promise<CompanionTurnResult> {
-	const { userMessage, companionResponse, llm, systemEvent = false } = input;
+	const { userMessage, companionResponse, llm, systemEvent = false, debug = false } = input;
 
 	const state = characterStore.state;
 	// System events (e.g. fired reminders) must not trigger sentiment heuristics,
@@ -77,6 +79,14 @@ export async function processCompanionTurn(input: CompanionTurnInput): Promise<C
 	const dialogue = parsed.dialogue;
 	let llmUpdates = parsed.stateUpdates;
 
+	if (debug) {
+		console.log('%c[LLM raw response]', 'color:#00b2ff;font-weight:bold', companionResponse);
+		console.log('%c[LLM parsed]', 'color:#22c55e;font-weight:bold', {
+			stateUpdates: llmUpdates,
+			new_memory: llmUpdates?.newMemory ?? null
+		});
+	}
+
 	// Decoupled fallback: the model skipped the inline JSON, so ask a dedicated
 	// forced-JSON call to extract mood + memory from the exchange.
 	if (!llmUpdates) {
@@ -93,6 +103,9 @@ export async function processCompanionTurn(input: CompanionTurnInput): Promise<C
 			// parseResponse handles both bare JSON (OpenAI json_object) and a
 			// model-added ```json fence (Anthropic). Don't re-wrap.
 			llmUpdates = parseResponse(extracted).stateUpdates;
+			if (debug) {
+				console.log('%c[extraction fallback]', 'color:#f59e0b;font-weight:bold', extracted, '->', llmUpdates);
+			}
 		}
 	}
 
