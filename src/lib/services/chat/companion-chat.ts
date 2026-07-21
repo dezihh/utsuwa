@@ -291,8 +291,7 @@ export async function sendCompanionMessage(
 				baseURL,
 				hasImages: images.length > 0
 			},
-			systemEvent,
-			debug: import.meta.env.DEV
+			systemEvent
 		});
 
 		// Schedule a direct fallback only when the LLM did not emit any reminder
