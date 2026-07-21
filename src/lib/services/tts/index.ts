@@ -22,6 +22,12 @@ export interface TTSOptions {
 	altInstructions?: string;
 	/** OmniVoice: diffusion steps (4-64). Higher = better quality, slower. Default 32. */
 	numStep?: number;
+	/** Whether the alternative voice/language switch is enabled by the user. */
+	enableAltLanguage?: boolean;
+	/** Alternative voice speed (0.5-2.0). Falls back to `speed` when unset. */
+	altSpeed?: number;
+	/** Alternative voice quality / diffusion steps. Falls back to `numStep` when unset. */
+	altNumStep?: number;
 	/** OmniVoice: voice diversity temperature (0-10). 0 = deterministic. Default 5. */
 	positionTemperature?: number;
 	/** OmniVoice: token sampling temperature (0-2). 0 = greedy. Default 0. */
@@ -99,20 +105,36 @@ import { OpenAITTS } from './openai-tts.ts';
 
 // Provider factory
 let currentProvider: ITTSProvider | null = null;
-let currentOptions: TTSOptions | null = null;
+let currentOptionsKey: string | null = null;
+
+/**
+ * Build a stable cache key from the options that actually affect provider
+ * behaviour. OmniVoice voice design (instructions), alt voice config, and
+ * quality params must invalidate the cache when they change.
+ */
+function buildProviderCacheKey(options: TTSOptions): string {
+	return JSON.stringify({
+		provider: options.provider,
+		apiKey: options.apiKey,
+		voiceId: options.voiceId,
+		model: options.model,
+		baseUrl: options.baseUrl,
+		speed: options.speed,
+		instructions: options.instructions,
+		altVoiceId: options.altVoiceId,
+		altInstructions: options.altInstructions,
+		altSpeed: options.altSpeed,
+		numStep: options.numStep,
+		altNumStep: options.altNumStep,
+		positionTemperature: options.positionTemperature,
+		classTemperature: options.classTemperature
+	});
+}
 
 export function getTTSProvider(options: TTSOptions): ITTSProvider {
 	// Check if we can reuse the current provider
-	if (
-		currentProvider &&
-		currentOptions &&
-		currentOptions.provider === options.provider &&
-		currentOptions.apiKey === options.apiKey &&
-		currentOptions.voiceId === options.voiceId &&
-		currentOptions.model === options.model &&
-		currentOptions.baseUrl === options.baseUrl &&
-		currentOptions.speed === options.speed
-	) {
+	const key = buildProviderCacheKey(options);
+	if (currentProvider && currentOptionsKey === key) {
 		return currentProvider;
 	}
 
@@ -143,6 +165,6 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 			currentProvider = new OpenAITTS(options);
 	}
 
-	currentOptions = { ...options };
+	currentOptionsKey = key;
 	return currentProvider;
 }

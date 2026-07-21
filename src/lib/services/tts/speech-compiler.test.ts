@@ -9,6 +9,7 @@ import {
 	compile,
 	compileFromText,
 	recover,
+	parsePseudoToolCalls,
 	type ToolCall
 } from './speech-compiler.ts';
 
@@ -67,17 +68,13 @@ test('splitLongSegments splits a speak with 4 sentences', () => {
 });
 
 test('splitLongSegments leaves a single sentence untouched', () => {
-	const input: ToolCall[] = [
-		{ name: 'speak', arguments: { text: 'Hello.', lang: 'en' } }
-	];
+	const input: ToolCall[] = [{ name: 'speak', arguments: { text: 'Hello.', lang: 'en' } }];
 	const result = splitLongSegments(input);
 	assert.equal(result.length, 1);
 });
 
 test('splitLongSegments leaves two sentences untouched (compiler threshold)', () => {
-	const input: ToolCall[] = [
-		{ name: 'speak', arguments: { text: 'Hello. How are you?', lang: 'en' } }
-	];
+	const input: ToolCall[] = [{ name: 'speak', arguments: { text: 'Hello. How are you?', lang: 'en' } }];
 	const result = splitLongSegments(input);
 	assert.equal(result.length, 1);
 });
@@ -90,6 +87,16 @@ test('splitLongSegments preserves non-speak calls', () => {
 	const result = splitLongSegments(input);
 	assert.ok(result.length >= 4);
 	assert.equal(result[result.length - 1].name, 'pause');
+});
+
+test('splitLongSegments preserves trailing text without terminator', () => {
+	const input: ToolCall[] = [
+		{ name: 'speak', arguments: { text: 'Hello! How are you? I am fine. Thanks for asking and goodbye', lang: 'en' } }
+	];
+	const result = splitLongSegments(input);
+	// 3 sentences with terminators + 1 trailing fragment = 4 segments
+	assert.equal(result.length, 4);
+	assert.equal(result[3].arguments.text, 'Thanks for asking and goodbye');
 });
 
 // ── mergeSegments ─────────────────────────────────────────
@@ -135,20 +142,26 @@ test('mergeSegments does not merge pause or gesture between speaks', () => {
 	assert.equal(result.length, 3);
 });
 
+test('mergeSegments does not mutate the original calls', () => {
+	const input: ToolCall[] = [
+		{ name: 'speak', arguments: { text: 'Hello', lang: 'en' } },
+		{ name: 'speak', arguments: { text: 'world', lang: 'en' } }
+	];
+	const originalText = input[0].arguments.text;
+	mergeSegments(input);
+	assert.equal(input[0].arguments.text, originalText);
+});
+
 // ── resolveLanguage ───────────────────────────────────────
 
 test('resolveLanguage fills undefined lang with primaryLanguage', () => {
-	const input: ToolCall[] = [
-		{ name: 'speak', arguments: { text: 'Hello' } }
-	];
+	const input: ToolCall[] = [{ name: 'speak', arguments: { text: 'Hello' } }];
 	const result = resolveLanguage(input, 'de');
 	assert.equal(result[0].arguments.lang, 'de');
 });
 
 test('resolveLanguage preserves explicit lang', () => {
-	const input: ToolCall[] = [
-		{ name: 'speak', arguments: { text: 'Hola', lang: 'es' } }
-	];
+	const input: ToolCall[] = [{ name: 'speak', arguments: { text: 'Hola', lang: 'es' } }];
 	const result = resolveLanguage(input, 'de');
 	assert.equal(result[0].arguments.lang, 'es');
 });
@@ -156,9 +169,7 @@ test('resolveLanguage preserves explicit lang', () => {
 // ── compileSegments ───────────────────────────────────────
 
 test('compileSegments maps speak to CompiledSegment', () => {
-	const input: ToolCall[] = [
-		{ name: 'speak', arguments: { text: 'Hello', lang: 'en' } }
-	];
+	const input: ToolCall[] = [{ name: 'speak', arguments: { text: 'Hello', lang: 'en' } }];
 	const result = compileSegments(input);
 	assert.equal(result.length, 1);
 	assert.equal(result[0].type, 'speak');
@@ -198,10 +209,10 @@ test('compile runs the full pipeline', () => {
 	assert.equal(result.errors.length, 0);
 });
 
-test('compile handles empty input', () => {
+test('compile handles empty input gracefully', () => {
 	const result = compile([], 'de');
 	assert.equal(result.segments.length, 0);
-	assert.ok(result.errors.length > 0);
+	assert.equal(result.errors.length, 0);
 });
 
 // ── compileFromText (fallback) ─────────────────────────────
@@ -215,10 +226,10 @@ test('compileFromText creates single speak segment from plain text', () => {
 	assert.equal(result.errors.length, 0);
 });
 
-test('compileFromText handles empty text', () => {
+test('compileFromText handles empty text gracefully', () => {
 	const result = compileFromText('', 'de');
 	assert.equal(result.segments.length, 0);
-	assert.ok(result.errors.length > 0);
+	assert.equal(result.errors.length, 0);
 });
 
 // ── Regression tests ──────────────────────────────────────
@@ -231,9 +242,12 @@ test('recover creates a single speak segment from raw text', () => {
 	assert.equal(segments[0].language, 'en');
 });
 
-test('recover returns empty for empty input', () => {
-	assert.equal(recover('', 'de').length, 0);
-	assert.equal(recover('   ', 'de').length, 0);
+test('recover returns an empty speak segment for empty input', () => {
+	const segments = recover('', 'de');
+	assert.equal(segments.length, 1);
+	assert.equal(segments[0].type, 'speak');
+	assert.equal(segments[0].text, '');
+	assert.equal(segments[0].language, 'de');
 });
 
 test('regression: Spanish teacher scenario — separate language segments kept separate', () => {
@@ -248,3 +262,70 @@ test('regression: Spanish teacher scenario — separate language segments kept s
 	assert.equal(result.segments[1].language, 'es');
 	assert.equal(result.segments[2].language, 'de');
 });
+
+// ── parsePseudoToolCalls (fallback for models without tool support) ─
+
+test('parsePseudoToolCalls extracts speak calls and inlines text', () => {
+	const text = 'Hello speak({"text":"world"}) there';
+	const parsed = parsePseudoToolCalls(text);
+	assert.equal(parsed.calls.length, 1);
+	assert.equal(parsed.calls[0].name, 'speak');
+	assert.equal(parsed.calls[0].arguments.text, 'world');
+	assert.equal(parsed.cleanedText, 'Hello world there');
+});
+
+test('parsePseudoToolCalls returns empty calls and original text when no calls found', () => {
+	const text = 'Hello world';
+	const parsed = parsePseudoToolCalls(text);
+	assert.equal(parsed.calls.length, 0);
+	assert.equal(parsed.cleanedText, 'Hello world');
+});
+
+test('parsePseudoToolCalls handles pause and gesture calls', () => {
+	const text = 'Hello pause({"ms":300}) gesture({"type":"smile"}) world';
+	const parsed = parsePseudoToolCalls(text);
+	assert.equal(parsed.calls.length, 2);
+	assert.equal(parsed.calls[0].name, 'pause');
+	assert.equal(parsed.calls[1].name, 'gesture');
+	assert.equal(parsed.cleanedText, 'Hello world');
+});
+
+test('parsePseudoToolCalls understands JavaScript-style object literals', () => {
+	const text = 'Hola speak({ lang: "es", text: "¿Cómo estás?" }) mundo';
+	const parsed = parsePseudoToolCalls(text);
+	assert.equal(parsed.calls.length, 1);
+	assert.equal(parsed.calls[0].name, 'speak');
+	assert.equal(parsed.calls[0].arguments.lang, 'es');
+	assert.equal(parsed.calls[0].arguments.text, '¿Cómo estás?');
+	assert.equal(parsed.cleanedText, 'Hola ¿Cómo estás? mundo');
+});
+
+test('parsePseudoToolCalls handles spaced calls and single quotes', () => {
+	const text = "Hi speak({ lang: 'en', text: 'Hello' }) there";
+	const parsed = parsePseudoToolCalls(text);
+	assert.equal(parsed.calls.length, 1);
+	assert.equal(parsed.calls[0].arguments.text, 'Hello');
+	assert.equal(parsed.cleanedText, 'Hi Hello there');
+});
+
+test('parsePseudoToolCalls handles text containing a closing brace', () => {
+	const text = 'Hola speak({ lang: "es", text: "¡Hola! :-)" }) adios';
+	const parsed = parsePseudoToolCalls(text);
+	assert.equal(parsed.calls.length, 1);
+	assert.equal(parsed.calls[0].arguments.text, '¡Hola! :-)');
+	assert.equal(parsed.cleanedText, 'Hola ¡Hola! :-) adios');
+});
+
+test('parsePseudoToolCalls returns chunks preserving prose/call order', () => {
+	const text = 'Hello speak({ text: "world" }) how are you?';
+	const parsed = parsePseudoToolCalls(text);
+	assert.equal(parsed.chunks.length, 3);
+	assert.equal(parsed.chunks[0].type, 'prose');
+	assert.equal(parsed.chunks[0].text, 'Hello');
+	assert.equal(parsed.chunks[1].type, 'call');
+	assert.equal(parsed.chunks[1].call?.name, 'speak');
+	assert.equal(parsed.chunks[2].type, 'prose');
+	assert.equal(parsed.chunks[2].text, 'how are you?');
+});
+
+

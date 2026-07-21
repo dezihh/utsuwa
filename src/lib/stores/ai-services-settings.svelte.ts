@@ -336,6 +336,10 @@ export function createTtsSettingsState() {
 		modulesStore.setModuleSetting('speech', 'speed', value);
 	}
 
+	function handleTTSAltSpeedChange(value: number) {
+		modulesStore.setModuleSetting('speech', 'altSpeed', value);
+	}
+
 	function handleTTSVoiceChange(voiceId: string) {
 		modulesStore.setModuleSetting('speech', 'activeVoiceId', voiceId);
 	}
@@ -407,6 +411,7 @@ export function createTtsSettingsState() {
 		handleTTSProviderChange,
 		handleTTSModelChange,
 		handleTTSSpeedChange,
+		handleTTSAltSpeedChange,
 		handleTTSVoiceChange,
 		handleTTSInstructionsChange,
 		handleTTSAltInstructionsChange,

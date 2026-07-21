@@ -96,6 +96,20 @@ export const speechModule: ModuleDefinition = {
 				defaultValue: 32
 			},
 			{
+				key: 'altSpeed',
+				type: 'number',
+				label: 'Alternative Voice Speed',
+				description: 'Speech rate for the alternative language (0.5-2.0). Falls back to primary speed.',
+				defaultValue: 1.0
+			},
+			{
+				key: 'altNumStep',
+				type: 'number',
+				label: 'Alternative Diffusion Steps',
+				description: 'Quality for the alternative language (4-64). Falls back to primary numStep.',
+				defaultValue: 32
+			},
+			{
 				key: 'positionTemperature',
 				type: 'number',
 				label: 'Voice Diversity',

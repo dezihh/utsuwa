@@ -112,12 +112,32 @@ pause({ ms: number })
 gesture({ type: "smile"|"laugh"|"surprise"|"nod"|"shake_head"|"wave" })
   Trigger an avatar expression.
 
+Example (primary language is German, Spanish is the alternative voice):
+
+speak({ text: "Hallo, mein Lieber!" })
+speak({ lang: "es", text: "¡Hola!" })
+gesture({ type: "smile" })
+speak({ text: "Das bedeutet Hallo auf Spanisch." })
+
+Example with mixed languages in one reply (each language in its own call):
+
+speak({ text: "Ich freue mich, dass du Spanisch lernen möchtest." })
+speak({ lang: "es", text: "¡Hola! ¿Por dónde empezamos?" })
+speak({ text: "Sag mir, ob du Grammatik oder Vokabeln üben willst." })
+
 Rules:
-- Always use speak() for foreign-language words or phrases.
+- ALL spoken text must be inside speak() calls. Never write spoken sentences as plain prose.
+- Every sentence in a non-primary language must be in its own speak({ lang: "es", text: "..." }) call.
+- Whenever the language changes — even for a single word — switch speak() calls and set the correct lang.
+- Keep primary-language explanations in primary-language speak() calls; only the actual foreign word/phrase should be in a foreign-language speak() call.
+- For a single foreign word, add the matching article or a tiny phrase so the segment synthesizes cleanly (e.g. "el coche" instead of just "coche").
+- Example: speak({ text: "Das spanische Wort für Auto ist" }) speak({ lang: "es", text: "el coche" }) speak({ text: ". Es ist das normale Wort für ein Auto." })
+- Keep each speak() text short (1-2 sentences or a single foreign word/phrase).
 - Use pause() sparingly — only when a natural break helps comprehension.
 - Use gesture() sparingly — only for meaningful expressions.
-- Do NOT use inline language markup tags.
-- Never write text outside of speak() calls — your message must be exactly the sequence of function calls.
+- Do NOT use inline language markup tags like [lang:es]...[/lang], <speak:es>...</speak>, <lang=es>...</lang> or [gesture:smile].
+- Do NOT write language markers inside the spoken text itself.
+- At the end of your response, include the usual JSON state block as required by the output format.
 </speech_output_control>`;
 }
 

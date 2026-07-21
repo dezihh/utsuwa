@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -30,7 +31,7 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from omnivoice import OmniVoice, VoiceClonePrompt
 
 logger = logging.getLogger("omnivoice-proxy")
@@ -155,6 +156,22 @@ app.add_middleware(
 )
 
 
+# Ensure CORS headers are also present on uncaught exceptions so the browser
+# surfaces the real error instead of a generic CORS failure.
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    status = 500
+    detail = str(exc)
+    if isinstance(exc, HTTPException):
+        status = exc.status_code
+        detail = exc.detail
+    return JSONResponse(
+        status_code=status,
+        content={"error": detail},
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
 @app.get("/health")
 async def health():
     if _app_started:
@@ -191,19 +208,61 @@ async def clone_voice(
     _get_voice_dir().mkdir(parents=True, exist_ok=True)
 
     suffix = Path(ref_audio.filename or "audio.wav").suffix or ".wav"
+    file_bytes = await ref_audio.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded audio file is empty")
+
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(await ref_audio.read())
+        tmp.write(file_bytes)
         tmp_path = tmp.name
 
+    # Normalize to a clean 24 kHz mono WAV that OmniVoice can ingest.
+    # This also repairs files with broken headers or non-PCM content.
+    normalized_path = tmp_path + ".normalized.wav"
     try:
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i", tmp_path,
+                    "-ar", "24000",
+                    "-ac", "1",
+                    "-c:a", "pcm_s16le",
+                    normalized_path,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error("ffmpeg normalization failed: %s", e.stderr)
+            raise HTTPException(status_code=400, detail=f"Could not normalize audio: {e.stderr}") from None
+
+        try:
+            import soundfile as sf
+            info = sf.info(normalized_path)
+            if info.duration <= 0:
+                raise HTTPException(status_code=400, detail="Normalized audio has zero duration")
+        except Exception as e:
+            logger.warning("Could not inspect clone audio: %s", e)
+
         prompt = await loop.run_in_executor(
             None,
-            lambda: _model.create_voice_clone_prompt(ref_audio=tmp_path, ref_text=ref_text or None),
+            lambda: _model.create_voice_clone_prompt(
+                ref_audio=normalized_path,
+                ref_text=ref_text or None,
+                preprocess_prompt=False,
+            ),
         )
         out_path = _get_voice_dir() / f"{voice_id}.pt"
         await loop.run_in_executor(None, prompt.save, str(out_path))
     finally:
-        os.unlink(tmp_path)
+        for p in (tmp_path, normalized_path):
+            try:
+                os.unlink(p)
+            except FileNotFoundError:
+                pass
 
     return {"id": f"clone:{voice_id}"}
 
@@ -230,6 +289,9 @@ async def speech(request: Request):
     num_step = body.get("num_step")
     position_temperature = body.get("position_temperature")
     class_temperature = body.get("class_temperature")
+
+    logger.info("speech request: voice=%r instructions=%r speed=%s num_step=%s pos_temp=%s class_temp=%s",
+                voice, instructions, speed, num_step, position_temperature, class_temperature)
 
     wav = await _generate(
         text,

@@ -1,6 +1,14 @@
 import { type TTSOptions } from '$lib/services/tts';
-import { VoiceOrchestrator, type SpeechSegment } from '$lib/services/voice-orchestrator';
+import { VoiceOrchestrator } from '$lib/services/voice-orchestrator';
 import { splitIntoSentences } from '$lib/utils/sentences';
+import {
+	parsePseudoToolCalls,
+	compile,
+	compileFromText,
+	type CompiledSegment
+} from '$lib/services/tts/speech-compiler';
+import { normalizeLanguageTags } from '$lib/services/tts/language-tag-normalizer';
+import { SpeechScheduler } from '$lib/services/tts/speech-scheduler';
 import {
 	canSpeak,
 	clearQueue,
@@ -14,9 +22,6 @@ function createTTSStore() {
 	let isSpeaking = $state(false);
 	let currentAnalyser = $state<AnalyserNode | null>(null);
 	let queue = $state<QueueItem[]>([]);
-	// Last playback failure, surfaced by the UI as a toast. Silent failures made
-	// misconfigurations (like a stale voice id from another provider) look like
-	// the companion just chose not to speak.
 	let lastError = $state<string | null>(null);
 	let errorTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -28,14 +33,50 @@ function createTTSStore() {
 		errorTimer = setTimeout(() => (lastError = null), 8000);
 	}
 
-	function buildCallbacks(): {
-		onAnalyserUpdate: (analyser: AnalyserNode) => void;
-	} {
-		return {
-			onAnalyserUpdate: (analyser: AnalyserNode) => {
-				currentAnalyser = analyser;
+	function buildCompiledSegments(text: string, options: TTSOptions): CompiledSegment[] {
+		const primaryLang = options.language || 'de';
+
+		if (options.provider === 'omnivoice') {
+			// First try real tool-call syntax emitted by the model.
+			const parsed = parsePseudoToolCalls(text);
+			console.log('[OmniVoice] parsed pseudo calls:', parsed.calls.length, parsed.calls);
+			if (parsed.calls.length > 0) {
+				// If the model also wrote plain prose around the calls, treat that
+				// prose as primary-language speak() segments so nothing is lost.
+				const mixedCalls = parsed.chunks.flatMap((chunk) => {
+					if (chunk.type === 'call' && chunk.call) {
+						return [chunk.call];
+					}
+					if (chunk.type === 'prose' && chunk.text) {
+						return splitIntoSentences(chunk.text).map((sentence) => ({
+							name: 'speak' as const,
+							arguments: { text: sentence, lang: primaryLang }
+						}));
+					}
+					return [];
+				});
+				const segments = compile(mixedCalls, primaryLang).segments;
+				console.log('[OmniVoice] compiled segments:', segments);
+				return segments;
 			}
-		};
+
+			// Fallback: normalize inline language/gesture markers (e.g. <speak:es>,
+			// [lang:es], <gesture:smile>) into speak()/gesture() calls.
+			const normalized = normalizeLanguageTags(text, primaryLang);
+			console.log('[OmniVoice] normalized language tags:', normalized.calls);
+			if (normalized.calls.length > 0) {
+				const segments = compile(normalized.calls, primaryLang).segments;
+				console.log('[OmniVoice] compiled segments:', segments);
+				return segments;
+			}
+
+			// Final fallback: treat the whole text as one primary-language segment.
+			console.log('[OmniVoice] falling back to single text segment');
+			return compileFromText(text, primaryLang).segments;
+		}
+
+		const sentences = splitIntoSentences(text);
+		return sentences.map((sentence) => ({ type: 'speak' as const, text: sentence, language: primaryLang }));
 	}
 
 	const engine: QueueEngine = {
@@ -47,10 +88,18 @@ function createTTSStore() {
 			queue = value.queue;
 		},
 		play: async (item) => {
-			const sentences = splitIntoSentences(item.text);
-			const segments: SpeechSegment[] = sentences.map((sentence) => ({ text: sentence }));
+			const segments = buildCompiledSegments(item.text, item.options);
 
-			await orchestrator.speakSegments(segments, item.options, buildCallbacks());
+			// Skip non-speech content early (emoji-only, empty, etc.).
+			const hasSpeakable = segments.some(
+				(s) => s.type === 'speak' && s.text?.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s\p{P}]/gu, '').trim()
+			);
+			if (!hasSpeakable) {
+				return;
+			}
+
+			const scheduler = new SpeechScheduler(orchestrator);
+			await scheduler.beginPlan(segments, item.options);
 		},
 		onError: (error) => {
 			console.error('TTS error:', error);
@@ -62,7 +111,6 @@ function createTTSStore() {
 	};
 
 	async function speak(text: string, options: TTSOptions) {
-		// Cloud providers need a key; local servers (e.g. Kokoro) don't.
 		if (!canSpeak(options)) {
 			console.warn('TTS not configured - missing API key');
 			return;
@@ -79,8 +127,6 @@ function createTTSStore() {
 
 	function stop() {
 		orchestrator.interrupt();
-		// clearQueue resets the queue snapshot only; currentAnalyser is store-level
-		// state and is cleared separately below.
 		const cleared = clearQueue({ isSpeaking, queue });
 		isSpeaking = cleared.isSpeaking;
 		queue = cleared.queue;

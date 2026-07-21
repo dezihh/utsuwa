@@ -151,7 +151,7 @@ If the setting is left off, Utsuwa keeps the historical defaults (10 retrieved t
 |----------|-----------|
 | **Cloud** | ElevenLabs, OpenAI TTS |
 | **Local** | Local TTS (Kokoro-FastAPI, openedai-speech, any OpenAI-compatible server) |
-| **Local** | OmniVoice — locally run TTS with 600+ languages, voice design and voice cloning. Requires the OmniVoice proxy (`python tools/omnivoice-proxy.py --device cuda`). Voice cloning needs a reference text (ASR is disabled to avoid Whisper model dependency). |
+| **Local** | OmniVoice — locally run TTS with 600+ languages, voice design and voice cloning, multilingual sentence-by-sentence playback with automatic voice switching, plus optional pauses and avatar gestures. Requires the OmniVoice proxy (`python tools/omnivoice-proxy.py --device cuda`). Voice cloning needs a reference text (ASR is disabled to avoid Whisper model dependency). |
 
 ### STT Providers (4)
 

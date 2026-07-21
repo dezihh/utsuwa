@@ -33,8 +33,8 @@ export class SpeechScheduler {
 	private orchestrator: VoiceOrchestrator;
 	private storeGesture: GestureStore;
 	private storeSubtitle: SubtitleStore;
-	private gestureTimers: number[] = [];
-	private aborted = false;
+	private timers: ReturnType<typeof setTimeout>[] = [];
+	private abortController: AbortController | null = null;
 
 	constructor(orchestrator: VoiceOrchestrator) {
 		this.orchestrator = orchestrator;
@@ -50,82 +50,93 @@ export class SpeechScheduler {
 	}
 
 	async beginPlan(segments: CompiledSegment[], options: TTSOptions): Promise<void> {
-		this.aborted = false;
-		this.clearGestureTimers();
+		this.abortController = new AbortController();
+		this.clearTimers();
 
-		const speechSegments: SpeechSegment[] = [];
+		this.orchestrator.beginSession(options, {
+			onSegmentStart: (segment: SpeechSegment) => {
+				this.storeSubtitle.text = segment.text;
+			},
+			onComplete: () => {
+				this.storeSubtitle.visible = false;
+				this.clearTimers();
+			}
+		});
+
 		for (const seg of segments) {
-			if (this.aborted) break;
+			if (this.abortController.signal.aborted) break;
 
 			if (seg.type === 'gesture') {
 				this.scheduleGesture(seg);
 				continue;
 			}
+
 			if (seg.type === 'pause') {
 				if (seg.durationMs && seg.durationMs > 0) {
 					await this.delay(seg.durationMs);
 				}
 				continue;
 			}
+
 			// speak
 			this.storeSubtitle.visible = true;
 			this.storeSubtitle.text = seg.text;
 			this.storeSubtitle.language = seg.language;
 
-			speechSegments.push({
+			this.orchestrator.pushSegment({
 				text: seg.text ?? '',
 				language: seg.language
 			});
 		}
 
-		if (speechSegments.length === 0) {
-			this.storeSubtitle.visible = false;
-			return;
-		}
-
-		// Use the existing orchestrator pipeline.
-		// It handles voiceId/instructions mapping internally.
-		await this.orchestrator.speakSegments(speechSegments, options, {
-			onSegmentStart: (segment: SpeechSegment) => {
-				this.storeSubtitle.text = segment.text;
-			},
-			onComplete: () => {
-				this.storeSubtitle.visible = false;
-				this.clearGestureTimers();
-			}
-		});
+		if (this.abortController.signal.aborted) return;
+		await this.orchestrator.endSession();
 	}
 
 	interrupt(): void {
-		this.aborted = true;
+		this.abortController?.abort();
 		this.orchestrator.interrupt();
 		this.storeSubtitle.visible = false;
-		this.clearGestureTimers();
+		this.clearTimers();
 	}
 
 	private scheduleGesture(seg: CompiledSegment): void {
+		if (this.abortController?.signal.aborted) return;
+
 		this.storeGesture.active = true;
 		this.storeGesture.type = seg.gestureType;
 
 		const duration = seg.durationMs ?? 1500;
-		const timer = window.setTimeout(() => {
+		const timer = setTimeout(() => {
+			if (this.abortController?.signal.aborted) return;
 			this.storeGesture.active = false;
 		}, duration);
-		this.gestureTimers.push(timer);
+		this.timers.push(timer);
 	}
 
-	private clearGestureTimers(): void {
-		for (const t of this.gestureTimers) {
+	private clearTimers(): void {
+		for (const t of this.timers) {
 			clearTimeout(t);
 		}
-		this.gestureTimers = [];
+		this.timers = [];
 		this.storeGesture.active = false;
 	}
 
 	private delay(ms: number): Promise<void> {
 		return new Promise((resolve) => {
-			const timer = window.setTimeout(resolve, ms);
-			this.gestureTimers.push(timer);
+			const signal = this.abortController?.signal;
+			if (signal?.aborted) {
+				resolve();
+				return;
+			}
+
+			const timer = setTimeout(resolve, ms);
+			this.timers.push(timer);
+
+			signal?.addEventListener('abort', () => {
+				clearTimeout(timer);
+				resolve();
+			}, { once: true });
 		});
 	}
 }

@@ -30,6 +30,55 @@ export interface SpeechSegment {
 	voiceId?: string;
 }
 
+/** Result of resolving whether a segment should use the alternative voice. */
+export interface VoiceResolution {
+	voiceId?: string;
+	inferredPrimaryLang: string | undefined;
+	lastSegmentLang: string | undefined;
+}
+
+/**
+ * Decide whether a segment should switch to the alternative voice.
+ *
+ * The switch only happens when the user explicitly enabled the alternative
+ * voice (`enableAltLanguage === true`) and configured an `altVoiceId`. The
+ * segment must not already have an explicit voice selector.
+ *
+ * Keeps the inferred primary language and last-segment-language state so the
+ * caller can update its session bookkeeping.
+ */
+export function resolveSegmentVoice(
+	segment: SpeechSegment,
+	sessionOptions: TTSOptions,
+	inferredPrimaryLang: string | undefined,
+	lastSegmentLang: string | undefined
+): VoiceResolution {
+	let voiceId = segment.voiceId;
+	let newInferredPrimaryLang = inferredPrimaryLang;
+	const newLastSegmentLang = segment.language !== undefined ? segment.language : lastSegmentLang;
+
+	if (
+		!voiceId &&
+		sessionOptions.enableAltLanguage === true &&
+		sessionOptions.altVoiceId &&
+		segment.language
+	) {
+		if (newInferredPrimaryLang === undefined) {
+			newInferredPrimaryLang = segment.language;
+		}
+		const primaryLang = sessionOptions.language || newInferredPrimaryLang;
+		const altLang = sessionOptions.altLanguage;
+		const shouldUseAlt = altLang
+			? segment.language === altLang
+			: segment.language !== primaryLang;
+		if (shouldUseAlt) {
+			voiceId = 'alt';
+		}
+	}
+
+	return { voiceId, inferredPrimaryLang: newInferredPrimaryLang, lastSegmentLang: newLastSegmentLang };
+}
+
 /** Callbacks the orchestrator fires so the UI can react synchronously. */
 export interface OrchestratorCallbacks {
 	/** Fired when a segment starts playing - for speech bubble sync */
@@ -251,23 +300,17 @@ export class VoiceOrchestrator {
 		);
 		if (!textContent.trim()) return;
 
-		// Auto-assign alt voice when language differs from the configured primary language.
-		// Requires sessionOptions.language or at least one segment to provide a language hint.
-		if (!segment.voiceId && this.sessionOptions.altVoiceId && segment.language) {
-			if (this.inferredPrimaryLang === undefined) {
-				this.inferredPrimaryLang = segment.language;
-				this.lastSegmentLang = segment.language;
-			}
-			const primaryLang = this.sessionOptions.language || this.inferredPrimaryLang;
-			const altLang = this.sessionOptions.altLanguage;
-			const shouldUseAlt = altLang
-				? segment.language === altLang
-				: segment.language !== primaryLang;
-			if (shouldUseAlt) {
-				segment = { ...segment, voiceId: 'alt' };
-			}
-		}
-		this.lastSegmentLang = segment.language !== undefined ? segment.language : this.lastSegmentLang;
+		// Auto-assign alt voice when the user explicitly enabled the alternative
+		// voice and configured an altVoiceId.
+		const resolution = resolveSegmentVoice(
+			segment,
+			this.sessionOptions,
+			this.inferredPrimaryLang,
+			this.lastSegmentLang
+		);
+		segment = { ...segment, voiceId: resolution.voiceId };
+		this.inferredPrimaryLang = resolution.inferredPrimaryLang;
+		this.lastSegmentLang = resolution.lastSegmentLang;
 
 		const provider = getTTSProvider(this.sessionOptions);
 		const abort = this.pipelineAbort;
@@ -441,18 +484,21 @@ export class VoiceOrchestrator {
 		segment: SpeechSegment,
 		signal: AbortSignal
 	): Promise<AudioBuffer | null> {
+		const resolvedVoiceId = this.resolveVoiceId(segment.voiceId);
+		const isAlt = resolvedVoiceId && resolvedVoiceId === this.sessionOptions?.altVoiceId;
+
 		const streamOpts: StreamOptions = {
 			emotion: segment.emotion,
 			exaggeration: segment.exaggeration,
 			language: segment.language,
-			speed: segment.speed ?? this.sessionOptions?.speed,
+			speed: segment.speed
+				?? (isAlt ? this.sessionOptions?.altSpeed : undefined)
+				?? this.sessionOptions?.speed,
 			pitch: segment.pitch,
 			volume: segment.volume,
-			voiceId: this.resolveVoiceId(segment.voiceId),
+			voiceId: resolvedVoiceId,
 			signal
 		};
-
-		const resolvedVoiceId = streamOpts.voiceId;
 		if (this.sessionOptions?.instructions || this.sessionOptions?.altInstructions) {
 			const isAlt = resolvedVoiceId && resolvedVoiceId === this.sessionOptions?.altVoiceId;
 			const instr = isAlt
@@ -463,9 +509,21 @@ export class VoiceOrchestrator {
 			}
 		}
 
-		if (this.sessionOptions?.numStep != null) streamOpts.numStep = this.sessionOptions.numStep;
+		if (this.sessionOptions?.numStep != null || this.sessionOptions?.altNumStep != null) {
+			streamOpts.numStep = (isAlt ? this.sessionOptions?.altNumStep : undefined)
+				?? this.sessionOptions?.numStep;
+		}
 		if (this.sessionOptions?.positionTemperature != null) streamOpts.positionTemperature = this.sessionOptions.positionTemperature;
 		if (this.sessionOptions?.classTemperature != null) streamOpts.classTemperature = this.sessionOptions.classTemperature;
+
+		console.log('[VoiceOrchestrator] synthesizing segment:', {
+			text: segment.text,
+			language: segment.language,
+			voiceId: segment.voiceId,
+			resolvedVoiceId,
+			isAlt,
+			streamOpts
+		});
 
 		if (signal.aborted) return null;
 

@@ -202,3 +202,114 @@ test('interrupt stops playback and onComplete fires', async () => {
 	assert.equal(complete, true);
 	assert.equal(orchestrator.getIsPlaying(), false);
 });
+
+// ── resolveSegmentVoice (alt-voice switching) ───────────────
+
+import { resolveSegmentVoice } from './voice-orchestrator.ts';
+
+function seg(text: string, language: string, voiceId?: string): SpeechSegment {
+	return { text, language, voiceId };
+}
+
+function altOpts(overrides: Partial<TTSOptions> = {}): TTSOptions {
+	return {
+		provider: 'omnivoice',
+		voiceId: 'alloy',
+		language: 'de',
+		altLanguage: 'es',
+		altVoiceId: 'onyx',
+		enableAltLanguage: true,
+		...overrides
+	};
+}
+
+test('resolveSegmentVoice switches to alt voice when language matches altLanguage', () => {
+	const result = resolveSegmentVoice(seg('Hola', 'es'), altOpts(), undefined, undefined);
+	assert.equal(result.voiceId, 'alt');
+});
+
+test('resolveSegmentVoice keeps primary voice for primary language', () => {
+	const result = resolveSegmentVoice(seg('Hallo', 'de'), altOpts(), undefined, undefined);
+	assert.equal(result.voiceId, undefined);
+});
+
+test('resolveSegmentVoice does not switch when enableAltLanguage is false', () => {
+	const result = resolveSegmentVoice(
+		seg('Hola', 'es'),
+		altOpts({ enableAltLanguage: false }),
+		undefined,
+		undefined
+	);
+	assert.equal(result.voiceId, undefined);
+});
+
+test('resolveSegmentVoice does not switch when altVoiceId is missing', () => {
+	const result = resolveSegmentVoice(
+		seg('Hola', 'es'),
+		altOpts({ altVoiceId: undefined }),
+		undefined,
+		undefined
+	);
+	assert.equal(result.voiceId, undefined);
+});
+
+test('resolveSegmentVoice infers primary language when session language is unset', () => {
+	const result = resolveSegmentVoice(seg('Hallo', 'de'), altOpts({ language: undefined }), undefined, undefined);
+	assert.equal(result.inferredPrimaryLang, 'de');
+	assert.equal(result.voiceId, undefined);
+
+	const next = resolveSegmentVoice(
+		seg('Hola', 'es'),
+		altOpts({ language: undefined }),
+		result.inferredPrimaryLang,
+		result.lastSegmentLang
+	);
+	assert.equal(next.voiceId, 'alt');
+});
+
+test('resolveSegmentVoice falls back to language difference when altLanguage is unset', () => {
+	const result = resolveSegmentVoice(seg('Hello', 'en'), altOpts({ altLanguage: undefined }), 'de', 'de');
+	assert.equal(result.voiceId, 'alt');
+});
+
+test('resolveSegmentVoice preserves explicit voice selector', () => {
+	const result = resolveSegmentVoice(seg('Hola', 'es', 'default'), altOpts(), undefined, undefined);
+	assert.equal(result.voiceId, 'default');
+});
+
+test('resolveSegmentVoice tracks last segment language', () => {
+	const result = resolveSegmentVoice(seg('Hola', 'es'), altOpts(), undefined, 'de');
+	assert.equal(result.lastSegmentLang, 'es');
+});
+
+test('speakSegments uses altVoiceId for segments tagged with alt language', async () => {
+	const fetchCalls: { url: string; body: Record<string, unknown> }[] = [];
+	// @ts-expect-error global fetch mock
+	globalThis.fetch = (url: string, init: RequestInit) => {
+		fetchCalls.push({ url, body: parseBody(init) });
+		return mockFetchResponse();
+	};
+
+	const orchestrator = new VoiceOrchestrator();
+	const segments: SpeechSegment[] = [
+		{ text: 'Hallo.', language: 'de' },
+		{ text: 'Hola.', language: 'es' }
+	];
+
+	await orchestrator.speakSegments(
+		segments,
+		{
+			provider: 'omnivoice',
+			voiceId: 'clone:Female1',
+			altVoiceId: 'Male1',
+			language: 'de',
+			altLanguage: 'es',
+			enableAltLanguage: true
+		},
+		{}
+	);
+
+	assert.equal(fetchCalls.length, 2);
+	assert.equal(fetchCalls[0].body.voice, 'clone:Female1');
+	assert.equal(fetchCalls[1].body.voice, 'Male1');
+});

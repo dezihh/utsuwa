@@ -18,6 +18,7 @@ import { processCompanionTurn } from '$lib/services/chat/companion-turn';
 import { retrieveRelevantContext } from '$lib/engine/memory';
 import { buildSystemPrompt, truncateChatHistory, type PromptContext } from '$lib/ai/prompt-builder';
 import { keepImage, type PreparedImage } from '$lib/services/storage/keepsakes';
+import { cleanSpeechMarkers } from '$lib/services/tts/chat-text';
 import { extractReminderTags, tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
 import { reminderStore } from '$lib/stores/reminders.svelte';
 import { getWorkingMemory, ensureSession } from '$lib/engine/memory';
@@ -211,7 +212,15 @@ export async function sendCompanionMessage(
 		const selectedModel = model || providerMeta?.models?.[0]?.id || '';
 		const baseURL = providerConfig.baseUrl || providerMeta?.defaultBaseUrl;
 		let messages = buildMessages(images);
-		const onDelta = (full: string) => chatStore.updateLastMessage(full);
+		const displaySpeechSettings = modulesStore.getModuleSettings('speech');
+		const displayTtsProvider = displaySpeechSettings.activeProvider as TTSProvider;
+		const onDelta = (full: string) => {
+			const display =
+				displayTtsProvider === 'omnivoice'
+					? cleanSpeechMarkers(full, (displaySpeechSettings.primaryLanguage as string) || 'de')
+					: full;
+			chatStore.updateLastMessage(display);
+		};
 
 		// Truncate message history to the configured context window. This applies
 		// to every provider so users can size prompts to their model's limit.
@@ -321,19 +330,43 @@ export async function sendCompanionMessage(
 			);
 		}
 
-		chatStore.updateLastMessage(turn.dialogue);
-		hooks.setLatestResponse(turn.dialogue);
+		// OmniVoice may still emit legacy/inline language markers depending on the
+		// model's instruction following. Strip them from the visible chat text and
+		// from the VRM lip-sync input, while the raw turn.dialogue stays available
+		// for the TTS pipeline (which normalizes markers into tool calls).
+		const displayDialogue =
+			displayTtsProvider === 'omnivoice'
+				? cleanSpeechMarkers(turn.dialogue, (displaySpeechSettings.primaryLanguage as string) || 'de')
+				: turn.dialogue;
+
+		chatStore.updateLastMessage(displayDialogue);
+		hooks.setLatestResponse(displayDialogue);
 
 		if (turn.dialogue) {
-			vrmStore.startTalking(turn.dialogue);
+			vrmStore.startTalking(displayDialogue);
 
 			const speechState = modulesStore.getModuleState('speech');
 			const speechSettings = modulesStore.getModuleSettings('speech');
+
+			// Fallback: older saved settings may have altInstructions but no
+			// altVoiceId. Pick a matching OmniVoice preset so the switch works.
+			function resolveAltVoiceId(instructions: string | undefined, fallback: string): string {
+				if (!instructions) return fallback;
+				const i = instructions.toLowerCase();
+				if (i.includes('male') && !i.includes('female')) return 'onyx';
+				return 'alloy';
+			}
+
+			const configuredAltVoiceId = (speechSettings.altVoiceId as string) || undefined;
+			const altInstructions = (speechSettings.altInstructions as string) || undefined;
+			const effectiveAltVoiceId =
+				configuredAltVoiceId || resolveAltVoiceId(altInstructions, 'onyx');
+
 			if (speechState?.enabled) {
 				const ttsProvider = speechSettings.activeProvider as TTSProvider;
 				const ttsConfig = settingsStore.getProviderConfig(ttsProvider);
 				const ttsMeta = getTTSProvider(ttsProvider);
-				ttsStore.speak(turn.dialogue, {
+				const ttsSpeakOptions = {
 					provider: ttsProvider,
 					apiKey: ttsConfig.apiKey,
 					voiceId: (speechSettings.activeVoiceId as string) || ttsConfig.voiceId,
@@ -344,11 +377,15 @@ export async function sendCompanionMessage(
 					altInstructions: (speechSettings.altInstructions as string) || undefined,
 					language: (speechSettings.primaryLanguage as string) || undefined,
 					altLanguage: (speechSettings.altLanguage as string) || undefined,
-					altVoiceId: (speechSettings.altVoiceId as string) || undefined,
+					altVoiceId: effectiveAltVoiceId,
+					enableAltLanguage: (speechSettings.enableAltLanguage as boolean) ?? false,
 					numStep: (speechSettings.numStep as number) ?? undefined,
+					altSpeed: (speechSettings.altSpeed as number) ?? undefined,
+					altNumStep: (speechSettings.altNumStep as number) ?? undefined,
 					positionTemperature: (speechSettings.positionTemperature as number) ?? undefined,
 					classTemperature: (speechSettings.classTemperature as number) ?? undefined
-				});
+				};
+				ttsStore.speak(turn.dialogue, ttsSpeakOptions);
 			}
 		}
 	} catch (err) {

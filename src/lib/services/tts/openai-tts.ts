@@ -6,6 +6,47 @@ import {
 	type StreamOptions,
 	type TTSCapabilities
 } from './index.ts';
+
+/**
+ * Build the request body for an OpenAI-compatible /audio/speech endpoint.
+ * Exported so the body-construction logic can be unit-tested without an
+ * AudioContext or a real fetch.
+ */
+export function buildOpenAITTSRequestBody(
+	providerId: string,
+	model: string,
+	voiceId: string,
+	speed: number,
+	text: string,
+	streamOptions?: StreamOptions
+): Record<string, unknown> {
+	const isOmnivoice = providerId === 'omnivoice';
+	// Per-segment voice overrides (e.g. alternative language voice) take precedence
+	// over the provider's default/primary voice.
+	const effectiveVoiceId = streamOptions?.voiceId ?? voiceId;
+	const body: Record<string, unknown> = {
+		model,
+		input: text,
+		voice: effectiveVoiceId,
+		speed: streamOptions?.speed ?? speed,
+		response_format: isOmnivoice ? 'wav' : 'mp3'
+	};
+
+	const instructions = streamOptions?.instructions;
+	if (isOmnivoice && instructions) {
+		body.instructions = instructions;
+	}
+	if (isOmnivoice) {
+		if (streamOptions?.numStep != null) body.num_step = streamOptions.numStep;
+		if (streamOptions?.positionTemperature != null) {
+			body.position_temperature = streamOptions.positionTemperature;
+		}
+		if (streamOptions?.classTemperature != null) {
+			body.class_temperature = streamOptions.classTemperature;
+		}
+	}
+	return body;
+}
 import {
 	getTTSBaseUrl,
 	getLocalTTSConnectionHint,
@@ -78,23 +119,16 @@ export class OpenAITTS implements ITTSProvider {
 			headers.Authorization = `Bearer ${this.apiKey}`;
 		}
 
-		const isOmnivoice = this.providerId === 'omnivoice';
-		const body: Record<string, unknown> = {
-			model: this.model,
-			input: text,
-			voice: this.voiceId,
-			speed: options?.speed ?? this.speed,
-			response_format: isOmnivoice ? 'wav' : 'mp3'
-		};
-		const instructions = options?.instructions;
-		if (isOmnivoice && instructions) {
-			body.instructions = instructions;
-		}
-		if (isOmnivoice) {
-			if (options?.numStep != null) body.num_step = options.numStep;
-			if (options?.positionTemperature != null) body.position_temperature = options.positionTemperature;
-			if (options?.classTemperature != null) body.class_temperature = options.classTemperature;
-		}
+		const body = buildOpenAITTSRequestBody(
+			this.providerId,
+			this.model,
+			this.voiceId,
+			this.speed,
+			text,
+			options
+		);
+
+		console.log('[OpenAITTS] request body:', body);
 
 		let response: Response;
 		try {

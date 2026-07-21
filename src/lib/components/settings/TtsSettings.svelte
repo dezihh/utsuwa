@@ -79,8 +79,8 @@ const GENDERS = ['male', 'female'] as const;
 		let gender = 'female';
 		let pitch = 'moderate';
 		let age = 'young adult';
-		if (i.includes('male')) gender = 'male';
-		for (const p of PITCHES) { if (i.includes(p)) { pitch = p; break; } }
+		if (i.includes('male') && !i.includes('female')) gender = 'male';
+		for (const p of [...PITCHES].sort((a, b) => b.length - a.length)) { if (i.includes(p)) { pitch = p; break; } }
 		for (const a of AGES) { if (i.includes(a)) { age = a; break; } }
 		return { gender, pitch, age };
 	}
@@ -94,11 +94,19 @@ const GENDERS = ['male', 'female'] as const;
 		parseInstructions(tts.speechSettings.altInstructions as string || '')
 	);
 
+	function pickOmniVoicePreset(gender: string): string {
+		// Pick a stable preset that matches the requested gender. These are
+		// OmniVoice's built-in voices (see tools/omnivoice-proxy.py PRESETS).
+		return gender === 'male' ? 'onyx' : 'alloy';
+	}
+
 	function setPrimaryDesign(gender?: string, pitch?: string, age?: string) {
 		const g = gender ?? primaryDesign.gender;
 		const p = pitch ?? primaryDesign.pitch;
 		const a = age ?? primaryDesign.age;
 		tts.handleTTSInstructionsChange(buildInstructions(g, p, a));
+		// In synthetic mode the voiceId is the preset that matches the design.
+		tts.handleTTSVoiceChange(pickOmniVoicePreset(g));
 	}
 
 	function setAltDesign(gender?: string, pitch?: string, age?: string) {
@@ -106,11 +114,17 @@ const GENDERS = ['male', 'female'] as const;
 		const p = pitch ?? altDesign.pitch;
 		const a = age ?? altDesign.age;
 		tts.handleTTSAltInstructionsChange(buildInstructions(g, p, a));
+		// In synthetic mode the voiceId is the preset that matches the design.
+		tts.handleTTSAltVoiceChange(pickOmniVoicePreset(g));
 	}
 
 	const primaryVoiceId = $derived.by(() => (tts.speechSettings.activeVoiceId as string) || '');
-	const isPrimaryClone = $derived.by(() => primaryVoiceId.startsWith('clone:') || primaryShowClone);
 	let primaryShowClone = $state(false);
+	const isPrimaryClone = $derived.by(() => primaryVoiceId.startsWith('clone:') || primaryShowClone);
+
+	const altVoiceId = $derived.by(() => (tts.speechSettings.altVoiceId as string) || '');
+	let altShowClone = $state(false);
+	const isAltClone = $derived.by(() => altVoiceId.startsWith('clone:') || altShowClone);
 
 	function baseUrl(): string {
 		let url = (settingsStore.getProviderConfig('omnivoice').baseUrl || 'http://localhost:8880/v1/')
@@ -132,6 +146,17 @@ const GENDERS = ['male', 'female'] as const;
 		clearTimeout(cloneFetchTimer);
 		cloneFetchTimer = setTimeout(fetchClonedVoices, 500);
 	}
+
+	$effect(() => {
+		if (tts.isTTSEnabled && tts.speechSettings.activeProvider === 'omnivoice') {
+			scheduleCloneFetch();
+			startHealthPolling();
+		}
+		return () => {
+			clearTimeout(cloneFetchTimer);
+			stopHealthPolling();
+		};
+	});
 
 	// ── Health ────────────────────────────────────────────────
 
@@ -215,6 +240,10 @@ const GENDERS = ['male', 'female'] as const;
 				tts.handleTTSVoiceChange('');
 				primaryShowClone = false;
 			}
+			if ((tts.speechSettings.altVoiceId as string) === 'clone:' + cloneId) {
+				tts.handleTTSAltVoiceChange('');
+				altShowClone = false;
+			}
 			await fetchClonedVoices();
 		} catch { /* ignore */ }
 		cloneDeleting = '';
@@ -229,15 +258,19 @@ const GENDERS = ['male', 'female'] as const;
 			const lang = (tts.speechSettings.primaryLanguage as string) || 'de';
 			const text = TEST_PHRASES[lang] || TEST_PHRASES.de;
 			const voiceId = (tts.speechSettings.activeVoiceId as string) || '';
-			const instructions = (tts.speechSettings.instructions as string) || undefined;
+			const instructions = isPrimaryClone
+				? undefined
+				: ((tts.speechSettings.instructions as string) || buildInstructions('female', 'moderate', 'young adult'));
 
 			const body: Record<string, unknown> = {
 				model: 'omnivoice',
 				input: text,
 				response_format: 'wav'
 			};
-			if (isPrimaryClone && voiceId) body.voice = voiceId;
+			if (voiceId && voiceId !== '') body.voice = voiceId;
 			if (instructions) body.instructions = instructions;
+			const speed = tts.speechSettings.speed as number;
+			if (speed != null) body.speed = speed;
 			const ns = tts.speechSettings.numStep as number;
 			if (ns) body.num_step = ns;
 			const pt = tts.speechSettings.positionTemperature as number;
@@ -262,6 +295,55 @@ const GENDERS = ['male', 'female'] as const;
 			source.start(0);
 		} catch (err) {
 			console.error('Preview failed:', err);
+		} finally {
+			previewLoading = false;
+		}
+	}
+
+	async function handleAltPreview() {
+		previewTarget = 'alt';
+		previewLoading = true;
+		try {
+			const lang = (tts.speechSettings.altLanguage as string) || 'es';
+			const text = TEST_PHRASES[lang] || TEST_PHRASES.de;
+			const voiceId = (tts.speechSettings.altVoiceId as string) || '';
+			const instructions = isAltClone
+				? undefined
+				: ((tts.speechSettings.altInstructions as string) || buildInstructions('female', 'moderate', 'young adult'));
+
+			const body: Record<string, unknown> = {
+				model: 'omnivoice',
+				input: text,
+				response_format: 'wav'
+			};
+			if (voiceId && voiceId !== '') body.voice = voiceId;
+			if (instructions) body.instructions = instructions;
+			const speed = ((tts.speechSettings.altSpeed ?? tts.speechSettings.speed) as number);
+			if (speed != null) body.speed = speed;
+			const ns = ((tts.speechSettings.altNumStep ?? tts.speechSettings.numStep) as number);
+			if (ns) body.num_step = ns;
+			const pt = tts.speechSettings.positionTemperature as number;
+			if (pt != null) body.position_temperature = pt;
+			const ct = tts.speechSettings.classTemperature as number;
+			if (ct != null) body.class_temperature = ct;
+
+			const res = await fetch(baseUrl() + 'audio/speech', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+			const arrayBuffer = await res.arrayBuffer();
+			const ctx = getSharedAudioContext();
+			if (ctx.state === 'suspended') await ctx.resume();
+			const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+			const source = ctx.createBufferSource();
+			source.buffer = audioBuffer;
+			source.connect(ctx.destination);
+			source.start(0);
+		} catch (err) {
+			console.error('Alt preview failed:', err);
 		} finally {
 			previewLoading = false;
 		}
@@ -379,7 +461,6 @@ const GENDERS = ['male', 'female'] as const;
 			<!-- OmniVoice Settings                                      -->
 			<!-- ═══════════════════════════════════════════════════════ -->
 			{#if tts.speechSettings.activeProvider === 'omnivoice'}
-				{@const voices = [...(provider?.voices ?? []), ...clonedVoices]}
 				{@const enableAlt = (tts.speechSettings.enableAltLanguage as boolean) || false}
 
 				<!-- Proxy status hint -->
@@ -431,7 +512,10 @@ const GENDERS = ['male', 'female'] as const;
 						<label class="omnivoice-radio">
 							<input type="radio" name="ov-p-mode" value="synth"
 								checked={!isPrimaryClone}
-								onchange={() => { primaryShowClone = false; tts.handleTTSVoiceChange(''); }} />
+								onchange={() => {
+									primaryShowClone = false;
+									tts.handleTTSVoiceChange(pickOmniVoicePreset(primaryDesign.gender));
+								}} />
 							Synthetic
 						</label>
 						<label class="omnivoice-radio">
@@ -471,10 +555,10 @@ const GENDERS = ['male', 'female'] as const;
 									Clone New
 								</button>
 								{#if primaryVoiceId}
-									<button class="btn btn-sm btn-ghost omnivoice-delete-btn"
+									<button class="btn btn-sm btn-danger omnivoice-delete-btn"
 										onclick={() => deleteClone(primaryVoiceId.replace('clone:', ''))}
 										disabled={cloneDeleting === primaryVoiceId.replace('clone:', '')}>
-										{#if cloneDeleting === primaryVoiceId.replace('clone:', '')}...{:else}✕{/if}
+										{#if cloneDeleting === primaryVoiceId.replace('clone:', '')}...{:else}Delete{/if}
 									</button>
 								{/if}
 							</div>
@@ -572,79 +656,122 @@ const GENDERS = ['male', 'female'] as const;
 						</div>
 
 						<div class="omnivoice-voice-row">
-							<div class="api-key-row" style="flex:1;margin-bottom:0;">
-								<input
-									type="text"
-									class="api-key-input"
-									list="omnivoice-alt-voices"
-									placeholder="Select voice"
-									value={tts.speechSettings.altVoiceId as string ?? ''}
-									onchange={(e) => tts.handleTTSAltVoiceChange(e.currentTarget.value)}
-								/>
-						<datalist id="omnivoice-alt-voices">
-								{#each provider?.voices ?? [] as voice}
-									<option value={voice.id}>{voice.name}</option>
-								{/each}
-								{#each clonedVoices as voice}
-									<option value={voice.id}>{voice.name} (clone)</option>
-								{/each}
-							</datalist>
-							</div>
-							<button class="btn btn-sm btn-secondary" onclick={() => openCloneModal(true)}>
-								Clone
+							<span class="omnivoice-design-label" style="width:auto;flex-shrink:0;">Voice</span>
+							<label class="omnivoice-radio">
+								<input type="radio" name="ov-a-mode" value="synth"
+									checked={!isAltClone}
+									onchange={() => {
+										altShowClone = false;
+										tts.handleTTSAltVoiceChange(pickOmniVoicePreset(altDesign.gender));
+									}} />
+								Synthetic
+							</label>
+							<label class="omnivoice-radio">
+								<input type="radio" name="ov-a-mode" value="clone"
+									checked={isAltClone}
+									onchange={() => {
+										altShowClone = true;
+										const c = clonedVoices[0];
+										if (c) tts.handleTTSAltVoiceChange(c.id);
+									}} />
+								Cloned
+							</label>
+							<span style="flex:1;"></span>
+							<button
+								class="btn btn-sm btn-primary"
+								onclick={handleAltPreview}
+								disabled={previewLoading && previewTarget === 'alt'}>
+								{#if previewLoading && previewTarget === 'alt'}
+									<span class="omnivoice-spinner"></span> Testing...
+								{:else}
+									▶ Test
+								{/if}
 							</button>
 						</div>
 
-										<!-- ── Voice Design ── -->
-					<div class="omnivoice-design">
-							<div class="omnivoice-design-row">
-								<span class="omnivoice-design-label">Gender</span>
-								{#each GENDERS as g}
-									<label class="omnivoice-radio">
-										<input type="radio" name="ov-a-gender" value={g}
-											checked={altDesign.gender === g}
-											onchange={() => setAltDesign(g, undefined)} />
-										{g}
-									</label>
-								{/each}
-							</div>
-							<div class="omnivoice-design-row">
-								<span class="omnivoice-design-label">Pitch</span>
-								{#each PITCHES as p}
-									<label class="omnivoice-radio">
-										<input type="radio" name="ov-a-pitch" value={p}
-											checked={altDesign.pitch === p}
-											onchange={() => setAltDesign(undefined, p)} />
-										{p}
-									</label>
+						{#if isAltClone}
+							{#if clonedVoices.length > 0}
+								<div class="omnivoice-voice-row">
+									<select class="omnivoice-clone-select" style="flex:1;"
+										value={altVoiceId}
+										onchange={(e) => tts.handleTTSAltVoiceChange(e.currentTarget.value)}>
+										{#each clonedVoices as v}
+											<option value={v.id}>{v.name}</option>
+										{/each}
+									</select>
+									<button class="btn btn-sm btn-secondary" onclick={() => openCloneModal(true)}>
+										Clone New
+									</button>
+									{#if altVoiceId}
+										<button class="btn btn-sm btn-danger omnivoice-delete-btn"
+											onclick={() => deleteClone(altVoiceId.replace('clone:', ''))}
+											disabled={cloneDeleting === altVoiceId.replace('clone:', '')}>
+											{#if cloneDeleting === altVoiceId.replace('clone:', '')}...{:else}Delete{/if}
+										</button>
+									{/if}
+								</div>
+							{:else}
+								<div class="omnivoice-voice-row">
+									<span class="omnivoice-no-clones">No cloned voices yet.</span>
+									<button class="btn btn-sm btn-primary" onclick={() => openCloneModal(true)}>
+										Clone New Voice
+									</button>
+								</div>
+							{/if}
+						{:else}
+							<div class="omnivoice-design">
+								<div class="omnivoice-design-row">
+									<span class="omnivoice-design-label">Gender</span>
+									{#each GENDERS as g}
+										<label class="omnivoice-radio">
+											<input type="radio" name="ov-a-gender" value={g}
+												checked={altDesign.gender === g}
+												onchange={() => setAltDesign(g, undefined)} />
+											{g}
+										</label>
 									{/each}
+								</div>
+								<div class="omnivoice-design-row">
+									<span class="omnivoice-design-label">Age</span>
+									{#each AGES as a}
+										<label class="omnivoice-radio">
+											<input type="radio" name="ov-a-age" value={a}
+												checked={altDesign.age === a}
+												onchange={() => setAltDesign(undefined, undefined, a)} />
+											{a}
+										</label>
+									{/each}
+								</div>
+								<div class="omnivoice-design-row">
+									<span class="omnivoice-design-label">Pitch</span>
+									{#each PITCHES as p}
+										<label class="omnivoice-radio">
+											<input type="radio" name="ov-a-pitch" value={p}
+												checked={altDesign.pitch === p}
+												onchange={() => setAltDesign(undefined, p)} />
+											{p}
+										</label>
+									{/each}
+								</div>
 							</div>
-							<div class="omnivoice-design-row">
-								<span class="omnivoice-design-label">Age</span>
-								{#each AGES as a}
-									<label class="omnivoice-radio">
-										<input type="radio" name="ov-a-age" value={a}
-											checked={altDesign.age === a}
-											onchange={() => setAltDesign(undefined, undefined, a)} />
-										{a}
-									</label>
-								{/each}
-							</div>
+						{/if}
+
+						<div class="omnivoice-design">
 							<div class="omnivoice-design-row">
 								<span class="omnivoice-design-label">Speed</span>
 								<input type="range" min="0.5" max="2.0" step="0.05"
 									class="omnivoice-slider"
-									value={tts.speechSettings.speed as number ?? 1}
-									oninput={(e) => tts.handleTTSSpeedChange(parseFloat(e.currentTarget.value))} />
-								<span class="omnivoice-slider-val">{tts.speechSettings.speed as number ?? 1}</span>
+									value={(tts.speechSettings.altSpeed as number) ?? (tts.speechSettings.speed as number) ?? 1}
+									oninput={(e) => tts.handleTTSAltSpeedChange(parseFloat(e.currentTarget.value))} />
+								<span class="omnivoice-slider-val">{(tts.speechSettings.altSpeed as number) ?? (tts.speechSettings.speed as number) ?? 1}</span>
 							</div>
 							<div class="omnivoice-design-row">
 								<span class="omnivoice-design-label">Quality</span>
 								{#each NUMSTEPS as s}
 									<label class="omnivoice-radio">
 										<input type="radio" name="ov-a-ns" value={s}
-											checked={(tts.speechSettings.numStep as number ?? 32) === s}
-											onchange={() => modulesStore.setModuleSetting('speech', 'numStep', s)} />
+											checked={((tts.speechSettings.altNumStep as number) ?? (tts.speechSettings.numStep as number) ?? 32) === s}
+											onchange={() => modulesStore.setModuleSetting('speech', 'altNumStep', s)} />
 										{s}
 									</label>
 								{/each}
@@ -670,7 +797,7 @@ const GENDERS = ['male', 'female'] as const;
 							<h3 class="omnivoice-modal-title">Clone New Voice</h3>
 
 									<div class="omnivoice-modal-field">
-								<label class="omnivoice-modal-label">Reference Audio (3–10s, wav/mp3)</label>
+								<label class="omnivoice-modal-label" for="clone-audio">Reference Audio (3–10s, wav/mp3)</label>
 								<div class="omnivoice-file-row">
 									<label class="btn btn-sm btn-secondary" for="clone-audio">
 										{cloneFileName || 'Choose file...'}
@@ -691,27 +818,28 @@ const GENDERS = ['male', 'female'] as const;
 								</div>
 							</div>
 
-							<div class="omnivoice-modal-field">
-								<label class="omnivoice-modal-label" for="clone-name">Voice Name</label>
-								<input
-									type="text"
-									id="clone-name"
-									class="api-key-input"
-									placeholder="e.g. my_voice"
-									bind:value={cloneVoiceId}
-								/>
-							</div>
+						<div class="omnivoice-modal-field">
+							<label class="omnivoice-modal-label" for="clone-name">Voice Name</label>
+							<input
+								type="text"
+								id="clone-name"
+								class="api-key-input"
+								placeholder="e.g. my_voice"
+								bind:value={cloneVoiceId}
+							/>
+						</div>
 
-							<div class="omnivoice-modal-field">
-								<label class="omnivoice-modal-label" for="clone-text">Reference Text (required — ASR disabled)</label>
-								<input
-									type="text"
-									id="clone-text"
-									class="api-key-input"
-									placeholder="Transcription of the audio"
-									bind:value={cloneRefText}
-								/>
-							</div>
+						<div class="omnivoice-modal-field">
+							<label class="omnivoice-modal-label" for="clone-text">Reference Text (required)</label>
+							<textarea
+								id="clone-text"
+								class="api-key-input omnivoice-clone-textarea"
+								placeholder="Write the sentence you have recorded in the audio file"
+								rows="4"
+								bind:value={cloneRefText}
+							></textarea>
+							<p class="omnivoice-modal-hint">Enter the exact sentence spoken in the audio recording (6–10 seconds).</p>
+						</div>
 
 							{#if cloneError}
 								<p class="omnivoice-modal-error">{cloneError}</p>
@@ -871,6 +999,17 @@ const GENDERS = ['male', 'female'] as const;
 		gap: 0.5rem;
 		margin-top: 1rem;
 	}
+	.omnivoice-clone-textarea {
+		resize: vertical;
+		min-height: 5em;
+		width: 100%;
+		font-family: inherit;
+	}
+	.omnivoice-modal-hint {
+		font-size: 0.75rem;
+		color: var(--text-tertiary);
+		margin: 0.25rem 0 0;
+	}
 
 	/* ── Voice Design ──────────────────────────────────── */
 
@@ -922,7 +1061,7 @@ const GENDERS = ['male', 'female'] as const;
 	.omnivoice-file-name { font-size: 0.75rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.omnivoice-clone-select { font-size: 0.8rem; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid transparent; border-radius: var(--radius-lg); padding: 0.5rem 0.75rem; }
 	.omnivoice-clone-select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-muted); }
-	.omnivoice-delete-btn { color: var(--color-error); padding: 0.25rem 0.5rem; }
+	.omnivoice-delete-btn { padding: 0.25rem 0.5rem; }
 	.omnivoice-file-row { display: flex; align-items: center; gap: 0.5rem; }
 	.omnivoice-hidden-input { display: none; }
 </style>

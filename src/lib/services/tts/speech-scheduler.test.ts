@@ -1,14 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Mock setTimeout/clearTimeout — execute callbacks immediately for synchronous tests
-globalThis.setTimeout = ((fn: () => void, _ms: number) => {
-	fn();
-	return 1;
-}) as typeof setTimeout;
-globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
-(globalThis as Record<string, unknown>).window = globalThis;
-
 import { SpeechScheduler } from './speech-scheduler.ts';
 import type { CompiledSegment } from './speech-compiler.ts';
 import type { TTSOptions } from './index.ts';
@@ -19,34 +11,45 @@ const baseOptions: TTSOptions = { provider: 'omnivoice', voiceId: 'alloy' };
 function makeMockOrchestrator() {
 	let capturedSegments: SpeechSegment[] = [];
 	let intercepted = false;
-	let completed = false;
+	let sessionEnded = false;
+	let beginSessionCalls = 0;
 
-	function speakSegments(
-		segments: SpeechSegment[],
-		_options: TTSOptions,
-		callbacks?: { onSegmentStart?: (s: SpeechSegment) => void; onComplete?: () => void }
-	) {
-		capturedSegments = segments;
-		if (callbacks?.onSegmentStart) {
-			for (const seg of segments) {
-				callbacks.onSegmentStart(seg);
-			}
-		}
-		completed = true;
-		callbacks?.onComplete?.();
+	function beginSession(_options: TTSOptions, callbacks?: { onSegmentStart?: (s: SpeechSegment) => void; onComplete?: () => void }) {
+		beginSessionCalls++;
+		capturedSegments = [];
+		callbacksRef = callbacks;
+	}
+
+	let callbacksRef: { onSegmentStart?: (s: SpeechSegment) => void; onComplete?: () => void } | undefined;
+
+	function pushSegment(segment: SpeechSegment) {
+		capturedSegments.push(segment);
+		callbacksRef?.onSegmentStart?.(segment);
+	}
+
+	async function endSession() {
+		sessionEnded = true;
+		callbacksRef?.onComplete?.();
 		return Promise.resolve();
 	}
 
+	function interrupt() {
+		intercepted = true;
+	}
+
 	return {
-		speakSegments,
-		interrupt: () => { intercepted = true; },
+		beginSession,
+		pushSegment,
+		endSession,
+		interrupt,
 		getSegments: () => capturedSegments,
 		wasIntercepted: () => intercepted,
-		wasCompleted: () => completed
+		wasSessionEnded: () => sessionEnded,
+		getBeginSessionCalls: () => beginSessionCalls
 	};
 }
 
-test('beginPlan translates speak segments to orchestrator', async () => {
+test('beginPlan translates speak segments to orchestrator pushSegment', async () => {
 	const mock = makeMockOrchestrator();
 	const s = new SpeechScheduler(mock as any);
 	const segments: CompiledSegment[] = [
@@ -59,25 +62,28 @@ test('beginPlan translates speak segments to orchestrator', async () => {
 	assert.equal(captured.length, 2);
 	assert.equal(captured[0].text, 'Hello');
 	assert.equal(captured[0].language, 'en');
-	assert.ok(mock.wasCompleted());
+	assert.equal(mock.wasSessionEnded(), true);
+	assert.equal(mock.getBeginSessionCalls(), 1);
 });
 
-test('beginPlan skips gesture and pause segments from orchestrator calls', async () => {
+test('beginPlan handles gesture and pause segments', async () => {
 	const mock = makeMockOrchestrator();
 	const s = new SpeechScheduler(mock as any);
 	const segments: CompiledSegment[] = [
 		{ type: 'gesture', gestureType: 'smile', language: '' },
 		{ type: 'speak', text: 'Hello', language: 'en' },
-		{ type: 'pause', durationMs: 200, language: '' },
+		{ type: 'pause', durationMs: 50, language: '' },
 		{ type: 'speak', text: 'world', language: 'en' }
 	];
 	await s.beginPlan(segments, baseOptions);
 
-	// Only speak segments should reach the orchestrator
 	const captured = mock.getSegments();
 	assert.equal(captured.length, 2);
 	assert.equal(captured[0].text, 'Hello');
 	assert.equal(captured[1].text, 'world');
+
+	const stores = s.getStores();
+	assert.equal(stores.gesture.type, 'smile');
 });
 
 test('interrupt calls orchestrator.interrupt', () => {
