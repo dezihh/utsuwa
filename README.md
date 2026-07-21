@@ -69,7 +69,7 @@
 - **LLM Integration**: Support for 8 LLM providers: OpenAI, Anthropic, Google, xAI, DeepSeek, Ollama, LM Studio, and any OpenAI-compatible endpoint (OpenRouter, Together, vLLM, ...)
 - **Local Model Discovery**: Ollama and LM Studio discover installed local models directly from your device
 - **Text-to-Speech**: Support for ElevenLabs and OpenAI TTS, plus local voices via any OpenAI-compatible server (Kokoro-FastAPI, openedai-speech). Sentences are fetched in parallel with playback so gaps between sentences stay short
-- **Fully Local Option**: Run the whole stack offline — local LLM (Ollama/LM Studio), local TTS, and local Whisper STT — so nothing leaves your device
+- **Fully Local Option**: Run the whole stack offline — local LLM (Ollama/LM Studio), local TTS (Kokoro, openedai-speech, or OmniVoice), and local Whisper STT — so nothing leaves your device
 - **Lip-sync**: Audio-driven mouth animation synced to TTS playback
 - **Animations**: VRMA-based idle and talking animations with automatic blinking
 - **Character Customization**: Customize your companion's name, personality, and system prompt
@@ -151,7 +151,20 @@ If the setting is left off, Utsuwa keeps the historical defaults (10 retrieved t
 |----------|-----------|
 | **Cloud** | ElevenLabs, OpenAI TTS |
 | **Local** | Local TTS (Kokoro-FastAPI, openedai-speech, any OpenAI-compatible server) |
-| **Local** | OmniVoice — locally run TTS with 600+ languages, voice design and voice cloning, multilingual sentence-by-sentence playback with automatic voice switching, plus optional pauses and avatar gestures. Requires the OmniVoice proxy (`python tools/omnivoice-proxy.py --device cuda`). Voice cloning needs a reference text (ASR is disabled to avoid Whisper model dependency). |
+| **Local** | OmniVoice — self-hosted GPU-accelerated TTS with 600+ languages, voice design, zero-shot voice cloning, and bilingual replies with automatic voice switching. See [Local TTS Setup](https://docs.utsuwa.ai/docs/guides/local-tts-setup) for installation. |
+
+#### OmniVoice Local TTS
+
+OmniVoice runs entirely on your own machine and generates speech at up to 40× real-time on a CUDA GPU, so your companion starts talking almost immediately instead of waiting for the full reply to finish. Highlights:
+
+- **Massive language coverage**: the underlying model supports 600+ languages and dialects; Utsuwa exposes 15 common spoken languages in the UI and lets you type any OmniVoice-supported language code.
+- **Voice design**: create synthetic voices by gender, age, pitch, dialect, and other attributes.
+- **Voice cloning**: clone a speaker from a short audio clip without training.
+- **Bilingual conversations**: enable a primary and an alternate language with independent voices; Utsuwa switches voices sentence by sentence when the model replies in the alternate language.
+- **Streaming-friendly**: sentences are synthesised in parallel and played back as they finish, keeping pauses short.
+- **Privacy-first**: all audio generation stays local; no cloud TTS key required.
+
+Run the included proxy (`python tools/omnivoice-proxy.py --device cuda`) and point Utsuwa at `http://localhost:8880/v1/`. Full setup steps are in the [Local TTS Setup guide](https://docs.utsuwa.ai/docs/guides/local-tts-setup).
 
 ### STT Providers (4)
 
