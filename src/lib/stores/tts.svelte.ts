@@ -39,7 +39,6 @@ function createTTSStore() {
 		if (options.provider === 'omnivoice') {
 			// First try real tool-call syntax emitted by the model.
 			const parsed = parsePseudoToolCalls(text);
-			console.log('[OmniVoice] parsed pseudo calls:', parsed.calls.length, parsed.calls);
 			if (parsed.calls.length > 0) {
 				// If the model also wrote plain prose around the calls, treat that
 				// prose as primary-language speak() segments so nothing is lost.
@@ -56,22 +55,18 @@ function createTTSStore() {
 					return [];
 				});
 				const segments = compile(mixedCalls, primaryLang).segments;
-				console.log('[OmniVoice] compiled segments:', segments);
 				return segments;
 			}
 
 			// Fallback: normalize inline language/gesture markers (e.g. <speak:es>,
 			// [lang:es], <gesture:smile>) into speak()/gesture() calls.
 			const normalized = normalizeLanguageTags(text, primaryLang);
-			console.log('[OmniVoice] normalized language tags:', normalized.calls);
 			if (normalized.calls.length > 0) {
 				const segments = compile(normalized.calls, primaryLang).segments;
-				console.log('[OmniVoice] compiled segments:', segments);
 				return segments;
 			}
 
 			// Final fallback: treat the whole text as one primary-language segment.
-			console.log('[OmniVoice] falling back to single text segment');
 			return compileFromText(text, primaryLang).segments;
 		}
 

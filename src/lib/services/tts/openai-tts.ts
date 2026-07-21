@@ -128,8 +128,6 @@ export class OpenAITTS implements ITTSProvider {
 			options
 		);
 
-		console.log('[OpenAITTS] request body:', body);
-
 		let response: Response;
 		try {
 			response = await fetch(`${this.baseUrl}audio/speech`, {

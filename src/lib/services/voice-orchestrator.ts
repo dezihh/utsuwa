@@ -516,15 +516,6 @@ export class VoiceOrchestrator {
 		if (this.sessionOptions?.positionTemperature != null) streamOpts.positionTemperature = this.sessionOptions.positionTemperature;
 		if (this.sessionOptions?.classTemperature != null) streamOpts.classTemperature = this.sessionOptions.classTemperature;
 
-		console.log('[VoiceOrchestrator] synthesizing segment:', {
-			text: segment.text,
-			language: segment.language,
-			voiceId: segment.voiceId,
-			resolvedVoiceId,
-			isAlt,
-			streamOpts
-		});
-
 		if (signal.aborted) return null;
 
 		// Acquire a synthesis slot — limits parallel requests to the provider's
