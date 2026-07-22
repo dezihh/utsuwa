@@ -96,49 +96,51 @@ export function buildSystemPrompt(context: PromptContext): string {
 function buildOmniVoiceLayer(ctx: PromptContext): string | null {
 	if (ctx.ttsProvider !== 'omnivoice') return null;
 	return `<speech_output_control>
-You have access to function calls for controlling speech output. Use them
-whenever you need to switch languages, add pauses, or trigger gestures.
+You have two voices: the default voice (primary language) and a second voice for the alternative language.
+The second voice is activated EXCLUSIVELY through <lang code="${ctx.altLanguage || 'es'}">...</lang> tags.
 
-Available functions:
+Before you answer, list all Spanish phrases you will use in your response:
+SPANISCH: <phrase1>, <phrase2>, ...
+Then give your actual answer with the tagged phrases.
 
-speak({ text: "...", lang?: "de"|"en"|"es"|"fr"|... })
-  Speak the given text. Omit "lang" for the primary language.
-  Include non-verbal markers like [laughter], [sigh] in the text.
-  Keep each speak() text to 1-2 sentences.
+DECISION — ask yourself only ONE question:
+"Is this a self-contained Spanish expression (greeting, proverb, full sentence, fixed phrase)?"
+→ YES: wrap the ENTIRE expression in <lang code="${ctx.altLanguage || 'es'}">...</lang>
+→ NO (a single, isolated Spanish word in the middle of a German sentence): NO tag, default voice
 
-pause({ ms: number })
-  Insert a pause between speech segments (100-5000 ms).
+A sentence can contain MULTIPLE elements that are treated DIFFERENTLY:
+check each Spanish element in the sentence INDIVIDUALLY, not the whole sentence at once.
 
-gesture({ type: "smile"|"laugh"|"surprise"|"nod"|"shake_head"|"wave" })
-  Trigger an avatar expression.
+EXAMPLES:
+  "mi amor"                 → <lang code="${ctx.altLanguage || 'es'}">mi amor</lang> (fixed phrase)
+  "una estrella"            → <lang code="${ctx.altLanguage || 'es'}">una estrella</lang> (self-contained phrase)
+  "¿Cómo estás?"            → <lang code="${ctx.altLanguage || 'es'}">¿Cómo estás?</lang> (full sentence)
+  "Al mal tiempo, buena cara" → <lang code="${ctx.altLanguage || 'es'}">Al mal tiempo, buena cara</lang> (proverb)
 
-Example (primary language is German, Spanish is the alternative voice):
+  "<lang code="${ctx.altLanguage || 'es'}">¿Cómo estás?</lang> Ich hoffe, dir geht es gut."
+  → "¿Cómo estás?" = voice 2, rest = voice 1
 
-speak({ text: "Hallo, mein Lieber!" })
-speak({ lang: "es", text: "¡Hola!" })
-gesture({ type: "smile" })
-speak({ text: "Das bedeutet Hallo auf Spanisch." })
+  "Zuerst sagte sie hola, dann fragte sie <lang code="${ctx.altLanguage || 'es'}">¿Cómo te llamas?</lang> und lachte."
+  → "hola" = single word = voice 1, "¿Cómo te llamas?" = full sentence = voice 2
 
-Example with mixed languages in one reply (each language in its own call):
+Proper names (cities, people) and words that have become part of German (e.g. Fiesta, Siesta, Paella, Tapas) do NOT count as Spanish tag candidates — never tag them.
 
-speak({ text: "Ich freue mich, dass du Spanisch lernen möchtest." })
-speak({ lang: "es", text: "¡Hola! ¿Por dónde empezamos?" })
-speak({ text: "Sag mir, ob du Grammatik oder Vokabeln üben willst." })
+COMMON MISTAKE — avoid this:
+WRONG (tags missing when repeating/explaining Spanish phrases):
+"¿Cómo estás? hat er gefragt, und Te quiero bedeutet Ich liebe dich."
 
-Rules:
-- The speak() calls ARE your visible reply. ALWAYS wrap every sentence you say in a speak() call.
-- NEVER write spoken text as plain prose outside of speak() calls. If you say it, it must be inside speak().
-- Every sentence in a non-primary language must be in its own speak({ lang: "es", text: "..." }) call.
-- Whenever the language changes — even for a single word — switch speak() calls and set the correct lang.
-- Keep primary-language explanations in primary-language speak() calls; only the actual foreign word/phrase should be in a foreign-language speak() call.
-- For a single foreign word, add the matching article or a tiny phrase so the segment synthesizes cleanly (e.g. "el coche" instead of just "coche").
-- Example: speak({ text: "Das spanische Wort für Auto ist" }) speak({ lang: "es", text: "el coche" }) speak({ text: ". Es ist das normale Wort für ein Auto." })
-- Keep each speak() text short (1-2 sentences or a single foreign word/phrase).
-- Use pause() sparingly — only when a natural break helps comprehension.
-- Use gesture() sparingly — only for meaningful expressions.
-- Do NOT use inline language markup tags like [lang:es]...[/lang], <speak:es>...</speak>, <lang=es>...</lang> or [gesture:smile].
-- Do NOT write language markers inside the spoken text itself.
-- At the end of your response, include the usual JSON state block as required by the output format.
+RIGHT (every Spanish phrase gets its tag, also when explaining/quoting):
+"<lang code="${ctx.altLanguage || 'es'}">¿Cómo estás?</lang> hat er gefragt, und <lang code="${ctx.altLanguage || 'es'}">Te quiero</lang> bedeutet Ich liebe dich."
+
+Rule: Whenever you write a Spanish phrase anywhere in your answer — in dialogue, when quoting, when explaining, or when translating — it MUST be tagged if it is self-contained.
+If unsure whether to tag: prefer NO tag for borderline cases. A missing tag on a borderline case is less disruptive than a wrongly placed tag.
+
+Use <lang code="${ctx.altLanguage || 'es'}"> ONLY for ${ctx.altLanguage || 'Spanish'}. All other languages are pronounced correctly by the default voice — no tag needed.
+
+You may also trigger avatar gestures with <gesture:smile>, <gesture:wave>, <gesture:nod>, <gesture:laugh>, <gesture:surprise> or <gesture:shake_head>. Use them sparingly.
+
+The "SPANISCH:" planning line will be removed automatically and is not part of your visible answer.
+At the end of your response, include the usual JSON state block as required by the output format.
 </speech_output_control>`;
 }
 

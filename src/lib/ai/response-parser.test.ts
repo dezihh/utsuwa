@@ -227,3 +227,18 @@ test('prose with a stray brace but no state keys is left intact', () => {
 	assert.ok(dialogue.includes('coffee'));
 	assert.ok(dialogue.includes('{'));
 });
+
+test('strips SPANISCH planning line from dialogue', () => {
+	const raw = [
+		'SPANISCH: mi amor, una estrella, ¿Cómo estás?',
+		'Hallo <lang code="es">mi amor</lang>, wie geht es dir?',
+		'```json',
+		'{ "mood_change": { "emotion": "happy", "intensity_delta": 1 } }',
+		'```'
+	].join('\n');
+	const { dialogue } = parseResponse(raw);
+	assert.ok(!dialogue.includes('SPANISCH:'), 'SPANISCH line leaked into dialogue');
+	assert.ok(!dialogue.includes('mi amor, una estrella'), 'SPANISCH list leaked into dialogue');
+	assert.ok(dialogue.includes('Hallo'), 'primary text missing');
+	assert.ok(dialogue.includes('mi amor'), 'tagged Spanish text missing');
+});

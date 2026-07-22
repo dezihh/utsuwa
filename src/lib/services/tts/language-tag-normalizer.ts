@@ -19,6 +19,7 @@ interface TagMatch {
 const SPEAK_BRACKET_RE = /\[lang:([a-zA-Z\-]{2,8})\]([\s\S]*?)\[\/lang\]/g;
 const SPEAK_ANGLE_COLON_RE = /<speak:([a-zA-Z\-]{2,8})>([\s\S]*?)<\/speak>/g;
 const SPEAK_ANGLE_EQUALS_RE = /<lang=([a-zA-Z\-]{2,8})>([\s\S]*?)<\/lang>/g;
+const SPEAK_ANGLE_CODE_RE = /<lang code="([a-zA-Z\-]{2,8})">([\s\S]*?)<\/lang>/g;
 const GESTURE_ANGLE_COLON_RE = /<gesture:([a-zA-Z\-]+)>/g;
 const GESTURE_BRACKET_RE = /\[gesture:([a-zA-Z\-]+)\]/g;
 
@@ -46,6 +47,16 @@ function collectTagMatches(text: string): TagMatch[] {
 	}
 
 	for (const m of text.matchAll(SPEAK_ANGLE_EQUALS_RE)) {
+		matches.push({
+			index: m.index ?? 0,
+			end: (m.index ?? 0) + m[0].length,
+			language: m[1],
+			text: m[2].trim(),
+			type: 'speak'
+		});
+	}
+
+	for (const m of text.matchAll(SPEAK_ANGLE_CODE_RE)) {
 		matches.push({
 			index: m.index ?? 0,
 			end: (m.index ?? 0) + m[0].length,
@@ -84,6 +95,7 @@ function collectTagMatches(text: string): TagMatch[] {
  *   [lang:es]text[/lang]
  *   <speak:es>text</speak>
  *   <lang=es>text</lang>
+ *   <lang code="es">text</lang>
  *   <gesture:smile>  and  [gesture:smile]
  */
 export function normalizeLanguageTags(text: string, primaryLanguage: string): NormalizedLanguageOutput {
