@@ -37,7 +37,11 @@ export function buildOpenAITTSRequestBody(
 		body.instructions = instructions;
 	}
 	if (isOmnivoice) {
-		if (streamOptions?.language) body.language = streamOptions.language;
+		// Note: we intentionally do not send `language` to OmniVoice.
+		// The preview button and direct proxy tests show that the explicit
+		// language hint makes short segments (especially Spanish) much
+		// quieter; voice/instructions plus the per-segment voice switch
+		// already produce the correct language and accent.
 		if (streamOptions?.numStep != null) body.num_step = streamOptions.numStep;
 		if (streamOptions?.positionTemperature != null) {
 			body.position_temperature = streamOptions.positionTemperature;

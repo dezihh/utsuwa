@@ -92,6 +92,13 @@ test('sends OmniVoice quality params only for omnivoice', () => {
 	assert.equal('position_temperature' in openaiBody, false);
 	assert.equal('class_temperature' in openaiBody, false);
 });
+test('does not send language to OmniVoice even when streamOptions.language is set', () => {
+	const body = buildOpenAITTSRequestBody('omnivoice', 'omnivoice', 'alloy', 1, 'Hello.', {
+		language: 'es'
+	});
+	assert.equal('language' in body, false);
+});
+
 
 // ── fetchAudioBuffer integration ───────────────────────────
 
