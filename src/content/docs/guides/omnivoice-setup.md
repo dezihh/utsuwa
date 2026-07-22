@@ -133,6 +133,17 @@ curl -X POST http://localhost:8880/v1/voices/clone \
   -F "ref_text=The quick brown fox jumps over the lazy dog."
 ```
 
+## Voice consistency
+
+OmniVoice builds synthetic voices from attribute descriptions (gender, age, pitch, accent). Because it is a diffusion model, the resulting timbre can vary slightly from one synthesis to the next, even with identical settings. Short phrases and extreme temperature values (e.g. `position_temperature: 0`, `class_temperature: 0`) tend to make these variations more noticeable.
+
+**Cloned voices are usually more stable.** A clone is anchored to a concrete reference recording, so successive sentences keep a more consistent speaker identity. If you want the most stable bilingual experience, consider cloning one voice for your primary language and another for your alternate language instead of relying purely on synthetic presets.
+
+Practical tips:
+- Use `young adult` or `middle-aged` rather than `child` for clearer, louder output.
+- Try non-zero temperatures (`position_temperature: 1`, `class_temperature: 1`) if short phrases sound noisy or inconsistent.
+- For clone voices, use a clean, noise-free reference clip that matches the language you will synthesise most often.
+
 ## Proxy options
 
 ```
