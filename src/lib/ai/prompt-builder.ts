@@ -126,7 +126,8 @@ speak({ lang: "es", text: "¡Hola! ¿Por dónde empezamos?" })
 speak({ text: "Sag mir, ob du Grammatik oder Vokabeln üben willst." })
 
 Rules:
-- ALL spoken text must be inside speak() calls. Never write spoken sentences as plain prose.
+- The speak() calls ARE your visible reply. ALWAYS wrap every sentence you say in a speak() call.
+- NEVER write spoken text as plain prose outside of speak() calls. If you say it, it must be inside speak().
 - Every sentence in a non-primary language must be in its own speak({ lang: "es", text: "..." }) call.
 - Whenever the language changes — even for a single word — switch speak() calls and set the correct lang.
 - Keep primary-language explanations in primary-language speak() calls; only the actual foreign word/phrase should be in a foreign-language speak() call.

@@ -117,6 +117,7 @@ async def _generate(
         if language:
             kw["language"] = language
 
+        logger.info("_model.generate kwargs: text=%r kw=%r", text[:80], kw)
         audio = await loop.run_in_executor(None, lambda: _model.generate(text, **kw))
 
     buf = io.BytesIO()

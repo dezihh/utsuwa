@@ -128,6 +128,9 @@ export class OpenAITTS implements ITTSProvider {
 			text,
 			options
 		);
+		if (this.providerId === 'omnivoice') {
+			console.log('[OpenAITTS] request body:', JSON.stringify(body));
+		}
 
 		let response: Response;
 		try {
