@@ -28,6 +28,34 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+# Path to the request audit log. Each line is JSON with timestamp, parameters
+# and the input text as received by /v1/audio/speech. Set to "" to disable.
+REQUEST_LOG_PATH = os.environ.get("OMNIVOICE_REQUEST_LOG", "/tmp/omnivoice-requests.log")
+
+
+def log_speech_request(payload: dict[str, Any]) -> None:
+    """Append a normalised JSON record of the speech request to the audit log."""
+    path = REQUEST_LOG_PATH
+    if not path:
+        return
+    record = {
+        "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        "voice": payload.get("voice"),
+        "instructions": payload.get("instructions"),
+        "language": payload.get("language"),
+        "speed": payload.get("speed"),
+        "num_step": payload.get("num_step"),
+        "position_temperature": payload.get("position_temperature"),
+        "class_temperature": payload.get("class_temperature"),
+        "input": payload.get("input"),
+    }
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as e:
+        logger.warning("failed to write request log: %s", e)
+
+
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -298,6 +326,8 @@ async def speech(request: Request):
 
     logger.info("speech request: voice=%r instructions=%r language=%r speed=%s num_step=%s pos_temp=%s class_temp=%s",
                 voice, instructions, language, speed, num_step, position_temperature, class_temperature)
+
+    log_speech_request(body)
 
     wav = await _generate(
         text,
