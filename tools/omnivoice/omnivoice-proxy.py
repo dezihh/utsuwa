@@ -75,6 +75,7 @@ async def _generate(
     *,
     voice: str = "",
     instructions: str = "",
+    language: str = "",
     speed: float = 1.0,
     num_step: int | None = None,
     position_temperature: float | None = None,
@@ -112,6 +113,9 @@ async def _generate(
             kw["instruct"] = instructions
         elif voice in _PRESET_MAP:
             kw["instruct"] = _PRESET_MAP[voice]
+
+        if language:
+            kw["language"] = language
 
         audio = await loop.run_in_executor(None, lambda: _model.generate(text, **kw))
 
@@ -285,18 +289,20 @@ async def speech(request: Request):
 
     voice = body.get("voice", "")
     instructions = body.get("instructions", "")
+    language = body.get("language", "")
     speed = float(body.get("speed", 1.0))
     num_step = body.get("num_step")
     position_temperature = body.get("position_temperature")
     class_temperature = body.get("class_temperature")
 
-    logger.info("speech request: voice=%r instructions=%r speed=%s num_step=%s pos_temp=%s class_temp=%s",
-                voice, instructions, speed, num_step, position_temperature, class_temperature)
+    logger.info("speech request: voice=%r instructions=%r language=%r speed=%s num_step=%s pos_temp=%s class_temp=%s",
+                voice, instructions, language, speed, num_step, position_temperature, class_temperature)
 
     wav = await _generate(
         text,
         voice=voice,
         instructions=instructions,
+        language=language,
         speed=speed,
         num_step=int(num_step) if num_step is not None else None,
         position_temperature=float(position_temperature) if position_temperature is not None else None,

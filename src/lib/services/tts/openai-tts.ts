@@ -37,6 +37,7 @@ export function buildOpenAITTSRequestBody(
 		body.instructions = instructions;
 	}
 	if (isOmnivoice) {
+		if (streamOptions?.language) body.language = streamOptions.language;
 		if (streamOptions?.numStep != null) body.num_step = streamOptions.numStep;
 		if (streamOptions?.positionTemperature != null) {
 			body.position_temperature = streamOptions.positionTemperature;
