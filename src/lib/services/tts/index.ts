@@ -99,6 +99,45 @@ export function getSharedAudioContext(): AudioContext {
 	return sharedAudioContext;
 }
 
+let audioContextUnlocked = false;
+
+/**
+ * Unlock WebAudio on iOS Safari.
+ *
+ * iOS requires an AudioContext to be resumed from inside a user gesture.
+ * We listen for the first touch/click/key event and briefly create + resume a
+ * throwaway AudioContext. Once that succeeds, the shared context (and any other
+ * AudioContext in the tab) is allowed to play audio.
+ */
+export function unlockAudioContext(): void {
+	if (typeof window === 'undefined' || audioContextUnlocked) return;
+
+	const events = ['touchstart', 'touchend', 'click', 'keydown'] as const;
+
+	function unlock() {
+		if (audioContextUnlocked) return;
+		try {
+			const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+			if (AC) {
+				const ctx = new AC();
+				void ctx.resume().finally(() => ctx.close());
+			}
+			// Resume the already-created shared context as well, in case it was
+			// created before the user interacted with the page.
+			if (sharedAudioContext && sharedAudioContext.state === 'suspended') {
+				void sharedAudioContext.resume();
+			}
+			audioContextUnlocked = true;
+		} catch {
+			// ignore older browsers without AudioContext
+		}
+	}
+
+	events.forEach((event) => {
+		window.addEventListener(event, unlock, { once: true, passive: true });
+	});
+}
+
 // Import individual providers
 import { ElevenLabsTTS } from './elevenlabs.ts';
 import { OpenAITTS } from './openai-tts.ts';

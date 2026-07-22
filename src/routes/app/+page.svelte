@@ -40,6 +40,7 @@
 	import { personaStore } from '$lib/stores/persona.svelte';
 	import { displayStore } from '$lib/stores/display.svelte';
 	import { startWaitTone, stopWaitTone, destroyWaitTone } from '$lib/utils/wait-tone';
+	import { unlockAudioContext } from '$lib/services/tts';
 	import { debugEventsStore } from '$lib/stores/debugEvents.svelte';
 	import { getLLMProvider, providerSupportsVision } from '$lib/services/providers/registry';
 	import { isLocalLLMProvider } from '$lib/services/providers/local-endpoints';
@@ -130,6 +131,11 @@
 			stopWaitTone();
 		}
 	});
+
+	// Unlock WebAudio on iOS Safari on the first user gesture.
+	if (browser) {
+		unlockAudioContext();
+	}
 
 	const showBubble = $derived(
 		displayStore.chatDisplayMode === 'bubble' || displayStore.chatDisplayMode === 'both'

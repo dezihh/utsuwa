@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getTTSProvider } from './index.ts';
+import { getTTSProvider, unlockAudioContext } from './index.ts';
 import type { TTSOptions } from './index.ts';
 
 const baseOmniOptions: TTSOptions = {
@@ -64,4 +64,8 @@ test('getTTSProvider returns the same instance when only language changes', () =
 	const a = getTTSProvider(baseOmniOptions);
 	const b = getTTSProvider({ ...baseOmniOptions, language: 'es' });
 	assert.equal(a, b);
+});
+
+test('unlockAudioContext is safe in SSR environments without window', () => {
+	assert.doesNotThrow(() => unlockAudioContext());
 });
