@@ -164,7 +164,7 @@ OmniVoice runs entirely on your own machine and generates speech at up to 40× r
 - **Streaming-friendly**: sentences are synthesised in parallel and played back as they finish, keeping pauses short.
 - **Privacy-first**: all audio generation stays local; no cloud TTS key required.
 
-Run the included proxy (`python tools/omnivoice-proxy.py --device cuda`) and point Utsuwa at `http://localhost:8880/v1/`. Full setup steps are in the [Local TTS Setup guide](https://docs.utsuwa.ai/docs/guides/local-tts-setup).
+Run the included proxy (`python tools/omnivoice/omnivoice-proxy.py --device cuda`) and point Utsuwa at `http://localhost:8880/v1/`. Full setup steps are in the [OmniVoice Setup guide](https://docs.utsuwa.ai/docs/guides/omnivoice-setup).
 
 ### STT Providers (4)
 

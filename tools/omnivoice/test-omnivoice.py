@@ -4,10 +4,10 @@ Test client for omnivoice-proxy — verifies all endpoints work.
 
 Usage:
   # Start proxy in another terminal first:
-  #   python tools/omnivoice-proxy.py --device cpu
+  #   python tools/omnivoice/omnivoice-proxy.py --device cpu
   #
   # Then run:
-  python tools/test-omnivoice.py
+  python tools/omnivoice/test-omnivoice.py
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def main():
     try:
         r = requests.get(f"{BASE}/health", timeout=5)
     except requests.ConnectionError:
-        die("Proxy not running. Start it first: python tools/omnivoice-proxy.py")
+        die("Proxy not running. Start it first: python tools/omnivoice/omnivoice-proxy.py")
         return  # unreachable, makes type checker happy
     check("GET /health → 200", r.status_code == 200)
     health = r.json()

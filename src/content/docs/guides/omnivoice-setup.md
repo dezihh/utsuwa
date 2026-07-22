@@ -7,7 +7,7 @@ description: Run OmniVoice locally as a self-hosted TTS engine for Utsuwa.
 
 [OmniVoice](https://github.com/k2-fsa/OmniVoice) is a local, massively multilingual text-to-speech model. It supports 600+ languages, attribute-based voice design, and zero-shot voice cloning, and it runs entirely on your own hardware.
 
-Utsuwa talks to OmniVoice through a small proxy that exposes an OpenAI-compatible API. The proxy lives in `tools/omnivoice-proxy.py` in the Utsuwa repository and can be run from any directory you like.
+Utsuwa talks to OmniVoice through a small proxy that exposes an OpenAI-compatible API. The proxy lives in `tools/omnivoice/omnivoice-proxy.py` in the Utsuwa repository and can be run from any directory you like.
 
 ## What you get
 
@@ -35,19 +35,14 @@ The examples below install OmniVoice into a dedicated directory next to the Utsu
 [uv](https://docs.astral.sh/uv/) can fetch the correct Python version and manage the virtual environment in one step.
 
 ```bash
-mkdir -p /home/llms/omnivoice
-cd /home/llms/omnivoice
+mkdir -p /path/to/omnivoice-env
+cd /path/to/omnivoice-env
 
 # 1. Create a Python 3.11 virtual environment
 uv venv --python 3.11
 
-# 2. Install dependencies
-uv pip install torch==2.6.0 torchaudio==2.6.0 \
-  fastapi "uvicorn[standard]" requests soundfile "omnivoice>=0.2.1"
-
-# 3. Copy the proxy from the Utsuwa repository
-cp /home/llms/Utsuwa/tools/omnivoice-proxy.py .
-cp /home/llms/Utsuwa/tools/test-omnivoice.py .
+# 2. Install dependencies from the Utsuwa tools directory
+uv pip install -r /path/to/utsuwa/tools/omnivoice/requirements.txt
 ```
 
 ### Option B: using plain `venv`
@@ -55,30 +50,26 @@ cp /home/llms/Utsuwa/tools/test-omnivoice.py .
 If you already have Python 3.11 available:
 
 ```bash
-mkdir -p /home/llms/omnivoice
-cd /home/llms/omnivoice
+mkdir -p /path/to/omnivoice-env
+cd /path/to/omnivoice-env
 
 python3.11 -m venv .venv
 source .venv/bin/activate
 
-pip install torch==2.6.0 torchaudio==2.6.0 \
-  fastapi "uvicorn[standard]" requests soundfile "omnivoice>=0.2.1"
-
-cp /home/llms/Utsuwa/tools/omnivoice-proxy.py .
-cp /home/llms/Utsuwa/tools/test-omnivoice.py .
+pip install -r /path/to/utsuwa/tools/omnivoice/requirements.txt
 ```
 
 ## Start the proxy
 
 ```bash
-cd /home/llms/omnivoice
+cd /path/to/omnivoice-env
 source .venv/bin/activate
 
 # GPU
-python omnivoice-proxy.py --device cuda --port 8880
+python /path/to/utsuwa/tools/omnivoice/omnivoice-proxy.py --device cuda --port 8880
 
 # CPU-only
-python omnivoice-proxy.py --device cpu --port 8880
+python /path/to/utsuwa/tools/omnivoice/omnivoice-proxy.py --device cpu --port 8880
 ```
 
 The first start downloads the model. Wait until you see:
@@ -100,9 +91,9 @@ curl http://localhost:8880/health
 With the proxy running, run the integration test:
 
 ```bash
-cd /home/llms/omnivoice
+cd /path/to/omnivoice-env
 source .venv/bin/activate
-python test-omnivoice.py
+python /path/to/utsuwa/tools/omnivoice/test-omnivoice.py
 ```
 
 It checks `/health`, lists voices, synthesises a short utterance, and verifies the clone endpoint accepts a request.
@@ -137,7 +128,7 @@ curl -X POST http://localhost:8880/v1/voices/clone \
 ## Proxy options
 
 ```
-python omnivoice-proxy.py --help
+python /path/to/utsuwa/tools/omnivoice/omnivoice-proxy.py --help
   --host           Bind host (default: 0.0.0.0)
   --port           Bind port (default: 8880)
   --device         cpu | cuda | auto (default: cpu)

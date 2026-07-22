@@ -194,7 +194,7 @@ export const TTS_PROVIDERS: ProviderMetadata[] = [
 		]
 	},
 	// OmniVoice — local TTS with 600+ languages, voice cloning and voice design.
-	// OpenAI-compatible via tools/omnivoice-proxy.py.
+	// OpenAI-compatible via tools/omnivoice/omnivoice-proxy.py.
 	{
 		id: 'omnivoice',
 		name: 'OmniVoice',

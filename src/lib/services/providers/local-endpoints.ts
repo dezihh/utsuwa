@@ -84,7 +84,7 @@ export function getLocalTTSConnectionHint(
 		: ' If the server blocks this site, enable CORS for the app origin.';
 
 	if (providerId === 'omnivoice') {
-		return `Could not reach OmniVoice at ${ttsBaseUrl}. Make sure "omnivoice-proxy" is running (python tools/omnivoice-proxy.py) and reachable from this device.${originHint}`;
+		return `Could not reach OmniVoice at ${ttsBaseUrl}. Make sure "omnivoice-proxy" is running (python tools/omnivoice/omnivoice-proxy.py) and reachable from this device.${originHint}`;
 	}
 
 	return `Could not reach a local TTS server at ${ttsBaseUrl}. Make sure it is running and exposes the OpenAI /v1/audio/speech endpoint (e.g. Kokoro-FastAPI or openedai-speech).${originHint}`;

@@ -96,7 +96,7 @@ const GENDERS = ['male', 'female'] as const;
 
 	function pickOmniVoicePreset(gender: string): string {
 		// Pick a stable preset that matches the requested gender. These are
-		// OmniVoice's built-in voices (see tools/omnivoice-proxy.py PRESETS).
+		// OmniVoice's built-in voices (see tools/omnivoice/omnivoice-proxy.py PRESETS).
 		return gender === 'male' ? 'onyx' : 'alloy';
 	}
 
@@ -476,7 +476,7 @@ const GENDERS = ['male', 'female'] as const;
 							<span class="omnivoice-dot"></span> Checking...
 						{/if}
 					</span>
-					<span class="omnivoice-proxy-cmd">python tools/omnivoice-proxy.py --device cuda</span>
+					<span class="omnivoice-proxy-cmd">python tools/omnivoice/omnivoice-proxy.py --device cuda</span>
 				</div>
 
 				<!-- Base URL -->

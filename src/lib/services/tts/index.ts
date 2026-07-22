@@ -154,7 +154,7 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 			currentProvider = new OpenAITTS(options);
 			break;
 
-		// OmniVoice is OpenAI-compatible via tools/omnivoice-proxy.py.
+		// OmniVoice is OpenAI-compatible via tools/omnivoice/omnivoice-proxy.py.
 		case 'omnivoice':
 			currentProvider = new OpenAITTS(options);
 			break;

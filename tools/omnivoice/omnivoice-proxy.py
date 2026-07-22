@@ -3,8 +3,8 @@
 omni-proxy — Minimal OpenAI-compatible HTTP wrapper for k2-fsa/OmniVoice.
 
 Start:
-  pip install omnivoice fastapi uvicorn
-  python tools/omnivoice-proxy.py --port 8880
+  pip install -r tools/omnivoice/requirements.txt
+  python tools/omnivoice/omnivoice-proxy.py --port 8880
 
 Endpoints:
   POST /v1/audio/speech         — TTS with voice/instructions
