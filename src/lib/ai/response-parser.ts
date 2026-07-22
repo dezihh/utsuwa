@@ -322,9 +322,6 @@ function cleanDialogue(text: string, companionName?: string): string {
 	// Remove stage directions in parentheses
 	cleaned = cleaned.replace(/\([^)]*(?:smiles|laughs|sighs|blushes|looks|nods)[^)]*\)/gi, '');
 
-	// Remove the internal "SPANISCH:" planning line used by OmniVoice voice tagging.
-	cleaned = cleaned.replace(/^SPANISCH:[^\n]*\n?/gim, '');
-
 	// Remove leading transcript/name labels only (e.g. "Luna: ", "User: "), NOT
 	// arbitrary "Word:" prefixes — legit replies like "Note: ..." or
 	// "Reminder: ..." must survive. Keyed on known labels + the companion's name.

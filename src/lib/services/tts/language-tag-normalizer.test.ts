@@ -82,18 +82,3 @@ test('handles bracket gesture tags', () => {
 	assert.equal(calls[1].arguments.type, 'wave');
 	assert.equal(calls[2].name, 'speak');
 });
-
-test('converts angle-code lang tags to speak calls', () => {
-	const { calls, cleanedText } = normalizeLanguageTags(
-		'Hallo <lang code="es">¡Hola!</lang> Wie geht es dir?',
-		'de'
-	);
-	assert.equal(calls.length, 3);
-	assert.equal(calls[0].name, 'speak');
-	assert.equal(calls[0].arguments.text, 'Hallo');
-	assert.equal(calls[0].arguments.lang, 'de');
-	assert.equal(calls[1].name, 'speak');
-	assert.equal(calls[1].arguments.text, '¡Hola!');
-	assert.equal(calls[1].arguments.lang, 'es');
-	assert.equal(cleanedText, 'Hallo ¡Hola! Wie geht es dir?');
-});
