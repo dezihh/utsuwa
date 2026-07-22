@@ -55,16 +55,14 @@ function createTTSStore() {
 					}
 					return [];
 				});
-				const segments = compile(mixedCalls, primaryLang).segments;
-				return segments;
+				return compile(mixedCalls, primaryLang).segments;
 			}
 
 			// Fallback: normalize inline language/gesture markers (e.g. <speak:es>,
 			// [lang:es], <gesture:smile>) into speak()/gesture() calls.
 			const normalized = normalizeLanguageTags(text, primaryLang);
 			if (normalized.calls.length > 0) {
-				const segments = compile(normalized.calls, primaryLang).segments;
-				return segments;
+				return compile(normalized.calls, primaryLang).segments;
 			}
 
 			// Final fallback: treat the whole text as one primary-language segment.

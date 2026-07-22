@@ -780,6 +780,29 @@ const GENDERS = ['male', 'female'] as const;
 					{/if}
 				</div>
 
+				<!-- ── Advanced ── -->
+				<div class="omnivoice-card">
+					<div class="omnivoice-card-label">Advanced</div>
+					<div class="omnivoice-design">
+						<div class="omnivoice-design-row">
+							<span class="omnivoice-design-label">Voice Diversity</span>
+							<input type="range" min="0" max="10" step="0.1"
+								class="omnivoice-slider"
+								value={(tts.speechSettings.positionTemperature as number) ?? 0}
+								oninput={(e) => tts.handleTTSPositionTemperatureChange(parseFloat(e.currentTarget.value))} />
+							<span class="omnivoice-slider-val">{(tts.speechSettings.positionTemperature as number) ?? 0}</span>
+						</div>
+						<div class="omnivoice-design-row">
+							<span class="omnivoice-design-label">Token Temperature</span>
+							<input type="range" min="0" max="2" step="0.1"
+								class="omnivoice-slider"
+								value={(tts.speechSettings.classTemperature as number) ?? 0}
+								oninput={(e) => tts.handleTTSClassTemperatureChange(parseFloat(e.currentTarget.value))} />
+							<span class="omnivoice-slider-val">{(tts.speechSettings.classTemperature as number) ?? 0}</span>
+						</div>
+					</div>
+				</div>
+
 				<!-- ═══════════════════════════════════════════════════════ -->
 				<!-- Clone Modal                                               -->
 				<!-- ═══════════════════════════════════════════════════════ -->

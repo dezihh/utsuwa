@@ -113,8 +113,8 @@ export const speechModule: ModuleDefinition = {
 				key: 'positionTemperature',
 				type: 'number',
 				label: 'Voice Diversity',
-				description: 'Voice variation (0-10, default 5). 0 = deterministic.',
-				defaultValue: 5
+				description: 'Voice variation (0-10, default 0). 0 = deterministic, same speaker across sentences.',
+				defaultValue: 0
 			},
 			{
 				key: 'classTemperature',

@@ -340,6 +340,14 @@ export function createTtsSettingsState() {
 		modulesStore.setModuleSetting('speech', 'altSpeed', value);
 	}
 
+	function handleTTSPositionTemperatureChange(value: number) {
+		modulesStore.setModuleSetting('speech', 'positionTemperature', value);
+	}
+
+	function handleTTSClassTemperatureChange(value: number) {
+		modulesStore.setModuleSetting('speech', 'classTemperature', value);
+	}
+
 	function handleTTSVoiceChange(voiceId: string) {
 		modulesStore.setModuleSetting('speech', 'activeVoiceId', voiceId);
 	}
@@ -412,6 +420,8 @@ export function createTtsSettingsState() {
 		handleTTSModelChange,
 		handleTTSSpeedChange,
 		handleTTSAltSpeedChange,
+		handleTTSPositionTemperatureChange,
+		handleTTSClassTemperatureChange,
 		handleTTSVoiceChange,
 		handleTTSInstructionsChange,
 		handleTTSAltInstructionsChange,
