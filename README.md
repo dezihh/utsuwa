@@ -151,7 +151,7 @@ If the setting is left off, Utsuwa keeps the historical defaults (10 retrieved t
 |----------|-----------|
 | **Cloud** | ElevenLabs, OpenAI TTS |
 | **Local** | Local TTS (Kokoro-FastAPI, openedai-speech, any OpenAI-compatible server) |
-| **Local** | OmniVoice — self-hosted GPU-accelerated TTS with 600+ languages, voice design, zero-shot voice cloning, and bilingual replies with automatic voice switching. See [Local TTS Setup](https://docs.utsuwa.ai/docs/guides/local-tts-setup) for installation. |
+| **Local** | OmniVoice — self-hosted GPU-accelerated TTS with 600+ languages, voice design, zero-shot voice cloning, and bilingual replies with automatic voice switching. See [OmniVoice Setup](https://docs.utsuwa.ai/docs/guides/omnivoice-setup) for installation. |
 
 #### OmniVoice Local TTS
 

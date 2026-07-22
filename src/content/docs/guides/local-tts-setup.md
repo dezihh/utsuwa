@@ -45,39 +45,9 @@ Kokoro voice names encode region and gender, for example `af_bella` (American fe
 
 ## OmniVoice
 
-[OmniVoice](https://github.com/k2-fsa/OmniVoice) is a local, GPU-accelerated TTS engine with 600+ supported languages, high-quality zero-shot voice cloning, and attribute-based voice design (gender, age, pitch, dialect, and more). On a CUDA GPU it synthesises at up to 40× real-time, so replies start speaking within moments. Utsuwa wraps it with a small proxy that exposes an OpenAI-compatible `/v1/audio/speech` endpoint and adds CORS headers for browser use.
+[OmniVoice](https://github.com/k2-fsa/OmniVoice) is a local, GPU-accelerated TTS engine with 600+ supported languages, zero-shot voice cloning, and attribute-based voice design. Utsuwa connects to it through the `tools/omnivoice-proxy.py` wrapper, which exposes an OpenAI-compatible `/v1/audio/speech` endpoint and adds CORS headers for browser use.
 
-### Installation
-
-1. Install OmniVoice in a fresh Python environment (the proxy expects the `omnivoice` package):
-
-   ```bash
-   pip install omnivoice
-   ```
-
-   For GPU inference, install a matching PyTorch build first; see the [OmniVoice README](https://github.com/k2-fsa/OmniVoice/blob/master/README.md) for CUDA, Apple Silicon, and Intel Arc instructions.
-
-2. Start the proxy from the project root:
-
-   ```bash
-   python tools/omnivoice-proxy.py --device cuda --port 8880
-   ```
-
-   Use `--device cpu` if you have no GPU. The proxy listens on `http://localhost:8880/v1` by default.
-
-3. In Utsuwa, open **Settings > TTS**, enable **Speech**, and select **OmniVoice**. Leave the base URL as `http://localhost:8880/v1/` unless you changed the port.
-
-### Voice design and cloning
-
-- **Synthetic voices** let you design a voice by gender, age, and pitch. Utsuwa seeds common presets; pick one and refine it in the TTS settings.
-- **Cloned voices** are created from a short reference audio clip and an optional reference text. The proxy stores the cloned voice locally so you can reuse it across sessions.
-- **Bilingual replies** are supported via an optional alternate voice: set a primary language and voice, then enable the alternate language and voice. Utsuwa switches voices sentence by sentence when the model replies in the alternate language.
-
-### Notes
-
-- Voice cloning needs a clean reference clip. The proxy normalises uploaded audio automatically, but a short, clear recording with minimal background noise gives the best result.
-- The proxy runs as a separate process and is not started by `pnpm dev`. Start it before opening Utsuwa.
-- Because the proxy adds CORS headers, it also works from the hosted web app when running on `localhost`. For remote use, run Utsuwa in the desktop app or ensure the proxy allows the hosted origin.
+For a full step-by-step installation — including Python 3.11 setup, CUDA/CPU options, voice cloning, and troubleshooting — see the dedicated [OmniVoice Setup](./omnivoice-setup) guide.
 
 ## Custom Base URL
 
