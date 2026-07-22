@@ -21,92 +21,57 @@ The proxy exposes the endpoints Utsuwa expects (`/v1/audio/speech`, `/v1/voices`
 
 - Linux with NVIDIA GPU recommended (CUDA 12 capable driver).
 - For CPU-only inference a modern multi-core CPU is required; synthesis will be noticeably slower.
-- Python **3.11** is strongly recommended. OmniVoice 0.2.1 pulls older `numba`/`llvmlite` builds that currently do not support Python 3.12+.
-- `ffmpeg` installed system-wide (used by the proxy for audio normalisation during cloning).
+- Docker and Docker Compose (or a compatible container runtime).
+- `nvidia-container-toolkit` if you want GPU acceleration inside the container.
 - Internet access for the first start to download the `k2-fsa/OmniVoice` model from HuggingFace.
 
 ## Installation
 
-Create a directory for your OmniVoice environment on your Linux system and copy the files from the Utsuwa repository into it. The examples below use `~/omnivoice`, but any path works.
+OmniVoice runs inside a Docker container defined in the Utsuwa repository. The container image includes Python 3.11, `ffmpeg`, CUDA-capable PyTorch, and the OmniVoice proxy.
+
+### 1. Clone or locate the Utsuwa repository
 
 ```bash
-# 1. Create a working directory
-mkdir -p ~/omnivoice
-cd ~/omnivoice
-
-# 2. Copy the OmniVoice tools from the Utsuwa repository
-#    (adjust the source path to where you cloned Utsuwa)
-cp -r /path/to/utsuwa/tools/omnivoice/* .
+cd /path/to/utsuwa
 ```
 
-### Using `uv` (recommended)
-
-[uv](https://docs.astral.sh/uv/) handles the Python version and the virtual environment for you.
+### 2. Build and start the container
 
 ```bash
-cd ~/omnivoice
-
-# 1. Create a Python 3.11 virtual environment
-uv venv --python 3.11
-
-# 2. Install dependencies
-uv pip install -r requirements.txt
+cd docker
+docker compose up -d omnivoice-proxy
 ```
 
-### Using plain `venv`
-
-If you already have Python 3.11 installed:
-
-```bash
-cd ~/omnivoice
-
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Start the proxy
-
-```bash
-cd ~/omnivoice
-source .venv/bin/activate
-
-# GPU
-python omnivoice-proxy.py --device cuda --port 8880
-
-# CPU-only
-python omnivoice-proxy.py --device cpu --port 8880
-```
-
-On first start the OmniVoice model is downloaded from HuggingFace. This needs several gigabytes of disk space and may take a few minutes depending on your connection. Wait until you see:
-
-```
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8880
-```
-
-Verify it is ready:
+On first start the OmniVoice model is downloaded from HuggingFace. This needs several gigabytes of disk space and may take a few minutes depending on your connection. Wait until the health endpoint returns `ok`:
 
 ```bash
 curl http://localhost:8880/health
 # {"status":"ok"}
 ```
 
-## Test the proxy
+### CPU-only mode
 
-A small integration test is included. Start the proxy in one terminal, then run:
+If you do not have an NVIDIA GPU or `nvidia-container-toolkit`, edit `docker/docker-compose.yaml` and remove the `deploy.resources.reservations.devices` block under `omnivoice-proxy`. Then start the container with `--device cpu` by changing the `CMD` in `docker/Dockerfile.omnivoice-proxy` or by overriding the command:
 
 ```bash
-cd ~/omnivoice
-source .venv/bin/activate
-python test-omnivoice.py
+cd docker
+docker compose run -d --rm --name omnivoice-proxy omnivoice-proxy python omnivoice-proxy.py --host 0.0.0.0 --port 8880 --device cpu --voices-dir /data/voices
+```
+
+## Test the proxy
+
+A small integration test is included. Start the container (see above), then run the test inside the container:
+
+```bash
+cd docker
+docker compose exec omnivoice-proxy python /app/test-omnivoice.py
 ```
 
 It checks `/health`, `/v1/voices`, synthesises a short clip, and verifies that cloning accepts a request.
 
 ## Connect Utsuwa
 
-1. Start the proxy (`python omnivoice-proxy.py --device cuda --port 8880`).
+1. Start the container (`docker compose up -d omnivoice-proxy` from the `docker` directory).
 2. Open Utsuwa and go to **Settings > TTS**.
 3. Enable **Speech** and select **OmniVoice**.
 4. Leave the base URL as `http://localhost:8880/v1/` (or adjust the host/port if the proxy runs elsewhere).
@@ -145,16 +110,6 @@ python omnivoice-proxy.py --help
 Keep `--max-concurrent 1` for a single-GPU setup. OmniVoice is a diffusion model; running more than one synthesis in parallel on one GPU usually increases total latency rather than throughput.
 
 ## Troubleshooting
-
-### `llvmlite` build error during install
-
-You are probably using Python 3.12 or newer. Recreate the environment with Python 3.11:
-
-```bash
-rm -rf .venv
-uv venv --python 3.11
-uv pip install -r requirements.txt
-```
 
 ### `RuntimeError: CUDA out of memory`
 
