@@ -28,21 +28,30 @@ Utsuwa talks to OmniVoice through a small proxy that exposes an OpenAI-compatibl
 
 ## Installation
 
-The examples below install OmniVoice into a dedicated directory next to the Utsuwa repository, but you can use any path.
+Create a directory for OmniVoice on your Linux system and copy the files from the Utsuwa repository into it. The examples below use `~/omnivoice`, but any path works.
+
+```bash
+# 1. Create a working directory
+mkdir -p ~/omnivoice
+cd ~/omnivoice
+
+# 2. Copy the OmniVoice tools from the Utsuwa repository
+#    (adjust the source path to where you cloned Utsuwa)
+cp -r /path/to/utsuwa/tools/omnivoice/* .
+```
 
 ### Option A: using `uv` (recommended)
 
 [uv](https://docs.astral.sh/uv/) can fetch the correct Python version and manage the virtual environment in one step.
 
 ```bash
-mkdir -p /path/to/omnivoice-env
-cd /path/to/omnivoice-env
+cd ~/omnivoice
 
 # 1. Create a Python 3.11 virtual environment
 uv venv --python 3.11
 
-# 2. Install dependencies from the Utsuwa tools directory
-uv pip install -r /path/to/utsuwa/tools/omnivoice/requirements.txt
+# 2. Install dependencies
+uv pip install -r requirements.txt
 ```
 
 ### Option B: using plain `venv`
@@ -50,26 +59,25 @@ uv pip install -r /path/to/utsuwa/tools/omnivoice/requirements.txt
 If you already have Python 3.11 available:
 
 ```bash
-mkdir -p /path/to/omnivoice-env
-cd /path/to/omnivoice-env
+cd ~/omnivoice
 
 python3.11 -m venv .venv
 source .venv/bin/activate
 
-pip install -r /path/to/utsuwa/tools/omnivoice/requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Start the proxy
 
 ```bash
-cd /path/to/omnivoice-env
+cd ~/omnivoice
 source .venv/bin/activate
 
 # GPU
-python /path/to/utsuwa/tools/omnivoice/omnivoice-proxy.py --device cuda --port 8880
+python omnivoice-proxy.py --device cuda --port 8880
 
 # CPU-only
-python /path/to/utsuwa/tools/omnivoice/omnivoice-proxy.py --device cpu --port 8880
+python omnivoice-proxy.py --device cpu --port 8880
 ```
 
 The first start downloads the model. Wait until you see:
@@ -91,9 +99,9 @@ curl http://localhost:8880/health
 With the proxy running, run the integration test:
 
 ```bash
-cd /path/to/omnivoice-env
+cd ~/omnivoice
 source .venv/bin/activate
-python /path/to/utsuwa/tools/omnivoice/test-omnivoice.py
+python test-omnivoice.py
 ```
 
 It checks `/health`, lists voices, synthesises a short utterance, and verifies the clone endpoint accepts a request.
@@ -128,7 +136,7 @@ curl -X POST http://localhost:8880/v1/voices/clone \
 ## Proxy options
 
 ```
-python /path/to/utsuwa/tools/omnivoice/omnivoice-proxy.py --help
+python omnivoice-proxy.py --help
   --host           Bind host (default: 0.0.0.0)
   --port           Bind port (default: 8880)
   --device         cpu | cuda | auto (default: cpu)
@@ -148,8 +156,7 @@ You are likely using Python 3.12+. Recreate the environment with Python 3.11:
 ```bash
 rm -rf .venv
 uv venv --python 3.11
-uv pip install torch==2.6.0 torchaudio==2.6.0 \
-  fastapi "uvicorn[standard]" requests soundfile "omnivoice>=0.2.1"
+uv pip install -r requirements.txt
 ```
 
 ### CUDA out of memory

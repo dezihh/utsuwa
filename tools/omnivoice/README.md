@@ -27,21 +27,30 @@ The proxy exposes the endpoints Utsuwa expects (`/v1/audio/speech`, `/v1/voices`
 
 ## Installation
 
-You can install the dependencies directly from this directory. The examples below create a virtual environment next to the repository, but any path works.
+Create a directory for your OmniVoice environment on your Linux system and copy the files from the Utsuwa repository into it. The examples below use `~/omnivoice`, but any path works.
+
+```bash
+# 1. Create a working directory
+mkdir -p ~/omnivoice
+cd ~/omnivoice
+
+# 2. Copy the OmniVoice tools from the Utsuwa repository
+#    (adjust the source path to where you cloned Utsuwa)
+cp -r /path/to/utsuwa/tools/omnivoice/* .
+```
 
 ### Using `uv` (recommended)
 
 [uv](https://docs.astral.sh/uv/) handles the Python version and the virtual environment for you.
 
 ```bash
-mkdir -p /path/to/omnivoice-env
-cd /path/to/omnivoice-env
+cd ~/omnivoice
 
 # 1. Create a Python 3.11 virtual environment
 uv venv --python 3.11
 
 # 2. Install dependencies
-uv pip install -r /path/to/utsuwa/tools/omnivoice/requirements.txt
+uv pip install -r requirements.txt
 ```
 
 ### Using plain `venv`
@@ -49,25 +58,24 @@ uv pip install -r /path/to/utsuwa/tools/omnivoice/requirements.txt
 If you already have Python 3.11 installed:
 
 ```bash
-mkdir -p /path/to/omnivoice-env
-cd /path/to/omnivoice-env
+cd ~/omnivoice
 
 python3.11 -m venv .venv
 source .venv/bin/activate
-pip install -r /path/to/utsuwa/tools/omnivoice/requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Start the proxy
 
 ```bash
-cd /path/to/omnivoice-env
+cd ~/omnivoice
 source .venv/bin/activate
 
 # GPU
-python /path/to/utsuwa/tools/omnivoice/omnivoice-proxy.py --device cuda --port 8880
+python omnivoice-proxy.py --device cuda --port 8880
 
 # CPU-only
-python /path/to/utsuwa/tools/omnivoice/omnivoice-proxy.py --device cpu --port 8880
+python omnivoice-proxy.py --device cpu --port 8880
 ```
 
 On first start the OmniVoice model is downloaded from HuggingFace. This needs several gigabytes of disk space and may take a few minutes depending on your connection. Wait until you see:
@@ -89,16 +97,16 @@ curl http://localhost:8880/health
 A small integration test is included. Start the proxy in one terminal, then run:
 
 ```bash
-cd /path/to/omnivoice-env
+cd ~/omnivoice
 source .venv/bin/activate
-python /path/to/utsuwa/tools/omnivoice/test-omnivoice.py
+python test-omnivoice.py
 ```
 
 It checks `/health`, `/v1/voices`, synthesises a short clip, and verifies that cloning accepts a request.
 
 ## Connect Utsuwa
 
-1. Start the proxy (`python /path/to/utsuwa/tools/omnivoice/omnivoice-proxy.py --device cuda --port 8880`).
+1. Start the proxy (`python omnivoice-proxy.py --device cuda --port 8880`).
 2. Open Utsuwa and go to **Settings > TTS**.
 3. Enable **Speech** and select **OmniVoice**.
 4. Leave the base URL as `http://localhost:8880/v1/` (or adjust the host/port if the proxy runs elsewhere).
@@ -125,13 +133,13 @@ curl -X POST http://localhost:8880/v1/voices/clone \
 ## Proxy command-line options
 
 ```
-python /path/to/utsuwa/tools/omnivoice/omnivoice-proxy.py --help
-  --host           Bind host (default: 0.0.0.0)
-  --port           Bind port (default: 8880)
-  --device         cpu | cuda | auto (default: cpu)
-  --model-id       HuggingFace model id (default: k2-fsa/OmniVoice)
+python omnivoice-proxy.py --help
+  --host          Bind host (default: 0.0.0.0)
+  --port          Bind port (default: 8880)
+  --device        cpu | cuda | auto (default: cpu)
+  --model-id      HuggingFace model id (default: k2-fsa/OmniVoice)
   --max-concurrent Max parallel synthesis requests (default: 1)
-  --voices-dir     Directory for cloned voice profiles
+  --voices-dir    Directory for cloned voice profiles
 ```
 
 Keep `--max-concurrent 1` for a single-GPU setup. OmniVoice is a diffusion model; running more than one synthesis in parallel on one GPU usually increases total latency rather than throughput.
@@ -145,7 +153,7 @@ You are probably using Python 3.12 or newer. Recreate the environment with Pytho
 ```bash
 rm -rf .venv
 uv venv --python 3.11
-uv pip install -r /path/to/utsuwa/tools/omnivoice/requirements.txt
+uv pip install -r requirements.txt
 ```
 
 ### `RuntimeError: CUDA out of memory`
