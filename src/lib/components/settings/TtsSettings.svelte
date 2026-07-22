@@ -783,9 +783,9 @@ const GENDERS = ['male', 'female'] as const;
 				<!-- ── Advanced ── -->
 				<div class="omnivoice-card">
 					<div class="omnivoice-card-label">Advanced</div>
-					<div class="omnivoice-design">
+					<div class="omnivoice-design-grid-2">
 						<div class="omnivoice-design-row">
-							<span class="omnivoice-design-label">Voice Diversity</span>
+							<span class="omnivoice-design-label">Diversity</span>
 							<input type="range" min="0" max="10" step="0.1"
 								class="omnivoice-slider"
 								value={(tts.speechSettings.positionTemperature as number) ?? 0}
@@ -793,7 +793,7 @@ const GENDERS = ['male', 'female'] as const;
 							<span class="omnivoice-slider-val">{(tts.speechSettings.positionTemperature as number) ?? 0}</span>
 						</div>
 						<div class="omnivoice-design-row">
-							<span class="omnivoice-design-label">Token Temperature</span>
+							<span class="omnivoice-design-label">Temperature</span>
 							<input type="range" min="0" max="2" step="0.1"
 								class="omnivoice-slider"
 								value={(tts.speechSettings.classTemperature as number) ?? 0}
@@ -1040,6 +1040,14 @@ const GENDERS = ['male', 'female'] as const;
 		margin-top: 0.4rem;
 		padding-top: 0.5rem;
 		border-top: 1px solid var(--border-subtle);
+	}
+	.omnivoice-design-grid-2 {
+		margin-top: 0.4rem;
+		padding-top: 0.5rem;
+		border-top: 1px solid var(--border-subtle);
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.75rem;
 	}
 	.omnivoice-design-row {
 		display: flex;
