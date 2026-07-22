@@ -784,21 +784,25 @@ const GENDERS = ['male', 'female'] as const;
 				<div class="omnivoice-card">
 					<div class="omnivoice-card-label">Advanced</div>
 					<div class="omnivoice-design-grid-2">
-						<div class="omnivoice-design-row">
-							<span class="omnivoice-design-label">Diversity</span>
-							<input type="range" min="0" max="10" step="0.1"
-								class="omnivoice-slider"
-								value={(tts.speechSettings.positionTemperature as number) ?? 0}
-								oninput={(e) => tts.handleTTSPositionTemperatureChange(parseFloat(e.currentTarget.value))} />
-							<span class="omnivoice-slider-val">{(tts.speechSettings.positionTemperature as number) ?? 0}</span>
+						<div class="omnivoice-advanced-slider">
+							<span class="omnivoice-advanced-label">Diversity</span>
+							<div class="omnivoice-advanced-row">
+								<input type="range" min="0" max="10" step="0.1"
+									class="omnivoice-slider"
+									value={(tts.speechSettings.positionTemperature as number) ?? 0}
+									oninput={(e) => tts.handleTTSPositionTemperatureChange(parseFloat(e.currentTarget.value))} />
+								<span class="omnivoice-slider-val">{(tts.speechSettings.positionTemperature as number) ?? 0}</span>
+							</div>
 						</div>
-						<div class="omnivoice-design-row">
-							<span class="omnivoice-design-label">Temperature</span>
-							<input type="range" min="0" max="2" step="0.1"
-								class="omnivoice-slider"
-								value={(tts.speechSettings.classTemperature as number) ?? 0}
-								oninput={(e) => tts.handleTTSClassTemperatureChange(parseFloat(e.currentTarget.value))} />
-							<span class="omnivoice-slider-val">{(tts.speechSettings.classTemperature as number) ?? 0}</span>
+						<div class="omnivoice-advanced-slider">
+							<span class="omnivoice-advanced-label">Temperature</span>
+							<div class="omnivoice-advanced-row">
+								<input type="range" min="0" max="2" step="0.1"
+									class="omnivoice-slider"
+									value={(tts.speechSettings.classTemperature as number) ?? 0}
+									oninput={(e) => tts.handleTTSClassTemperatureChange(parseFloat(e.currentTarget.value))} />
+								<span class="omnivoice-slider-val">{(tts.speechSettings.classTemperature as number) ?? 0}</span>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -1048,6 +1052,27 @@ const GENDERS = ['male', 'female'] as const;
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 0.75rem;
+	}
+	.omnivoice-advanced-slider {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		min-width: 0;
+	}
+	.omnivoice-advanced-label {
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: var(--text-tertiary);
+	}
+	.omnivoice-advanced-row {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		min-width: 0;
+	}
+	.omnivoice-advanced-row .omnivoice-slider {
+		flex: 1;
+		min-width: 0;
 	}
 	.omnivoice-design-row {
 		display: flex;
