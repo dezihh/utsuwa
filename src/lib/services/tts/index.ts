@@ -104,6 +104,11 @@ export interface ITTSProvider {
 // Shared audio context for all providers
 let sharedAudioContext: AudioContext | null = null;
 
+/** Reset the shared audio context singleton. Exported for tests. */
+export function __resetSharedAudioContext(): void {
+	sharedAudioContext = null;
+}
+
 export function getSharedAudioContext(): AudioContext {
 	if (!sharedAudioContext) {
 		sharedAudioContext = new AudioContext();

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { TTSOptions, StreamOptions } from './index.ts';
 import { OpenAITTS, buildOpenAITTSRequestBody } from './openai-tts.ts';
+import { __resetSharedAudioContext } from './index.ts';
 
 
 const omnivoiceOpts: TTSOptions = {
@@ -308,4 +309,71 @@ test('buildOpenAITTSRequestBody does not send language for non-omnivoice', () =>
 		language: 'en'
 	});
 	assert.equal('language' in body, false);
+});
+
+
+test('speak disconnects source and analyser after playback ends', async () => {
+	const originalAudioContext = globalThis.AudioContext;
+	const originalFetch = globalThis.fetch;
+
+	const mockBuffer = {
+		sampleRate: 24000,
+		length: 24000,
+		duration: 1,
+		numberOfChannels: 1,
+		getChannelData: () => new Float32Array(24000)
+	} as unknown as AudioBuffer;
+
+	let sourceDisconnects = 0;
+	let analyserDisconnects = 0;
+
+	const mockContext = {
+		state: 'running',
+		resume: async () => { },
+		decodeAudioData: async () => mockBuffer,
+		createBufferSource: () => ({
+			buffer: null,
+			connect: () => { },
+			disconnect: () => {
+				sourceDisconnects++;
+			},
+			start: () => { },
+			onended: null
+		}),
+		createAnalyser: () => ({
+			fftSize: 256,
+			connect: () => { },
+			disconnect: () => {
+				analyserDisconnects++;
+			}
+		}),
+		destination: {}
+	} as unknown as AudioContext;
+
+	globalThis.AudioContext = function () {
+		return mockContext;
+	} as unknown as typeof AudioContext;
+
+	globalThis.fetch = async () =>
+		({
+			ok: true,
+			status: 200,
+			arrayBuffer: async () => new ArrayBuffer(0)
+		} as Response);
+
+	__resetSharedAudioContext();
+	try {
+		const tts = new OpenAITTS(omnivoiceOpts);
+		const result = await tts.speak('Hello.');
+		assert.equal(sourceDisconnects, 0);
+		assert.equal(analyserDisconnects, 0);
+		assert.ok(typeof result.source.onended === 'function');
+		const onEnded = result.source.onended as () => void;
+		onEnded();
+		assert.equal(sourceDisconnects, 1);
+		assert.equal(analyserDisconnects, 1);
+	} finally {
+		globalThis.AudioContext = originalAudioContext;
+		globalThis.fetch = originalFetch;
+	}
 });

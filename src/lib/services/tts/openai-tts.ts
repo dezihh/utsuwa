@@ -191,6 +191,11 @@ export class OpenAITTS implements ITTSProvider {
 		source.connect(analyser);
 		analyser.connect(audioContext.destination);
 
+		source.onended = () => {
+			source.disconnect();
+			analyser.disconnect();
+		};
+
 		source.start(0);
 
 		return { source, analyser };
