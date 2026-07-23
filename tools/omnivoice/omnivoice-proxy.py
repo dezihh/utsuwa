@@ -63,7 +63,7 @@ def log_speech_request(payload: dict[str, Any]) -> None:
 
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from omnivoice import OmniVoice, VoiceClonePrompt
@@ -94,6 +94,19 @@ _voices_dir: Path | None = None
 
 # Locks to prevent concurrent profile generation for the same key.
 _profile_locks: dict[str, asyncio.Lock] = {}
+
+
+def _verify_token(authorization: str | None = Header(None)) -> None:
+    """Require a Bearer token when the proxy is configured with --auth-token."""
+    cfg = app.state.cfg
+    token = getattr(cfg, "auth_token", None) or os.environ.get("OMNIVOICE_AUTH_TOKEN")
+    if not token:
+        return
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    scheme, _, provided = authorization.partition(" ")
+    if scheme.lower() != "bearer" or provided != token:
+        raise HTTPException(status_code=403, detail="Invalid authorization token")
 
 
 def _get_voice_dir() -> Path:
@@ -395,12 +408,12 @@ async def health():
     raise HTTPException(status_code=503, detail="Model is loading")
 
 
-@app.get("/v1/models")
+@app.get("/v1/models", dependencies=[Depends(_verify_token)])
 async def list_models():
     return {"object": "list", "data": [{"id": "omnivoice", "object": "model"}]}
 
 
-@app.get("/v1/voices")
+@app.get("/v1/voices", dependencies=[Depends(_verify_token)])
 async def list_voices():
     clones = _list_clones()
     return {
@@ -409,7 +422,7 @@ async def list_voices():
     }
 
 
-@app.post("/v1/voices/initialize")
+@app.post("/v1/voices/initialize", dependencies=[Depends(_verify_token)])
 async def initialize_voice(request: Request):
     """Pre-generate a persistent voice profile for a preset + language.
 
@@ -436,7 +449,7 @@ async def initialize_voice(request: Request):
     return {"status": status, "profile_key": key}
 
 
-@app.delete("/v1/voices/profile/{profile_key}")
+@app.delete("/v1/voices/profile/{profile_key}", dependencies=[Depends(_verify_token)])
 async def delete_profile(profile_key: str):
     """Delete a persistent preset profile to force regeneration."""
     profiles_dir = _get_profiles_dir()
@@ -451,7 +464,7 @@ async def delete_profile(profile_key: str):
     return {"deleted": profile_key}
 
 
-@app.post("/v1/voices/profile/reset")
+@app.post("/v1/voices/profile/reset", dependencies=[Depends(_verify_token)])
 async def reset_profile(request: Request):
     """Delete and immediately regenerate a persistent preset profile.
 
@@ -504,7 +517,7 @@ async def reset_profile(request: Request):
     return {"status": status, "profile_key": key}
 
 
-@app.post("/v1/voices/clone")
+@app.post("/v1/voices/clone", dependencies=[Depends(_verify_token)])
 async def clone_voice(
     ref_audio: UploadFile = File(...),
     voice_id: str = Form(...),
@@ -578,7 +591,7 @@ async def clone_voice(
     return {"id": f"clone:{voice_id}"}
 
 
-@app.delete("/v1/voices/clone/{clone_id}")
+@app.delete("/v1/voices/clone/{clone_id}", dependencies=[Depends(_verify_token)])
 async def delete_clone(clone_id: str):
     path = _get_voice_dir() / f"{clone_id}.pt"
     if not path.exists():
@@ -587,7 +600,7 @@ async def delete_clone(clone_id: str):
     return {"deleted": clone_id}
 
 
-@app.post("/v1/audio/speech")
+@app.post("/v1/audio/speech", dependencies=[Depends(_verify_token)])
 async def speech(request: Request):
     body = await request.json()
     text = body.get("input", "")
@@ -622,12 +635,17 @@ async def speech(request: Request):
 
 def _parse_args():
     p = argparse.ArgumentParser(description="omnivoice-proxy")
-    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--host", default="127.0.0.1", help="Host to bind to (default: 127.0.0.1)")
     p.add_argument("--port", type=int, default=8880)
     p.add_argument("--device", default="cpu", choices=["cpu", "cuda", "auto"])
     p.add_argument("--model-id", default="k2-fsa/OmniVoice")
     p.add_argument("--max-concurrent", type=int, default=1, help="Max concurrent synthesis requests")
     p.add_argument("--voices-dir", default=None, help="Directory for cloned voice profiles")
+    p.add_argument(
+        "--auth-token",
+        default=os.environ.get("OMNIVOICE_AUTH_TOKEN") or None,
+        help="Optional Bearer token required by all endpoints except /health (env: OMNIVOICE_AUTH_TOKEN)",
+    )
     return p.parse_args()
 
 
