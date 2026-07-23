@@ -397,7 +397,12 @@ export async function sendCompanionMessage(
 		hooks.setLatestResponse(displayDialogue);
 
 		if (turn.dialogue) {
-			vrmStore.startTalking(displayDialogue);
+			// During OmniVoice streaming the avatar is driven by ttsStore.isSpeaking
+			// and the real audio analyser, so a text-length estimate would desync.
+			// Only fall back to the estimated talking timer for non-streaming paths.
+			if (!streamingTTS) {
+				vrmStore.startTalking(displayDialogue);
+			}
 
 			if (speechState?.enabled && !streamingTTS) {
 				ttsStore.speak(turn.dialogue, ttsOptions);
