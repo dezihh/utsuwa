@@ -1,7 +1,9 @@
-import test from 'node:test';
+import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { getTTSProvider, unlockAudioContext } from './index.ts';
+import { getTTSProvider, unlockAudioContext, __resetTTSProviderCache } from './index.ts';
 import type { TTSOptions } from './index.ts';
+
+afterEach(() => __resetTTSProviderCache());
 
 const baseOmniOptions: TTSOptions = {
 	provider: 'omnivoice',

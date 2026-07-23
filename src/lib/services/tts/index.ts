@@ -158,6 +158,12 @@ import { OpenAITTS } from './openai-tts.ts';
 let currentProvider: ITTSProvider | null = null;
 let currentOptionsKey: string | null = null;
 
+/** Reset the provider singleton cache. Exported for tests. */
+export function __resetTTSProviderCache(): void {
+	currentProvider = null;
+	currentOptionsKey = null;
+}
+
 /**
  * Build a stable cache key from the options that actually affect provider
  * behaviour. OmniVoice voice design (instructions), alt voice config, and
