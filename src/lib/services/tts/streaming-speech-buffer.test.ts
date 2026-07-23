@@ -190,3 +190,9 @@ test('emits Chinese sentences without whitespace after 。', () => {
 	assert.equal(segments[0].text, '你好。');
 	assert.equal(segments[1].text, '今天怎么样？');
 });
+
+test('normalizes uppercase language codes in speak calls', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('speak({"text":"Hola","lang":"ES"})');
+	assert.deepEqual(segments, [{ text: 'Hola', language: 'es' }]);
+});

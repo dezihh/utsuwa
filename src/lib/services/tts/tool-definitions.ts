@@ -61,7 +61,7 @@ export function parseToolCall(call: ToolCall): ToolCall | null {
 			arguments: {
 				text: typeof a.text === 'string' ? a.text : '',
 				lang:
-					typeof a.lang === 'string' && a.lang.length >= 2 && a.lang.length <= 5
+					typeof a.lang === 'string' && a.lang.length >= 2 && a.lang.length <= 20
 						? a.lang.toLowerCase()
 						: undefined
 			}

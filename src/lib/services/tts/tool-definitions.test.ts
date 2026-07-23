@@ -47,3 +47,12 @@ test('parseToolCall normalizes speak lang to lowercase', () => {
 	assert.ok(result);
 	assert.equal(result?.arguments.lang, 'de');
 });
+
+test('parseToolCall accepts long language tags like zh-Hans', () => {
+	const result = parseToolCall({
+		name: 'speak',
+		arguments: { text: '你好', lang: 'zh-Hans' }
+	});
+	assert.ok(result);
+	assert.equal(result?.arguments.lang, 'zh-hans');
+});

@@ -40,7 +40,7 @@ test('handles speak calls with missing text', () => {
 		{ name: 'speak', arguments: { lang: 'en' } },
 		{ name: 'speak', arguments: { text: 'Hello' } }
 	]);
-	assert.equal(result, ' Hello');
+	assert.equal(result, 'Hello');
 });
 
 // ── cleanSpeechMarkers ─────────────────────────────────────

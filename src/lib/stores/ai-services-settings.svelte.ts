@@ -267,6 +267,7 @@ export function createTtsSettingsState() {
 		if (!provider) return;
 
 		const config = settingsStore.getProviderConfig(provider.id);
+		if (!isProviderReadyForFetch(provider, config)) return;
 
 		await fetchModels({
 			providerId: provider.id,
@@ -394,6 +395,11 @@ export function createTtsSettingsState() {
 		}
 	}
 
+	function handleTTSBaseUrlChange(providerId: string, baseUrl: string) {
+		settingsStore.setProviderConfig(providerId, { baseUrl });
+		ttsFetchError = null;
+	}
+
 	function handleApiKeyChange(providerId: string, apiKey: string) {
 		ttsFetchError = null;
 		applyApiKey(providerId, apiKey);
@@ -439,6 +445,7 @@ export function createTtsSettingsState() {
 		handleTTSAltLanguageChange,
 		handleTTSAltVoiceChange,
 		handleTTSEnableAltLanguage,
+		handleTTSBaseUrlChange,
 		handleTTSApiKeyBlur,
 		handleApiKeyChange,
 		toggleTTS

@@ -1,5 +1,8 @@
 FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
+ARG DEVICE=cuda
+ENV OMNIVOICE_DEVICE=${DEVICE}
+
 ENV DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/data/hf_cache \
     PYTHONUNBUFFERED=1
@@ -27,4 +30,4 @@ EXPOSE 8880
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -fsS http://localhost:8880/health >/dev/null || exit 1
 
-CMD ["python", "omnivoice-proxy.py", "--host", "0.0.0.0", "--port", "8880", "--device", "cuda", "--voices-dir", "/data/voices"]
+CMD python omnivoice-proxy.py --host 0.0.0.0 --port 8880 --device ${OMNIVOICE_DEVICE} --voices-dir /data/voices

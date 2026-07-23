@@ -28,6 +28,7 @@ export function cleanSpeechMarkers(text: string, primaryLanguage = 'de'): string
 export function reconstructChatText(toolCalls: ToolCall[]): string {
 	return toolCalls
 		.filter((c) => c.name === 'speak')
-		.map((c) => String(c.arguments.text ?? ''))
+		.map((c) => String(c.arguments.text ?? '').trim())
+		.filter(Boolean)
 		.join(' ');
 }

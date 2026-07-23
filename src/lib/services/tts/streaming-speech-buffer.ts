@@ -1,5 +1,6 @@
 import type { SpeechSegment } from '../voice-orchestrator.ts';
 import { scanPseudoToolCalls, parseJsonArgs } from './speech-compiler.ts';
+import { parseToolCall } from './tool-definitions.ts';
 import { splitIntoSegments, stripSpeechArtifacts, stripForSpeech } from '../../utils/sentences.ts';
 
 export interface StreamingSpeechBufferOptions {
@@ -224,15 +225,14 @@ export class StreamingSpeechBuffer {
 
 	private emitToolCall(argsStr: string): void {
 		const args = parseJsonArgs(argsStr);
-		const text = typeof args.text === 'string' ? args.text.trim() : '';
+		const parsed = parseToolCall({ name: 'speak', arguments: args });
+		if (!parsed || parsed.name !== 'speak') return;
+
+		const { text: rawText, lang } = parsed.arguments as { text: string; lang?: string };
+		const text = rawText.trim();
 		if (!text) return;
 
-		const lang =
-			typeof args.lang === 'string' && args.lang.length >= 2 && args.lang.length <= 5
-				? args.lang
-				: this.options.defaultLanguage || 'de';
-
-		this.options.onSegment({ text, language: lang });
+		this.options.onSegment({ text, language: lang || this.options.defaultLanguage || 'de' });
 	}
 
 

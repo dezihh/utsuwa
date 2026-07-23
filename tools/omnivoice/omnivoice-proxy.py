@@ -25,6 +25,7 @@ import os
 import shutil
 import subprocess
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +46,7 @@ def log_speech_request(payload: dict[str, Any]) -> None:
     if not path:
         return
     record = {
-        "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "voice": payload.get("voice"),
         "instructions": payload.get("instructions"),
         "language": payload.get("language"),

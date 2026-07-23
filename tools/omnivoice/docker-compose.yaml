@@ -6,9 +6,10 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: omnivoice-proxy
-    network_mode: host
     ipc: host
     shm_size: "2g"
+    ports:
+      - "8880:8880"
     deploy:
       resources:
         reservations:
