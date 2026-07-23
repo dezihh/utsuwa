@@ -7,7 +7,7 @@ import type { SpeechSegment } from '$lib/services/voice-orchestrator';
 export function splitIntoSentences(text: string): string[] {
 	if (!text.trim()) return [];
 	const parts = text
-		.split(/(?<=[.!?…])\s+/)
+		.split(/(?<=[.!?…。！？])\s*/u)
 		.map((s) => s.trim())
 		.filter((s) => s.length > 0);
 	return parts.length > 0 ? parts : [text.trim()];

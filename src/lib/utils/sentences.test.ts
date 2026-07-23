@@ -57,3 +57,9 @@ test('creates segments with default language', () => {
 test('returns empty array for empty text', () => {
 	assert.deepEqual(splitIntoSegments('', 'en'), []);
 });
+
+
+test('splits Japanese and Chinese sentences without whitespace', () => {
+	assert.deepEqual(splitIntoSentences('こんにちは。元気ですか？'), ['こんにちは。', '元気ですか？']);
+	assert.deepEqual(splitIntoSentences('你好！今天怎么样？'), ['你好！', '今天怎么样？']);
+});

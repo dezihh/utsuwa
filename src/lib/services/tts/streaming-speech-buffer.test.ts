@@ -173,3 +173,20 @@ test('plaintext before a speak call is still emitted', () => {
 	]);
 });
 
+
+
+test('emits Japanese sentences without whitespace after 。', () => {
+	const { buffer, segments } = createLanguageBuffer('ja');
+	buffer.feed('こんにちは。元気ですか。');
+	assert.equal(segments.length, 2);
+	assert.equal(segments[0].text, 'こんにちは。');
+	assert.equal(segments[1].text, '元気ですか。');
+});
+
+test('emits Chinese sentences without whitespace after 。', () => {
+	const { buffer, segments } = createLanguageBuffer('zh');
+	buffer.feed('你好。今天怎么样？');
+	assert.equal(segments.length, 2);
+	assert.equal(segments[0].text, '你好。');
+	assert.equal(segments[1].text, '今天怎么样？');
+});

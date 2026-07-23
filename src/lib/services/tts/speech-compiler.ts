@@ -36,7 +36,7 @@ export function validateCalls(calls: ToolCall[], primaryLanguage: string): ToolC
 	return result;
 }
 
-const SENTENCE_TERMINATOR_RE = /[.!?…]+[\s'")\]]*/g;
+const SENTENCE_TERMINATOR_RE = /[.!?…。！？]+[\s'")\]]*/g;
 
 /**
  * Split long speak() calls at sentence boundaries.

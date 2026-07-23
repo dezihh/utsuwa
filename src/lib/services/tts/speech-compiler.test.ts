@@ -100,6 +100,29 @@ test('splitLongSegments preserves trailing text without terminator', () => {
 	assert.equal(result[3].arguments.text, 'Thanks for asking and goodbye');
 });
 
+
+
+test('splitLongSegments splits Japanese sentences on 。', () => {
+	const input: ToolCall[] = [
+		{ name: 'speak', arguments: { text: 'こんにちは。元気ですか？私は元気です。', lang: 'ja' } }
+	];
+	const result = splitLongSegments(input);
+	assert.equal(result.length, 3);
+	assert.equal(result[0].arguments.text, 'こんにちは。');
+	assert.equal(result[1].arguments.text, '元気ですか？');
+	assert.equal(result[2].arguments.text, '私は元気です。');
+});
+
+test('splitLongSegments splits Chinese sentences on 。！？', () => {
+	const input: ToolCall[] = [
+		{ name: 'speak', arguments: { text: '你好！今天怎么样？我很好。', lang: 'zh' } }
+	];
+	const result = splitLongSegments(input);
+	assert.equal(result.length, 3);
+	assert.equal(result[0].arguments.text, '你好！');
+	assert.equal(result[1].arguments.text, '今天怎么样？');
+	assert.equal(result[2].arguments.text, '我很好。');
+});
 // ── mergeSegments ─────────────────────────────────────────
 
 test('mergeSegments merges consecutive same-language calls', () => {

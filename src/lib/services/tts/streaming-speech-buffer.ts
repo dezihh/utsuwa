@@ -176,7 +176,7 @@ export class StreamingSpeechBuffer {
 		}
 
 		// Emit up to the first sentence boundary so TTS can start immediately.
-		const sentenceEnd = /([.!?…])(\s+|$)/;
+		const sentenceEnd = /([.!?…。！？])\s*/;
 		const m = sentenceEnd.exec(text);
 		if (!m) return;
 
