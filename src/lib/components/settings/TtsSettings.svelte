@@ -100,6 +100,47 @@ const GENDERS = ['male', 'female'] as const;
 		return gender === 'male' ? 'onyx' : 'alloy';
 	}
 
+	// ── Profile initialization ────────────────────────────────
+
+	let primaryProfileStatus = $state<'idle' | 'generating' | 'ready' | 'error'>('idle');
+	let altProfileStatus = $state<'idle' | 'generating' | 'ready' | 'error'>('idle');
+
+	async function initializeProfile(voice: string, instructions: string, language: string, isAlt: boolean) {
+		const statusSetter = isAlt ? (s: typeof altProfileStatus) => (altProfileStatus = s) : (s: typeof primaryProfileStatus) => (primaryProfileStatus = s);
+		statusSetter('generating');
+		try {
+			const res = await fetch(baseUrl() + 'voices/initialize', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ voice, instructions, language })
+			});
+			if (!res.ok) {
+				statusSetter('error');
+				return;
+			}
+			const data = await res.json();
+			statusSetter(data.status === 'ready' ? 'ready' : 'error');
+		} catch {
+			statusSetter('error');
+		}
+	}
+
+	function initializePrimaryProfile() {
+		if (isPrimaryClone) return;
+		const voice = (tts.speechSettings.activeVoiceId as string) || 'alloy';
+		const instructions = (tts.speechSettings.instructions as string) || buildInstructions('female', 'moderate', 'young adult');
+		const language = (tts.speechSettings.primaryLanguage as string) || 'de';
+		initializeProfile(voice, instructions, language, false);
+	}
+
+	function initializeAltProfile() {
+		if (isAltClone) return;
+		const voice = (tts.speechSettings.altVoiceId as string) || 'alloy';
+		const instructions = (tts.speechSettings.altInstructions as string) || buildInstructions('female', 'moderate', 'young adult');
+		const language = (tts.speechSettings.altLanguage as string) || 'es';
+		initializeProfile(voice, instructions, language, true);
+	}
+
 	function setPrimaryDesign(gender?: string, pitch?: string, age?: string) {
 		const g = gender ?? primaryDesign.gender;
 		const p = pitch ?? primaryDesign.pitch;
@@ -107,6 +148,8 @@ const GENDERS = ['male', 'female'] as const;
 		tts.handleTTSInstructionsChange(buildInstructions(g, p, a));
 		// In synthetic mode the voiceId is the preset that matches the design.
 		tts.handleTTSVoiceChange(pickOmniVoicePreset(g));
+		// Eagerly generate the persistent profile so the first message is fast.
+		initializePrimaryProfile();
 	}
 
 	function setAltDesign(gender?: string, pitch?: string, age?: string) {
@@ -116,6 +159,8 @@ const GENDERS = ['male', 'female'] as const;
 		tts.handleTTSAltInstructionsChange(buildInstructions(g, p, a));
 		// In synthetic mode the voiceId is the preset that matches the design.
 		tts.handleTTSAltVoiceChange(pickOmniVoicePreset(g));
+		// Eagerly generate the persistent profile.
+		initializeAltProfile();
 	}
 
 	const primaryVoiceId = $derived.by(() => (tts.speechSettings.activeVoiceId as string) || '');
@@ -151,6 +196,11 @@ const GENDERS = ['male', 'female'] as const;
 		if (tts.isTTSEnabled && tts.speechSettings.activeProvider === 'omnivoice') {
 			scheduleCloneFetch();
 			startHealthPolling();
+			// Eagerly initialize profiles when settings panel opens with OmniVoice active
+			initializePrimaryProfile();
+			if ((tts.speechSettings.enableAltLanguage as boolean)) {
+				initializeAltProfile();
+			}
 		}
 		return () => {
 			clearTimeout(cloneFetchTimer);

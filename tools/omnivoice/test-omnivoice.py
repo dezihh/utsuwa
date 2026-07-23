@@ -125,6 +125,55 @@ def main():
         r4 = requests.delete(f"{BASE}/v1/voices/clone/test_clone")
         check("DELETE /v1/voices/clone/test_clone → 200", r4.status_code == 200)
 
+    # 7. Voice profile initialization (persistent preset profiles)
+    print("\n7. Voice profile initialization")
+    r = requests.post(
+        f"{BASE}/v1/voices/initialize",
+        json={"voice": "alloy", "language": "de"},
+    )
+    check("POST /v1/voices/initialize → 200", r.status_code == 200, f"HTTP {r.status_code}")
+    result = r.json()
+    check("profile status is 'ready'", result.get("status") == "ready")
+    profile_key = result.get("profile_key", "")
+    check("returns profile_key", len(profile_key) > 0)
+    print(f"         Profile key: {profile_key}")
+
+    # 8. Multilingual consistency: same voice, multiple languages
+    print("\n8. Multilingual voice consistency (de → es → de)")
+    sentences = [
+        ("de", "Dies ist der erste Satz auf Deutsch."),
+        ("es", "Esta es una oración en español."),
+        ("de", "Und hier spreche ich wieder Deutsch."),
+        ("es", "Aquí hablo español otra vez."),
+        ("de", "Der letzte Satz ist wieder auf Deutsch."),
+    ]
+    wav_paths = []
+    for i, (lang, text) in enumerate(sentences):
+        r = requests.post(
+            f"{BASE}/v1/audio/speech",
+            json={"model": "omnivoice", "input": text, "voice": "alloy", "language": lang},
+        )
+        check(f"sentence {i+1} ({lang}) → 200", r.status_code == 200, f"HTTP {r.status_code}")
+        p = Path(f"/tmp/omnivoice-consistency-{i+1}-{lang}.wav")
+        p.write_bytes(r.content)
+        wav_paths.append(p)
+    print(f"         Saved {len(wav_paths)} files to /tmp/omnivoice-consistency-*.wav")
+    print("         → Listen to these files to verify same speaker identity across languages.")
+
+    # 9. Profile deletion and regeneration
+    print("\n9. Profile deletion and regeneration")
+    if profile_key:
+        r = requests.delete(f"{BASE}/v1/voices/profile/{profile_key}")
+        check("DELETE profile → 200", r.status_code == 200, f"HTTP {r.status_code}")
+
+        # Re-initialize should recreate it
+        r = requests.post(
+            f"{BASE}/v1/voices/initialize",
+            json={"voice": "alloy", "language": "de"},
+        )
+        check("Re-initialize → 200", r.status_code == 200, f"HTTP {r.status_code}")
+        check("re-created profile is ready", r.json().get("status") == "ready")
+
     print("\nAll tests passed.")
 
 

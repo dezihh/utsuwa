@@ -91,14 +91,32 @@ curl -X POST http://localhost:8880/v1/voices/clone \
 
 ## Voice consistency
 
-OmniVoice builds synthetic voices from attribute descriptions (gender, age, pitch, accent). Because it is a diffusion model, the resulting timbre can vary slightly from one synthesis to the next, even with identical settings. Short phrases and extreme temperature values (e.g. `position_temperature: 0`, `class_temperature: 0`) tend to make these variations more noticeable.
+OmniVoice is a diffusion model. When using design attributes alone (gender, age, pitch, accent), each synthesis can produce a different speaker realization — same class, different identity. This is why Utsuwa uses **persistent voice profiles**: the proxy generates a reference audio once per voice design + language, stores it, and reuses it for all future requests. This anchors the speaker identity across sentences and sessions.
 
-**Cloned voices are usually more stable.** A clone is anchored to a concrete reference recording, so successive sentences keep a more consistent speaker identity. If you want the most stable bilingual experience, consider cloning one voice for your primary language and another for your alternate language instead of relying purely on synthetic presets.
+### How it works
 
-Practical tips:
-- Use `young adult` or `middle-aged` rather than `child` for clearer, louder output.
-- Try non-zero temperatures (`position_temperature: 1`, `class_temperature: 1`) if short phrases sound noisy or inconsistent.
-- For clone voices, use a clean, noise-free reference clip that matches the language you will synthesise most often.
+1. When you select or change a synthetic voice in **Settings > TTS**, Utsuwa asks the proxy to generate a voice profile for your chosen design and language.
+2. The profile is saved under the proxy's voices directory and survives restarts.
+3. Every sentence uses this stored profile as speaker conditioning, regardless of how many sentences the reply contains or how often the language switches.
+
+### Language-specific profiles
+
+Voice clone prompts are language-specific: a prompt generated from German reference audio will produce an accent when speaking Spanish, and vice versa. For a language teacher scenario where native pronunciation matters, Utsuwa creates **one profile per language** automatically. When sentences alternate between German and Spanish, each language uses its own native-sounding profile — both generated from the same design attributes (same gender, age, pitch) but with native pronunciation.
+
+### Cloned voices across languages
+
+If you clone a voice from a German audio clip, it will sound native in German but carry a German accent in other languages. For native pronunciation in multiple languages, clone separate voices per language (ideally from the same speaker). Alternatively, accept the accent as a natural characteristic.
+
+### Same voice for both language slots (language teacher default)
+
+Set the same voice preset (e.g. "alloy") for both Primary and Alternative voice. Utsuwa will use the correct language-specific profile for each sentence automatically. The speaker identity stays consistent; only the pronunciation rules change.
+
+### Tips
+
+- Use `young adult` or `middle-aged` for clearer output.
+- Low temperatures (`position_temperature: 1`, `class_temperature: 0.2`) improve consistency between sentences.
+- For clone voices, use a 3–10 second clean reference clip in the target language.
+- You can regenerate a profile at any time by clicking the regenerate button in Settings, or by deleting the profile via the API and re-selecting the voice.
 
 ## Proxy options
 

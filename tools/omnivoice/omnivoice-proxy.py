@@ -86,15 +86,167 @@ _model: OmniVoice | None = None
 _semaphore: asyncio.Semaphore | None = None
 _voices_dir: Path | None = None
 
+# Locks to prevent concurrent profile generation for the same key.
+_profile_locks: dict[str, asyncio.Lock] = {}
+
 
 def _get_voice_dir() -> Path:
     return _voices_dir or Path.home() / ".omnivoice-proxy" / "voices"
+
+
+def _get_profiles_dir() -> Path:
+    """Directory for auto-generated persistent preset profiles."""
+    d = _get_voice_dir() / "profiles"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _profile_key(voice: str, instructions: str, language: str) -> str:
+    """Build a stable filesystem-safe key for a preset profile.
+
+    The key includes language because cross-lingual prompts produce accented
+    speech. Each language gets its own native-sounding reference prompt.
+    """
+    import hashlib
+
+    # Normalize: lowercase, strip whitespace, sort comma-separated attributes
+    norm_instr = ", ".join(sorted(p.strip() for p in instructions.lower().split(",")))
+    raw = f"{voice}|{norm_instr}|{language.lower()}"
+    short_hash = hashlib.sha256(raw.encode()).hexdigest()[:12]
+    safe_voice = voice.replace(" ", "_")[:20]
+    safe_lang = (language or "auto").replace(" ", "_")[:10]
+    return f"{safe_voice}_{safe_lang}_{short_hash}"
+
+
+def _profile_path(voice: str, instructions: str, language: str) -> Path:
+    key = _profile_key(voice, instructions, language)
+    return _get_profiles_dir() / f"{key}.pt"
+
+
+def _profile_status(voice: str, instructions: str, language: str) -> str:
+    """Return 'ready', 'missing', or 'error' for a preset profile."""
+    p = _profile_path(voice, instructions, language)
+    if p.exists():
+        return "ready"
+    err = p.with_suffix(".error")
+    if err.exists():
+        return "error"
+    return "missing"
+
+
+# Text used to generate the initial reference audio for a preset profile.
+# Long enough to produce ~6 seconds of speech for a stable speaker embedding.
+_PROFILE_SEED_TEXTS: dict[str, str] = {
+    "de": "Guten Tag, mein Name ist dein Sprachassistent. Ich freue mich sehr, dir heute beim Lernen zu helfen. Lass uns gemeinsam beginnen.",
+    "en": "Hello, my name is your language assistant. I am very happy to help you learn today. Let us get started together and have a great session.",
+    "es": "Hola, mi nombre es tu asistente de idiomas. Estoy muy contento de ayudarte a aprender hoy. Comencemos juntos esta sesión.",
+    "fr": "Bonjour, je suis votre assistant linguistique. Je suis très heureux de vous aider à apprendre aujourd'hui. Commençons ensemble.",
+    "it": "Buongiorno, sono il tuo assistente linguistico. Sono molto felice di aiutarti a imparare oggi. Iniziamo insieme questa sessione.",
+    "pt": "Olá, sou o seu assistente de idiomas. Estou muito feliz em ajudá-lo a aprender hoje. Vamos começar juntos esta sessão.",
+    "ja": "こんにちは、私はあなたの言語アシスタントです。今日あなたの学習をお手伝いできてとても嬉しいです。一緒に始めましょう。",
+    "ko": "안녕하세요, 저는 여러분의 언어 도우미입니다. 오늘 여러분의 학습을 도와드리게 되어 매우 기쁩니다. 함께 시작합시다.",
+    "zh": "你好，我是你的语言助手。今天能帮助你学习我非常高兴。让我们一起开始吧。",
+    "ru": "Здравствуйте, я ваш языковой ассистент. Я очень рад помочь вам учиться сегодня. Давайте начнём вместе.",
+    "nl": "Hallo, ik ben je taalassistent. Ik ben heel blij om je vandaag te helpen met leren. Laten we samen beginnen.",
+    "pl": "Cześć, jestem twoim asystentem językowym. Bardzo się cieszę, że mogę ci dziś pomóc w nauce. Zacznijmy razem.",
+    "tr": "Merhaba, ben senin dil asistanınım. Bugün öğrenmene yardımcı olmaktan çok mutluyum. Birlikte başlayalım.",
+    "sv": "Hej, jag är din språkassistent. Jag är väldigt glad att hjälpa dig att lära dig idag. Låt oss börja tillsammans.",
+    "ar": "مرحبا، أنا مساعدك اللغوي. أنا سعيد جدا بمساعدتك في التعلم اليوم. لنبدأ معا.",
+}
+
+_PROFILE_SEED_DEFAULT = "Hello, I am your language learning companion. I look forward to helping you practice and improve your skills today. Let us begin."
+
+
+async def _get_or_create_profile(
+    voice: str, instructions: str, language: str
+) -> VoiceClonePrompt | None:
+    """Load an existing preset profile or create one on-demand.
+
+    Returns the VoiceClonePrompt or None if generation fails.
+    Generation is serialized per profile key to avoid duplicate work.
+    """
+    assert _model is not None
+    loop = asyncio.get_running_loop()
+    path = _profile_path(voice, instructions, language)
+
+    # Fast path: profile already exists
+    if path.exists():
+        return await loop.run_in_executor(None, VoiceClonePrompt.load, str(path))
+
+    # Serialize concurrent requests for the same profile
+    key = _profile_key(voice, instructions, language)
+    if key not in _profile_locks:
+        _profile_locks[key] = asyncio.Lock()
+
+    async with _profile_locks[key]:
+        # Re-check after acquiring lock (another request may have created it)
+        if path.exists():
+            return await loop.run_in_executor(None, VoiceClonePrompt.load, str(path))
+
+        logger.info("Generating persistent profile: voice=%r lang=%r instructions=%r", voice, language, instructions)
+
+        seed_text = _PROFILE_SEED_TEXTS.get(language.lower()[:2], _PROFILE_SEED_DEFAULT)
+
+        try:
+            # Generate reference audio using the design instructions.
+            # Use more diffusion steps for higher quality reference.
+            ref_audio = await loop.run_in_executor(
+                None,
+                lambda: _model.generate(
+                    seed_text,
+                    instruct=instructions,
+                    language=language or None,
+                    num_step=32,
+                ),
+            )
+
+            # Create a VoiceClonePrompt from the generated reference
+            import numpy as np
+
+            ref_wav = ref_audio[0]  # numpy array, 24kHz
+            if ref_wav.shape[-1] < 24000:  # less than 1 second — unusable
+                raise ValueError(f"Generated reference too short: {ref_wav.shape[-1]} samples")
+
+            import torch
+
+            ref_tensor = torch.from_numpy(ref_wav).unsqueeze(0)  # (1, T)
+            prompt = await loop.run_in_executor(
+                None,
+                lambda: _model.create_voice_clone_prompt(
+                    ref_audio=(ref_tensor, 24000),
+                    ref_text=seed_text,
+                    preprocess_prompt=True,
+                ),
+            )
+
+            # Save atomically (write to temp, then rename)
+            tmp_path = path.with_suffix(".tmp")
+            await loop.run_in_executor(None, prompt.save, str(tmp_path))
+            tmp_path.rename(path)
+
+            # Remove stale error marker if present
+            err_path = path.with_suffix(".error")
+            if err_path.exists():
+                err_path.unlink()
+
+            logger.info("Profile saved: %s", path.name)
+            return prompt
+
+        except Exception as e:
+            logger.error("Failed to generate profile for %s: %s", key, e)
+            # Write error marker so we don't retry every request
+            try:
+                path.with_suffix(".error").write_text(str(e), encoding="utf-8")
+            except OSError:
+                pass
+            return None
 
 
 def _list_clones() -> list[str]:
     d = _get_voice_dir()
     if not d.exists():
         return []
+    # Only list direct .pt files (not profiles subdirectory)
     return sorted(p.stem for p in d.glob("*.pt"))
 
 
@@ -137,13 +289,29 @@ async def _generate(
                 raise HTTPException(status_code=404, detail=f"Clone '{clone_id}' not found")
             prompt = await loop.run_in_executor(None, VoiceClonePrompt.load, str(prompt_file))
             kw["voice_clone_prompt"] = prompt
-        elif instructions:
-            kw["instruct"] = instructions
-        elif voice in _PRESET_MAP:
-            kw["instruct"] = _PRESET_MAP[voice]
+        elif voice in _PRESET_MAP or instructions:
+            # Resolve the effective design instructions
+            effective_instructions = instructions or _PRESET_MAP.get(voice, "")
+            effective_language = language or "en"
+
+            # Try to use a persistent profile for voice consistency
+            profile = await _get_or_create_profile(voice or "custom", effective_instructions, effective_language)
+            if profile is not None:
+                kw["voice_clone_prompt"] = profile
+            else:
+                # Fallback: use instruct directly (inconsistent but functional)
+                kw["instruct"] = effective_instructions
+                logger.warning("Using instruct fallback (no persistent profile) for voice=%r", voice)
 
         if language:
             kw["language"] = language
+
+        # Default to low temperatures for voice consistency when using profiles
+        if "voice_clone_prompt" in kw:
+            if "position_temperature" not in kw:
+                kw["position_temperature"] = 1.0
+            if "class_temperature" not in kw:
+                kw["class_temperature"] = 0.2
 
         logger.info("_model.generate kwargs: text=%r kw=%r", text[:80], kw)
         audio = await loop.run_in_executor(None, lambda: _model.generate(text, **kw))
@@ -224,6 +392,48 @@ async def list_voices():
         "presets": PRESETS,
         "clones": [{"id": f"clone:{c}", "name": c} for c in clones],
     }
+
+
+@app.post("/v1/voices/initialize")
+async def initialize_voice(request: Request):
+    """Pre-generate a persistent voice profile for a preset + language.
+
+    Call this from the settings UI when the user selects or changes a voice
+    so the first chat message doesn't incur the profile generation delay.
+
+    Body: {"voice": "alloy", "instructions": "...", "language": "de"}
+    """
+    body = await request.json()
+    voice = body.get("voice", "")
+    instructions = body.get("instructions", "")
+    language = body.get("language", "en")
+
+    if not voice and not instructions:
+        raise HTTPException(status_code=400, detail="'voice' or 'instructions' required")
+
+    effective_instructions = instructions or _PRESET_MAP.get(voice, "")
+    if not effective_instructions:
+        raise HTTPException(status_code=400, detail=f"Unknown voice '{voice}' and no instructions provided")
+
+    profile = await _get_or_create_profile(voice or "custom", effective_instructions, language)
+    status = "ready" if profile is not None else "error"
+    key = _profile_key(voice or "custom", effective_instructions, language)
+    return {"status": status, "profile_key": key}
+
+
+@app.delete("/v1/voices/profile/{profile_key}")
+async def delete_profile(profile_key: str):
+    """Delete a persistent preset profile to force regeneration."""
+    profiles_dir = _get_profiles_dir()
+    path = profiles_dir / f"{profile_key}.pt"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Profile '{profile_key}' not found")
+    path.unlink()
+    # Also remove error marker if present
+    err = path.with_suffix(".error")
+    if err.exists():
+        err.unlink()
+    return {"deleted": profile_key}
 
 
 @app.post("/v1/voices/clone")
