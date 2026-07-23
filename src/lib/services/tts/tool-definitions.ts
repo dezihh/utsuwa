@@ -60,7 +60,10 @@ export function parseToolCall(call: ToolCall): ToolCall | null {
 			name: 'speak',
 			arguments: {
 				text: typeof a.text === 'string' ? a.text : '',
-				lang: typeof a.lang === 'string' && a.lang.length >= 2 && a.lang.length <= 5 ? a.lang : undefined
+				lang:
+					typeof a.lang === 'string' && a.lang.length >= 2 && a.lang.length <= 5
+						? a.lang.toLowerCase()
+						: undefined
 			}
 		};
 	}
@@ -77,8 +80,9 @@ export function parseToolCall(call: ToolCall): ToolCall | null {
 	if (call.name === 'gesture') {
 		const a = call.arguments as Partial<GestureParams>;
 		const VALID = new Set(['smile', 'laugh', 'surprise', 'nod', 'shake_head', 'wave']);
-		return VALID.has(String(a.type ?? ''))
-			? { name: 'gesture', arguments: { type: a.type } }
+		const type = String(a.type ?? '').toLowerCase();
+		return VALID.has(type)
+			? { name: 'gesture', arguments: { type } }
 			: null;
 	}
 

@@ -36,3 +36,14 @@ test('parseToolCall accepts valid gesture types', () => {
 	assert.ok(result);
 	assert.equal(result?.arguments.type, 'smile');
 });
+test('parseToolCall normalizes gesture type to lowercase', () => {
+	const result = parseToolCall({ name: 'gesture', arguments: { type: 'Smile' } });
+	assert.ok(result);
+	assert.equal(result?.arguments.type, 'smile');
+});
+
+test('parseToolCall normalizes speak lang to lowercase', () => {
+	const result = parseToolCall({ name: 'speak', arguments: { text: 'Hello', lang: 'DE' } });
+	assert.ok(result);
+	assert.equal(result?.arguments.lang, 'de');
+});
