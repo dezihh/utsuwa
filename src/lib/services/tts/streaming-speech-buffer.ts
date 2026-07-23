@@ -47,11 +47,13 @@ export class StreamingSpeechBuffer {
 		// back to sentence-based plaintext emission, which would speak raw syntax.
 		const hadMarkup = this.tryEmitLanguageTags() || this.tryEmitLanguageCalls();
 		if (hadMarkup) {
+			this.compact();
 			this.clearFlushTimer();
 			return;
 		}
 
 		this.tryEmit();
+		this.compact();
 		this.armFlushTimer();
 	}
 
@@ -86,6 +88,17 @@ export class StreamingSpeechBuffer {
 		this.emittedLength = 0;
 		this.jsonDepth = 0;
 		this.clearFlushTimer();
+	}
+
+	/**
+	 * Trim the already-processed prefix from the buffer. This keeps the buffer
+	 * size bounded during long OmniVoice streams, so parsePseudoToolCalls() does
+	 * not re-scan text that has already been emitted.
+	 */
+	private compact(): void {
+		if (this.emittedLength <= 0) return;
+		this.buffer = this.buffer.slice(this.emittedLength);
+		this.emittedLength = 0;
 	}
 
 	private tryEmit(): void {

@@ -233,10 +233,12 @@ async def _get_or_create_profile(
                 ),
             )
 
-            # Save atomically (write to temp, then rename)
+            # Save atomically (write to temp, then move into place).
+            # shutil.move handles cross-filesystem installs where Path.rename
+            # would raise an OSError.
             tmp_path = path.with_suffix(".tmp")
             await loop.run_in_executor(None, prompt.save, str(tmp_path))
-            tmp_path.rename(path)
+            shutil.move(str(tmp_path), str(path))
 
             # Remove stale error marker if present
             err_path = path.with_suffix(".error")
@@ -468,18 +470,36 @@ async def reset_profile(request: Request):
     if not effective_instructions:
         raise HTTPException(status_code=400, detail=f"Unknown voice '{voice}' and no instructions provided")
 
-    # Delete existing profile (and any stale error marker) if present
+    # Back up the existing profile so we can roll back if regeneration fails.
     key = _profile_key(voice or "custom", effective_instructions, language)
     profiles_dir = _get_profiles_dir()
     path = profiles_dir / f"{key}.pt"
-    if path.exists():
+    backup = path.with_suffix(".bak")
+    had_existing = path.exists()
+    if had_existing:
+        shutil.copy2(str(path), str(backup))
         path.unlink()
     err = path.with_suffix(".error")
-    if err.exists():
+    had_error_marker = err.exists()
+    if had_error_marker:
         err.unlink()
 
     # Regenerate
-    profile = await _get_or_create_profile(voice or "custom", effective_instructions, language)
+    try:
+        profile = await _get_or_create_profile(voice or "custom", effective_instructions, language)
+    except Exception:
+        # Restore the previous profile so the voice keeps working.
+        if had_existing and backup.exists():
+            shutil.move(str(backup), str(path))
+        elif backup.exists():
+            backup.unlink()
+        if had_error_marker:
+            err.touch()
+        raise
+
+    # Success: drop the backup.
+    if backup.exists():
+        backup.unlink()
     status = "ready" if profile is not None else "error"
     return {"status": status, "profile_key": key}
 
