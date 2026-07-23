@@ -230,22 +230,93 @@ export interface ParsedCalls {
  * Repair JavaScript-style object literals (unquoted keys, single quotes) so
  * they can be parsed as JSON. Models often emit `{ lang: "es", text: "..." }`
  * instead of strict JSON.
+ *
+ * The repair respects string boundaries so single quotes inside double-quoted
+ * strings (e.g. `"...'perro'..."`) are kept intact.
  */
 export function parseJsonArgs(raw: string): Record<string, unknown> {
 	try {
 		return JSON.parse(raw);
 	} catch {
-		// Quote unquoted object keys: { key: ... } -> { "key": ... }
-		// Also normalise single-quoted string literals to double-quoted JSON.
-		const repaired = raw
-			.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":')
-			.replace(/'([^']*)'/g, '"$1"');
+		const repaired = repairJsObjectLiteral(raw);
 		try {
 			return JSON.parse(repaired);
 		} catch {
 			return {};
 		}
 	}
+}
+
+function repairJsObjectLiteral(raw: string): string {
+	let result = '';
+	let i = 0;
+	while (i < raw.length) {
+		const ch = raw[i];
+
+		// Whitespace passes through unchanged.
+		if (/\s/.test(ch)) {
+			result += ch;
+			i++;
+			continue;
+		}
+
+		// Unquoted object key at the start of the object or after {/,
+		if (/[a-zA-Z_$]/.test(ch)) {
+			const keyMatch = raw.slice(i).match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/);
+			const trimmed = result.trim();
+			if (
+				keyMatch &&
+				(trimmed === '' || trimmed.endsWith('{') || trimmed.endsWith(','))
+			) {
+				result += `"${keyMatch[1]}":`;
+				i += keyMatch[1].length;
+				while (i < raw.length && /\s/.test(raw[i])) i++;
+				if (i < raw.length && raw[i] === ':') i++;
+				continue;
+			}
+		}
+
+		// Double-quoted string: copy as-is.
+		if (ch === '"') {
+			const end = findStringEnd(raw, i, '"');
+			if (end !== -1) {
+				result += raw.slice(i, end + 1);
+				i = end + 1;
+				continue;
+			}
+		}
+
+		// Single-quoted string: convert to double-quoted JSON.
+		if (ch === "'") {
+			const end = findStringEnd(raw, i, "'");
+			if (end !== -1) {
+				const content = raw.slice(i + 1, end);
+				result += `"${content.replace(/"/g, '\\"')}"`;
+				i = end + 1;
+				continue;
+			}
+		}
+
+		result += ch;
+		i++;
+	}
+	return result;
+}
+
+function findStringEnd(raw: string, start: number, quote: string): number {
+	let escaped = false;
+	for (let j = start + 1; j < raw.length; j++) {
+		if (escaped) {
+			escaped = false;
+			continue;
+		}
+		if (raw[j] === '\\') {
+			escaped = true;
+			continue;
+		}
+		if (raw[j] === quote) return j;
+	}
+	return -1;
 }
 
 /**

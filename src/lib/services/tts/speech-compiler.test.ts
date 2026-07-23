@@ -326,3 +326,10 @@ test('parsePseudoToolCalls returns chunks preserving prose/call order', () => {
 });
 
 
+test('parsePseudoToolCalls keeps single quotes inside double-quoted strings', () => {
+	const text = `speak({ text: "Das spanische Wort 'perro' bedeutet Hund." })`;
+	const parsed = parsePseudoToolCalls(text);
+	assert.equal(parsed.calls.length, 1);
+	assert.equal(parsed.calls[0].arguments.text, "Das spanische Wort 'perro' bedeutet Hund.");
+	assert.equal(parsed.cleanedText, "Das spanische Wort 'perro' bedeutet Hund.");
+});
