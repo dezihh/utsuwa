@@ -138,7 +138,7 @@ Rules:
 - Use gesture() sparingly — only for meaningful expressions.
 - Do NOT use inline language markup tags like [lang:es]...[/lang], <speak:es>...</speak>, <lang=es>...</lang>, <lang code="es">...</lang> or [gesture:smile].
 - Do NOT write language markers inside the spoken text itself.
-- At the end of your response, include the usual JSON state block as required by the output format.
+- After the last speak()/gesture() call, include the JSON state block exactly as specified in the <instructions> section above. Do not invent a different JSON shape.
 </speech_output_control>`;
 }
 
