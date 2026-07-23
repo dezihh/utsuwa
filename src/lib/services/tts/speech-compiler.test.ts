@@ -207,13 +207,11 @@ test('compile runs the full pipeline', () => {
 	assert.equal(result.segments[1].type, 'pause');
 	assert.equal(result.segments[2].type, 'speak');
 	assert.equal(result.segments[2].text, 'World');
-	assert.equal(result.errors.length, 0);
 });
 
 test('compile handles empty input gracefully', () => {
 	const result = compile([], 'de');
 	assert.equal(result.segments.length, 0);
-	assert.equal(result.errors.length, 0);
 });
 
 // ── compileFromText (fallback) ─────────────────────────────
@@ -224,13 +222,11 @@ test('compileFromText creates single speak segment from plain text', () => {
 	assert.equal(result.segments[0].type, 'speak');
 	assert.equal(result.segments[0].text, 'Hello world.');
 	assert.equal(result.segments[0].language, 'en');
-	assert.equal(result.errors.length, 0);
 });
 
 test('compileFromText handles empty text gracefully', () => {
 	const result = compileFromText('', 'de');
 	assert.equal(result.segments.length, 0);
-	assert.equal(result.errors.length, 0);
 });
 
 // ── Regression tests ──────────────────────────────────────

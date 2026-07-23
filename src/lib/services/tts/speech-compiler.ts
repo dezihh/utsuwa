@@ -15,7 +15,6 @@ export interface CompiledSegment {
 
 export interface CompilerResult {
 	segments: CompiledSegment[];
-	errors: string[];
 }
 
 /**
@@ -164,7 +163,7 @@ export function compileSegments(calls: ToolCall[]): CompiledSegment[] {
  */
 export function compile(calls: ToolCall[], primaryLanguage: string): CompilerResult {
 	if (!calls || calls.length === 0) {
-		return { segments: [], errors: [] };
+		return { segments: [] };
 	}
 
 	const validated = validateCalls(calls, primaryLanguage);
@@ -173,7 +172,7 @@ export function compile(calls: ToolCall[], primaryLanguage: string): CompilerRes
 	const resolved = resolveLanguage(merged, primaryLanguage);
 	const segments = compileSegments(resolved);
 
-	return { segments, errors: [] };
+	return { segments };
 }
 
 /**
@@ -193,11 +192,10 @@ export function recover(originalText: string, primaryLanguage: string): Compiled
  */
 export function compileFromText(text: string, primaryLanguage: string): CompilerResult {
 	if (!text || !text.trim()) {
-		return { segments: [], errors: [] };
+		return { segments: [] };
 	}
 	return {
-		segments: [{ type: 'speak', text: text.trim(), language: primaryLanguage }],
-		errors: []
+		segments: [{ type: 'speak', text: text.trim(), language: primaryLanguage }]
 	};
 }
 
