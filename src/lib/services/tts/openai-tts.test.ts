@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { TTSOptions, StreamOptions } from './index.ts';
 import { OpenAITTS, buildOpenAITTSRequestBody } from './openai-tts.ts';
 
+
 const omnivoiceOpts: TTSOptions = {
 	provider: 'omnivoice',
 	voiceId: 'alloy',
@@ -92,6 +93,25 @@ test('sends OmniVoice quality params only for omnivoice', () => {
 	assert.equal('position_temperature' in openaiBody, false);
 	assert.equal('class_temperature' in openaiBody, false);
 });
+
+test('drops num_step for omnivoice when it is 0 or outside 4-64', () => {
+	const invalidOpts: StreamOptions[] = [
+		{ numStep: 0 },
+		{ numStep: 3 },
+		{ numStep: 65 },
+		{ numStep: -1 }
+	];
+	for (const opts of invalidOpts) {
+		const body = buildOpenAITTSRequestBody('omnivoice', 'omnivoice', 'alloy', 1, 'Hi', opts);
+		assert.equal('num_step' in body, false, `expected num_step to be dropped for ${JSON.stringify(opts)}`);
+	}
+});
+
+test('sends boundary num_step values 4 and 64 for omnivoice', () => {
+	assert.equal(buildOpenAITTSRequestBody('omnivoice', 'omnivoice', 'alloy', 1, 'Hi', { numStep: 4 }).num_step, 4);
+	assert.equal(buildOpenAITTSRequestBody('omnivoice', 'omnivoice', 'alloy', 1, 'Hi', { numStep: 64 }).num_step, 64);
+});
+
 
 // ── fetchAudioBuffer integration ───────────────────────────
 

@@ -38,7 +38,12 @@ export function buildOpenAITTSRequestBody(
 	}
 	if (isOmnivoice) {
 		if (streamOptions?.language) body.language = streamOptions.language;
-		if (streamOptions?.numStep != null) body.num_step = streamOptions.numStep;
+		// OmniVoice accepts num_step in the range 4-64. 0 is invalid and would
+		// trigger a server error, so we drop out-of-range values instead.
+		const numStep = streamOptions?.numStep;
+		if (numStep != null && numStep >= 4 && numStep <= 64) {
+			body.num_step = numStep;
+		}
 		if (streamOptions?.positionTemperature != null) {
 			body.position_temperature = streamOptions.positionTemperature;
 		}
@@ -128,7 +133,7 @@ export class OpenAITTS implements ITTSProvider {
 			text,
 			options
 		);
-		if (this.providerId === 'omnivoice' && import.meta.env.DEV) {
+		if (this.providerId === 'omnivoice' && import.meta.env?.DEV) {
 			console.log('[OpenAITTS] request body:', JSON.stringify(body));
 		}
 
