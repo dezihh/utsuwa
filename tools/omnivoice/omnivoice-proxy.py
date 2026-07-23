@@ -89,6 +89,57 @@ _voices_dir: Path | None = None
 # Locks to prevent concurrent profile generation for the same key.
 _profile_locks: dict[str, asyncio.Lock] = {}
 
+# ---------------------------------------------------------------------------
+# Voice continuity cache
+# ---------------------------------------------------------------------------
+# Stores the last generated audio tokens per voice-ID so the next request can
+# use them as additional speaker conditioning — mimicking OmniVoice's internal
+# chunk-to-chunk reference mechanism. This dramatically reduces the remaining
+# timbre variation between sentences for both cloned and synthetic voices.
+#
+# Structure: { voice_key: (VoiceClonePrompt, timestamp) }
+# Evicted after CONTINUITY_TTL_S seconds (one conversation turn).
+# ---------------------------------------------------------------------------
+
+import time as _time
+
+_continuity_cache: dict[str, tuple[Any, float]] = {}
+CONTINUITY_TTL_S = 120  # Cache a voice continuation for 2 minutes max
+
+
+def _continuity_key(voice: str, language: str) -> str:
+    """Cache key for voice continuity (voice-id + language)."""
+    return f"{voice}|{language}"
+
+
+def _get_continuity_prompt(voice: str, language: str) -> "VoiceClonePrompt | None":
+    """Get the cached continuation prompt if still valid."""
+    key = _continuity_key(voice, language)
+    entry = _continuity_cache.get(key)
+    if entry is None:
+        return None
+    prompt, ts = entry
+    if _time.time() - ts > CONTINUITY_TTL_S:
+        del _continuity_cache[key]
+        return None
+    return prompt
+
+
+def _set_continuity_prompt(voice: str, language: str, prompt: "VoiceClonePrompt") -> None:
+    """Store a continuation prompt derived from the last generated audio."""
+    key = _continuity_key(voice, language)
+    _continuity_cache[key] = (prompt, _time.time())
+    # Evict stale entries (simple housekeeping, no background task needed)
+    now = _time.time()
+    stale = [k for k, (_, ts) in _continuity_cache.items() if now - ts > CONTINUITY_TTL_S]
+    for k in stale:
+        del _continuity_cache[k]
+
+
+def _clear_continuity_cache() -> None:
+    """Clear the entire continuity cache (e.g. on interrupt/new session)."""
+    _continuity_cache.clear()
+
 
 def _get_voice_dir() -> Path:
     return _voices_dir or Path.home() / ".omnivoice-proxy" / "voices"
