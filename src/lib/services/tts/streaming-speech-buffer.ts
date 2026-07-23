@@ -14,9 +14,10 @@ export interface StreamingSpeechBufferOptions {
  * sentence terminator is still emitted after a short timeout.
  *
  * For OmniVoice the buffer also recognises language-marked tool calls of the
- * form `speak({"text":"...","lang":"xx"})`. Complete calls are emitted
- * immediately; incomplete calls suppress the plaintext flush timer so raw
- * syntax is never spoken.
+ * form `speak({"text":"...","lang":"xx"})` and the common inline tag form
+ * `<lang code="xx">...</lang>`. Complete markup is emitted immediately;
+ * incomplete markup suppresses the plaintext flush timer so raw syntax is
+ * never spoken.
  */
 export class StreamingSpeechBuffer {
 	private buffer = '';
@@ -41,10 +42,11 @@ export class StreamingSpeechBuffer {
 		}
 		this.buffer += chunk;
 
-		// Tool-call mode takes precedence: once we see speak(/pause(/gesture(
-		// we only emit complete calls and never fall back to sentence-based
-		// plaintext emission, which would speak raw syntax.
-		if (this.tryEmitLanguageCalls()) {
+		// Markup mode takes precedence: once we see speak(/pause(/gesture(
+		// or <lang code="xx"> tags we only emit complete markup and never fall
+		// back to sentence-based plaintext emission, which would speak raw syntax.
+		const hadMarkup = this.tryEmitLanguageTags() || this.tryEmitLanguageCalls();
+		if (hadMarkup) {
 			this.clearFlushTimer();
 			return;
 		}
@@ -54,23 +56,24 @@ export class StreamingSpeechBuffer {
 	}
 
 	flush(): void {
+		this.tryEmitLanguageTags();
 		this.tryEmitLanguageCalls();
 		const remaining = this.buffer.slice(this.emittedLength).trim();
 
 		// Only speak remaining plaintext if it does not contain raw or incomplete
-		// tool-call syntax. Anything that looks like a call has already been
-		// handled by tryEmitLanguageCalls(); leftover fragments are discarded.
-		if (remaining && !/(?:speak|pause|gesture)\s*\(/.test(remaining)) {
+		// markup syntax. Anything that looks like a call or tag has already been
+		// handled; leftover fragments are discarded.
+		if (remaining && !this.hasIncompleteMarkup(remaining)) {
 			const { cleaned } = stripForSpeech(remaining);
 			for (const seg of splitIntoSegments(cleaned.trim(), this.options.defaultLanguage)) {
 				this.options.onSegment(seg);
 			}
 		}
 
-		// Only mark the whole buffer as processed when no incomplete tool-call
-		// syntax remains. If raw syntax is left, later chunks may complete it;
-		// at end-of-stream the buffer is discarded anyway.
-		if (!/(?:speak|pause|gesture)\s*\(/.test(this.buffer.slice(this.emittedLength))) {
+		// Only mark the whole buffer as processed when no incomplete markup
+		// remains. If raw syntax is left, later chunks may complete it; at
+		// end-of-stream the buffer is discarded anyway.
+		if (!this.hasIncompleteMarkup(this.buffer.slice(this.emittedLength))) {
 			this.emittedLength = this.buffer.length;
 		}
 
@@ -244,5 +247,54 @@ export class StreamingSpeechBuffer {
 				: this.options.defaultLanguage || 'de';
 
 		this.options.onSegment({ text, language: lang });
+	}
+
+	/**
+	 * Scans for inline language tags such as `<lang code="es">...</lang>`.
+	 * Emits each complete tag as a SpeechSegment, emits plaintext that precedes
+	 * a tag, and advances `emittedLength` past consumed content.
+	 *
+	 * Returns `true` when the buffer is in tag mode (at least one complete tag
+	 * emitted or an incomplete tag opening remains).
+	 */
+	private tryEmitLanguageTags(): boolean {
+		const unprocessed = this.buffer.slice(this.emittedLength);
+		const tagRe = /<lang\s+code=["']([a-zA-Z\-]{2,8})["']>([\s\S]*?)<\/lang>/g;
+
+		let consumed = 0;
+		let hadTag = false;
+		let match: RegExpExecArray | null;
+
+		while ((match = tagRe.exec(unprocessed)) !== null) {
+			const before = unprocessed.slice(consumed, match.index).trim();
+			if (before) this.emit(before);
+
+			const text = match[2].trim();
+			if (text) {
+				this.options.onSegment({ text, language: match[1] });
+			}
+
+			consumed = match.index + match[0].length;
+			hadTag = true;
+			tagRe.lastIndex = consumed;
+		}
+
+		// If an incomplete <lang ...> opening follows, emit the plaintext before
+		// it so primary-language text is not held back while waiting for the
+		// closing </lang>.
+		const incompleteIndex = unprocessed.search(/<lang(\s+code=["']?)?/i);
+		if (incompleteIndex !== -1 && incompleteIndex > consumed) {
+			const before = unprocessed.slice(consumed, incompleteIndex).trim();
+			if (before) this.emit(before);
+			consumed = incompleteIndex;
+			hadTag = true;
+		}
+
+		this.emittedLength += consumed;
+		return hadTag;
+	}
+
+	private hasIncompleteMarkup(text: string): boolean {
+		return /(?:speak|pause|gesture)\s*\(/.test(text) || /<lang(\s+code=["']?)?/i.test(text);
 	}
 }

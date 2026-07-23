@@ -38,6 +38,21 @@ test('converts angle-equals lang tags to speak calls', () => {
 	assert.equal(cleanedText, 'Salut Comment ça va? Au revoir');
 });
 
+test('converts angle-code lang tags to speak calls', () => {
+	const { calls, cleanedText } = normalizeLanguageTags(
+		'Das Wort ist <lang code="es">gallo</lang>.',
+		'de'
+	);
+	assert.equal(calls.length, 3);
+	assert.equal(calls[0].arguments.text, 'Das Wort ist');
+	assert.equal(calls[0].arguments.lang, 'de');
+	assert.equal(calls[1].arguments.text, 'gallo');
+	assert.equal(calls[1].arguments.lang, 'es');
+	assert.equal(calls[2].arguments.text, '.');
+	assert.equal(calls[2].arguments.lang, 'de');
+	assert.equal(cleanedText, 'Das Wort ist gallo .');
+});
+
 test('converts gesture tags to gesture calls', () => {
 	const { calls, cleanedText } = normalizeLanguageTags(
 		'Hello <gesture:smile> how are you?',

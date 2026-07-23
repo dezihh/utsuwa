@@ -172,3 +172,30 @@ test('plaintext before a speak call is still emitted', () => {
 		{ text: 'Hola', language: 'es' }
 	]);
 });
+
+test('emits a complete <lang code> tag immediately', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('Das Wort ist <lang code="es">gallo</lang>.');
+	assert.deepEqual(segments, [
+		{ text: 'Das Wort ist', language: 'de' },
+		{ text: 'gallo', language: 'es' }
+	]);
+});
+
+test('does not speak incomplete <lang code> tags on flush', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('Das Wort ist <lang code="es">gal');
+	buffer.flush();
+	assert.deepEqual(segments, [{ text: 'Das Wort ist', language: 'de' }]);
+});
+
+test('completes a <lang code> tag split across chunks', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('Das Wort ist <lang code="es">gal');
+	assert.deepEqual(segments, [{ text: 'Das Wort ist', language: 'de' }]);
+	buffer.feed('lo</lang>.');
+	assert.deepEqual(segments, [
+		{ text: 'Das Wort ist', language: 'de' },
+		{ text: 'gallo', language: 'es' }
+	]);
+});

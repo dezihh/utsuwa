@@ -60,6 +60,14 @@ test('cleanSpeechMarkers removes lang equals tags and gesture markers', () => {
 	assert.equal(result, 'Hi Salut there');
 });
 
+test('cleanSpeechMarkers removes angle-code lang tags keeping inner text', () => {
+	const result = cleanSpeechMarkers(
+		'Das spanische Wort für Hahn ist <lang code="es">gallo</lang>.',
+		'de'
+	);
+	assert.equal(result, 'Das spanische Wort für Hahn ist gallo .');
+});
+
 test('cleanSpeechMarkers returns plain text unchanged when no markers', () => {
 	const result = cleanSpeechMarkers('Hello world', 'en');
 	assert.equal(result, 'Hello world');
