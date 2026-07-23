@@ -27,6 +27,20 @@ import { isTauri } from '$lib/services/platform';
 import type { LLMProvider, TTSProvider } from '$lib/types';
 import type { EventDefinition } from '$lib/types/events';
 
+/**
+ * Returns true when `text` ends with an incomplete speak/pause/gesture call or
+ * an incomplete language tag. Used by the streaming delta cleaner to decide
+ * whether it can flush the current chunk or needs to wait for more data.
+ */
+function hasIncompleteTrailingMarkup(text: string): boolean {
+	const trimmed = text.trimEnd();
+	// Incomplete call: speak( ... without closing brace/paren
+	if (/(speak|pause|gesture)\s*\([^)]*$/.test(trimmed)) return true;
+	// Incomplete <lang ...> opening
+	if (/<lang(\s+code=["']?)?$/i.test(trimmed)) return true;
+	return false;
+}
+
 export interface CompanionChatHooks {
 	/** Toggle the typing indicator. */
 	setTyping: (typing: boolean) => void;
@@ -258,13 +272,35 @@ export async function sendCompanionMessage(
 				? ttsStore.beginStreaming(ttsOptions)
 				: false;
 		let streamedLength = 0;
+		let displayedSoFar = '';
+		let pendingRaw = '';
 
 		const onDelta = (full: string) => {
-			const display =
-				displayTtsProvider === 'omnivoice'
-					? cleanSpeechMarkers(full, (displaySpeechSettings.primaryLanguage as string) || 'de')
-					: full;
-			chatStore.updateLastMessage(display);
+			if (displayTtsProvider !== 'omnivoice') {
+				chatStore.updateLastMessage(full);
+
+				if (streamingTTS && full.length > streamedLength) {
+					ttsStore.feedStreaming(full.slice(streamedLength));
+				}
+				streamedLength = full.length;
+				return;
+			}
+
+			const delta = full.slice(streamedLength);
+			pendingRaw += delta;
+
+			// Only flush when no incomplete speak/pause/gesture call or language
+			// tag is dangling at the end. This keeps the incremental cleanup O(1)
+			// per chunk instead of re-parsing the full accumulated text every time.
+			if (!hasIncompleteTrailingMarkup(pendingRaw)) {
+				displayedSoFar += cleanSpeechMarkers(
+					pendingRaw,
+					(displaySpeechSettings.primaryLanguage as string) || 'de'
+				);
+				pendingRaw = '';
+			}
+
+			chatStore.updateLastMessage(displayedSoFar);
 
 			if (streamingTTS && full.length > streamedLength) {
 				ttsStore.feedStreaming(full.slice(streamedLength));
@@ -338,9 +374,17 @@ export async function sendCompanionMessage(
 
 		hooks.setTyping(false);
 
+		// For OmniVoice the raw response contains speak({...}) / gesture({...})
+		// pseudo-tool-calls. Strip them before memory/fact extraction so the
+		// data layer only sees clean dialogue.
+		const cleanedCompanionResponse =
+			displayTtsProvider === 'omnivoice'
+				? cleanSpeechMarkers(fullContent, (displaySpeechSettings.primaryLanguage as string) || 'de')
+				: fullContent;
+
 		const turn = await processCompanionTurn({
 			userMessage: content,
-			companionResponse: fullContent,
+			companionResponse: cleanedCompanionResponse,
 			llm: {
 				provider,
 				model: selectedModel,
@@ -387,14 +431,9 @@ export async function sendCompanionMessage(
 			);
 		}
 
-		// OmniVoice may still emit legacy/inline language markers depending on the
-		// model's instruction following. Strip them from the visible chat text and
-		// from the VRM lip-sync input, while the raw turn.dialogue stays available
-		// for the TTS pipeline (which normalizes markers into tool calls).
-		const displayDialogue =
-			displayTtsProvider === 'omnivoice'
-				? cleanSpeechMarkers(turn.dialogue, (displaySpeechSettings.primaryLanguage as string) || 'de')
-				: turn.dialogue;
+		// turn.dialogue is already clean for OmniVoice because companionResponse
+		// was stripped of speak()/gesture() syntax before processCompanionTurn.
+		const displayDialogue = turn.dialogue;
 
 		chatStore.updateLastMessage(displayDialogue);
 		hooks.setLatestResponse(displayDialogue);
