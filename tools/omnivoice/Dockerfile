@@ -13,7 +13,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir "omnivoice>=0.2" "fastapi>=0.115" "uvicorn[standard]>=0.32" "soundfile>=0.12" \
     && pip cache purge
 
-COPY tools/omnivoice /app/
+COPY . /app/
 
 RUN mkdir -p /data/hf_cache /data/voices \
     && groupadd -r appuser \
