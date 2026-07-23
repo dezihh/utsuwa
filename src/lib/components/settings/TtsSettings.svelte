@@ -679,21 +679,20 @@ const GENDERS = ['male', 'female'] as const;
 						</button>
 					</div>
 
-					{#if !isPrimaryClone}
-						<div class="omnivoice-voice-row">
-							<span style="flex:1;"></span>
-							<button
-								class="btn btn-sm btn-secondary"
-								onclick={() => regenerateProfile('primary')}
-								disabled={primaryRegenerating}>
-								{#if primaryRegenerating}
-									<span class="omnivoice-spinner"></span> Regenerating...
-								{:else}
-									↻ Regenerate profile
-								{/if}
-							</button>
-						</div>
-					{/if}
+					<div class="omnivoice-voice-row">
+						<span style="flex:1;"></span>
+						<button
+							class="btn btn-sm btn-secondary"
+							onclick={() => regenerateProfile('primary')}
+							disabled={primaryRegenerating || isPrimaryClone}
+							title={isPrimaryClone ? 'Profile regeneration is only available for synthetic voices' : ''}>
+							{#if primaryRegenerating}
+								<span class="omnivoice-spinner"></span> Regenerating...
+							{:else}
+								↻ Regenerate profile
+							{/if}
+						</button>
+					</div>
 
 						{#if isPrimaryClone}
 						{#if clonedVoices.length > 0}
@@ -843,21 +842,20 @@ const GENDERS = ['male', 'female'] as const;
 							</button>
 						</div>
 
-						{#if !isAltClone}
-							<div class="omnivoice-voice-row">
-								<span style="flex:1;"></span>
-								<button
-									class="btn btn-sm btn-secondary"
-									onclick={() => regenerateProfile('alt')}
-									disabled={altRegenerating}>
-									{#if altRegenerating}
-										<span class="omnivoice-spinner"></span> Regenerating...
-									{:else}
-										↻ Regenerate profile
-									{/if}
-								</button>
-							</div>
-						{/if}
+						<div class="omnivoice-voice-row">
+							<span style="flex:1;"></span>
+							<button
+								class="btn btn-sm btn-secondary"
+								onclick={() => regenerateProfile('alt')}
+								disabled={altRegenerating || isAltClone}
+								title={isAltClone ? 'Profile regeneration is only available for synthetic voices' : ''}>
+								{#if altRegenerating}
+									<span class="omnivoice-spinner"></span> Regenerating...
+								{:else}
+									↻ Regenerate profile
+								{/if}
+							</button>
+						</div>
 
 						{#if isAltClone}
 							{#if clonedVoices.length > 0}
