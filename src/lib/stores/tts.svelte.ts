@@ -28,6 +28,7 @@ function createTTSStore() {
 	let errorTimer: ReturnType<typeof setTimeout> | null = null;
 	let streamingBuffer: StreamingSpeechBuffer | null = null;
 	let streamingSessionId = 0;
+	let isEndingSession = false;
 
 	const orchestrator = new VoiceOrchestrator();
 
@@ -152,6 +153,7 @@ function createTTSStore() {
 		const sessionId = streamingSessionId;
 		streamingBuffer = null;
 		buffer.flush();
+		isEndingSession = true;
 
 		try {
 			await orchestrator.endSession();
@@ -159,6 +161,7 @@ function createTTSStore() {
 			console.error('Streaming TTS error:', error);
 			reportError(error);
 		} finally {
+			isEndingSession = false;
 			if (sessionId === streamingSessionId) {
 				isSpeaking = false;
 				currentAnalyser = null;
@@ -170,7 +173,11 @@ function createTTSStore() {
 		streamingSessionId++;
 		streamingBuffer?.reset();
 		streamingBuffer = null;
-		orchestrator.interrupt();
+		// If endStreaming is already shutting the orchestrator down, avoid a
+		// concurrent interrupt() that could leave the orchestrator inconsistent.
+		if (!isEndingSession) {
+			orchestrator.interrupt();
+		}
 		isSpeaking = false;
 		currentAnalyser = null;
 	}

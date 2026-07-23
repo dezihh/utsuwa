@@ -138,6 +138,20 @@ def _profile_status(voice: str, instructions: str, language: str) -> str:
     return "missing"
 
 
+def _sanitize_instructions(instructions: Any) -> str:
+    """Normalize user-supplied design instructions for profile keys and TTS.
+
+    Keeps printable ASCII letters, digits, commas and spaces, collapses
+    whitespace, and limits length. This prevents odd characters from
+    disturbing the profile-key hash or the downstream prompt.
+    """
+    if not isinstance(instructions, str):
+        return ""
+    cleaned = "".join(ch for ch in instructions if ch.isprintable())
+    cleaned = " ".join(cleaned.split())
+    return cleaned[:200]
+
+
 # Text used to generate the initial reference audio for a preset profile.
 # Long enough to produce ~6 seconds of speech for a stable speaker embedding.
 _PROFILE_SEED_TEXTS: dict[str, str] = {
@@ -404,7 +418,7 @@ async def initialize_voice(request: Request):
     """
     body = await request.json()
     voice = body.get("voice", "")
-    instructions = body.get("instructions", "")
+    instructions = _sanitize_instructions(body.get("instructions", ""))
     language = body.get("language", "en")
 
     if not voice and not instructions:
@@ -444,7 +458,7 @@ async def reset_profile(request: Request):
     """
     body = await request.json()
     voice = body.get("voice", "")
-    instructions = body.get("instructions", "")
+    instructions = _sanitize_instructions(body.get("instructions", ""))
     language = body.get("language", "en")
 
     if not voice and not instructions:

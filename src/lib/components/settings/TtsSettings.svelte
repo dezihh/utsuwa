@@ -145,15 +145,21 @@ const GENDERS = ['male', 'female'] as const;
 			primaryRegenerating = true;
 		}
 		try {
-			const voice = isAlt
-				? ((tts.speechSettings.altVoiceId as string) || 'alloy')
-				: ((tts.speechSettings.activeVoiceId as string) || 'alloy');
-			const instructions = isAlt
-				? ((tts.speechSettings.altInstructions as string) || buildInstructions('female', 'moderate', 'young adult'))
-				: ((tts.speechSettings.instructions as string) || buildInstructions('female', 'moderate', 'young adult'));
-			const language = isAlt
-				? ((tts.speechSettings.altLanguage as string) || 'es')
-				: ((tts.speechSettings.primaryLanguage as string) || 'de');
+			const { voice, instructions, language } = isAlt
+				? {
+						voice: (tts.speechSettings.altVoiceId as string) || 'alloy',
+						instructions:
+							(tts.speechSettings.altInstructions as string) ||
+							buildInstructions('female', 'moderate', 'young adult'),
+						language: (tts.speechSettings.altLanguage as string) || 'es'
+					}
+				: {
+						voice: (tts.speechSettings.activeVoiceId as string) || 'alloy',
+						instructions:
+							(tts.speechSettings.instructions as string) ||
+							buildInstructions('female', 'moderate', 'young adult'),
+						language: (tts.speechSettings.primaryLanguage as string) || 'de'
+					};
 
 			const res = await fetch(baseUrl() + 'voices/profile/reset', {
 				method: 'POST',

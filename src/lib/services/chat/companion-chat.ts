@@ -330,6 +330,9 @@ export async function sendCompanionMessage(
 		}
 
 		if (streamingTTS) {
+			// Intentionally fire-and-forget: endStreaming flushes the buffer and
+			// waits for the orchestrator to finish, but memory/event/image
+			// processing (processCompanionTurn) must not be blocked.
 			void ttsStore.endStreaming();
 		}
 
