@@ -1,3 +1,5 @@
+import { parseToolCall } from './tool-definitions.ts';
+
 export interface ToolCall {
 	name: string;
 	arguments: Record<string, unknown>;
@@ -17,34 +19,20 @@ export interface CompilerResult {
 }
 
 /**
- * Validate raw tool calls from the LLM. Fills missing fields,
- * clamps values, and discards unrecognized calls.
+ * Validate raw tool calls from the LLM. Delegates argument parsing to the
+ * shared schema validator and only adds the primary-language fallback here.
  */
 export function validateCalls(calls: ToolCall[], primaryLanguage: string): ToolCall[] {
-	const knownTools = new Set(['speak', 'pause', 'gesture']);
 	const result: ToolCall[] = [];
 	for (const c of calls) {
-		if (!knownTools.has(c.name)) continue;
+		const parsed = parseToolCall(c);
+		if (!parsed) continue;
 
-		if (c.name === 'speak') {
-			const text = typeof c.arguments.text === 'string' ? c.arguments.text : '';
-			const lang =
-				typeof c.arguments.lang === 'string' &&
-				c.arguments.lang.length >= 2 &&
-				c.arguments.lang.length <= 5
-					? c.arguments.lang
-					: primaryLanguage;
-			result.push({ name: 'speak', arguments: { text, lang } });
-		} else if (c.name === 'pause') {
-			const ms = typeof c.arguments.ms === 'number' ? Math.round(c.arguments.ms) : 500;
-			result.push({ name: 'pause', arguments: { ms: Math.max(100, Math.min(5000, ms)) } });
-		} else if (c.name === 'gesture') {
-			const valid = new Set(['smile', 'laugh', 'surprise', 'nod', 'shake_head', 'wave']);
-			const type = String(c.arguments.type ?? '');
-			if (valid.has(type)) {
-				result.push({ name: 'gesture', arguments: { type } });
-			}
+		if (parsed.name === 'speak') {
+			parsed.arguments.lang = (parsed.arguments.lang as string | undefined) || primaryLanguage;
 		}
+
+		result.push(parsed);
 	}
 	return result;
 }

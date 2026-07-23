@@ -67,7 +67,7 @@ export function parseToolCall(call: ToolCall): ToolCall | null {
 
 	if (call.name === 'pause') {
 		const a = call.arguments as Partial<PauseParams>;
-		const ms = typeof a.ms === 'number' ? Math.round(a.ms) : 0;
+		const ms = typeof a.ms === 'number' ? Math.round(a.ms) : 500;
 		return {
 			name: 'pause',
 			arguments: { ms: Math.max(100, Math.min(5000, ms)) }
