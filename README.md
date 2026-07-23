@@ -163,6 +163,9 @@ OmniVoice runs entirely on your own machine and generates speech at up to 40× r
 - **Bilingual conversations**: enable a primary and an alternate language with independent voices; Utsuwa switches voices sentence by sentence when the model replies in the alternate language.
 - **Streaming-friendly**: sentences are synthesised in parallel and played back as they finish, keeping pauses short.
 - **Privacy-first**: all audio generation stays local; no cloud TTS key required.
+- **Regenerate profiles**: if a synthetic voice drifts or you want a slightly different take on the same design, click **Regenerate profile** in Settings > TTS to create a fresh persistent profile.
+
+Because OmniVoice is a diffusion model, synthetic voices are never 100% identical between regenerations — the same design attributes will always sound similar, but subtle speaker characteristics can vary. Cloned voices are much more stable because they are anchored to your reference audio.
 
 Run the included proxy (`python tools/omnivoice/omnivoice-proxy.py --device cuda`) and point Utsuwa at `http://localhost:8880/v1/`. Full setup steps are in the [OmniVoice Setup guide](https://docs.utsuwa.ai/docs/guides/omnivoice-setup).
 

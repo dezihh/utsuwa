@@ -118,6 +118,20 @@ If you clone a voice from a German audio clip, it will sound native in German bu
 
 Set the same voice preset (e.g. "alloy") for both Primary and Alternative voice. Utsuwa will use the correct language-specific profile for each sentence automatically. The speaker identity stays consistent; only the pronunciation rules change.
 
+### Regenerate a profile
+
+Each synthetic voice slot has a **↻ Regenerate profile** button in **Settings > TTS**. Clicking it deletes the stored profile for that exact voice design + language and immediately creates a fresh one.
+
+Use this when:
+
+- A synthetic voice has drifted over many sessions and no longer sounds the way you want.
+- You want to explore a slightly different speaker realization of the same design attributes.
+- You changed hardware or updated OmniVoice and want a clean profile.
+
+**Important:** the button only affects the profile of the voice slot you click it for. If you have a primary German voice and an alternate Spanish voice, regenerating the alternate voice leaves the primary voice untouched, and vice versa.
+
+Because OmniVoice is a diffusion model, a regenerated profile will be *similar* to the previous one — same gender, age, pitch, and accent — but never a 100% identical copy. Think of it as the same character played by a slightly different actor. Cloned voices are much more stable because they are anchored to your uploaded reference audio.
+
 ### Managing profiles
 
 Profiles are identified by a stable key derived from voice, instructions, and language. You can list, delete, or regenerate them via the proxy API.
@@ -135,6 +149,14 @@ Delete a profile to force regeneration on the next request:
 ```bash
 # Replace <profile_key> with the key returned by /v1/voices/initialize
 curl -X DELETE http://localhost:8880/v1/voices/profile/<profile_key>
+```
+
+Reset (delete + regenerate) a profile in one call:
+
+```bash
+curl -X POST http://localhost:8880/v1/voices/profile/reset \
+  -H "Content-Type: application/json" \
+  -d '{"voice":"alloy","instructions":"female, young adult, moderate pitch","language":"de"}'
 ```
 
 To remove all generated profiles, delete the `profiles/` directory inside the `omnivoice-voices` Docker volume.

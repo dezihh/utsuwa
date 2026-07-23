@@ -117,6 +117,16 @@ Delete a profile to force regeneration:
 curl -X DELETE http://localhost:8880/v1/voices/profile/<profile_key>
 ```
 
+Reset (delete + regenerate) a profile in one call. This is what the **Regenerate profile** button in Utsuwa uses when you want a fresh take on a synthetic voice:
+
+```bash
+curl -X POST http://localhost:8880/v1/voices/profile/reset \
+  -H "Content-Type: application/json" \
+  -d '{"voice":"alloy","instructions":"female, young adult, moderate pitch","language":"de"}'
+```
+
+Resetting is useful when a synthetic voice has drifted over time or when you simply want to explore a slightly different realization of the same design. Because OmniVoice is a diffusion model, the new profile will be similar but not identical to the old one.
+
 ## Proxy command-line options
 
 ```
