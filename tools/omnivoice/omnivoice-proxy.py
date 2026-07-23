@@ -28,6 +28,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import hashlib
+import time
+
+import numpy as np
+import torch
+
 # Path to the request audit log. Each line is JSON with timestamp, parameters
 # and the input text as received by /v1/audio/speech. Set to "" to disable.
 REQUEST_LOG_PATH = os.environ.get("OMNIVOICE_REQUEST_LOG", "/tmp/omnivoice-requests.log")
@@ -89,57 +95,6 @@ _voices_dir: Path | None = None
 # Locks to prevent concurrent profile generation for the same key.
 _profile_locks: dict[str, asyncio.Lock] = {}
 
-# ---------------------------------------------------------------------------
-# Voice continuity cache
-# ---------------------------------------------------------------------------
-# Stores the last generated audio tokens per voice-ID so the next request can
-# use them as additional speaker conditioning — mimicking OmniVoice's internal
-# chunk-to-chunk reference mechanism. This dramatically reduces the remaining
-# timbre variation between sentences for both cloned and synthetic voices.
-#
-# Structure: { voice_key: (VoiceClonePrompt, timestamp) }
-# Evicted after CONTINUITY_TTL_S seconds (one conversation turn).
-# ---------------------------------------------------------------------------
-
-import time as _time
-
-_continuity_cache: dict[str, tuple[Any, float]] = {}
-CONTINUITY_TTL_S = 120  # Cache a voice continuation for 2 minutes max
-
-
-def _continuity_key(voice: str, language: str) -> str:
-    """Cache key for voice continuity (voice-id + language)."""
-    return f"{voice}|{language}"
-
-
-def _get_continuity_prompt(voice: str, language: str) -> "VoiceClonePrompt | None":
-    """Get the cached continuation prompt if still valid."""
-    key = _continuity_key(voice, language)
-    entry = _continuity_cache.get(key)
-    if entry is None:
-        return None
-    prompt, ts = entry
-    if _time.time() - ts > CONTINUITY_TTL_S:
-        del _continuity_cache[key]
-        return None
-    return prompt
-
-
-def _set_continuity_prompt(voice: str, language: str, prompt: "VoiceClonePrompt") -> None:
-    """Store a continuation prompt derived from the last generated audio."""
-    key = _continuity_key(voice, language)
-    _continuity_cache[key] = (prompt, _time.time())
-    # Evict stale entries (simple housekeeping, no background task needed)
-    now = _time.time()
-    stale = [k for k, (_, ts) in _continuity_cache.items() if now - ts > CONTINUITY_TTL_S]
-    for k in stale:
-        del _continuity_cache[k]
-
-
-def _clear_continuity_cache() -> None:
-    """Clear the entire continuity cache (e.g. on interrupt/new session)."""
-    _continuity_cache.clear()
-
 
 def _get_voice_dir() -> Path:
     return _voices_dir or Path.home() / ".omnivoice-proxy" / "voices"
@@ -158,8 +113,6 @@ def _profile_key(voice: str, instructions: str, language: str) -> str:
     The key includes language because cross-lingual prompts produce accented
     speech. Each language gets its own native-sounding reference prompt.
     """
-    import hashlib
-
     # Normalize: lowercase, strip whitespace, sort comma-separated attributes
     norm_instr = ", ".join(sorted(p.strip() for p in instructions.lower().split(",")))
     raw = f"{voice}|{norm_instr}|{language.lower()}"
@@ -252,13 +205,9 @@ async def _get_or_create_profile(
             )
 
             # Create a VoiceClonePrompt from the generated reference
-            import numpy as np
-
             ref_wav = ref_audio[0]  # numpy array, 24kHz
             if ref_wav.shape[-1] < 24000:  # less than 1 second — unusable
                 raise ValueError(f"Generated reference too short: {ref_wav.shape[-1]} samples")
-
-            import torch
 
             ref_tensor = torch.from_numpy(ref_wav).unsqueeze(0)  # (1, T)
             prompt = await loop.run_in_executor(
@@ -315,7 +264,6 @@ async def _generate(
     """Run OmniVoice TTS and return WAV bytes (24 kHz, float32)."""
     import io
 
-    import numpy as np
     import soundfile as sf
 
     loop = asyncio.get_running_loop()

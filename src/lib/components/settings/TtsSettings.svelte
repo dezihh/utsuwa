@@ -102,12 +102,7 @@ const GENDERS = ['male', 'female'] as const;
 
 	// ── Profile initialization ────────────────────────────────
 
-	let primaryProfileStatus = $state<'idle' | 'generating' | 'ready' | 'error'>('idle');
-	let altProfileStatus = $state<'idle' | 'generating' | 'ready' | 'error'>('idle');
-
-	async function initializeProfile(voice: string, instructions: string, language: string, isAlt: boolean) {
-		const statusSetter = isAlt ? (s: typeof altProfileStatus) => (altProfileStatus = s) : (s: typeof primaryProfileStatus) => (primaryProfileStatus = s);
-		statusSetter('generating');
+	async function initializeProfile(voice: string, instructions: string, language: string) {
 		try {
 			const res = await fetch(baseUrl() + 'voices/initialize', {
 				method: 'POST',
@@ -115,13 +110,10 @@ const GENDERS = ['male', 'female'] as const;
 				body: JSON.stringify({ voice, instructions, language })
 			});
 			if (!res.ok) {
-				statusSetter('error');
-				return;
+				console.error('Profile initialization failed:', res.status);
 			}
-			const data = await res.json();
-			statusSetter(data.status === 'ready' ? 'ready' : 'error');
-		} catch {
-			statusSetter('error');
+		} catch (err) {
+			console.error('Profile initialization error:', err);
 		}
 	}
 
@@ -130,7 +122,7 @@ const GENDERS = ['male', 'female'] as const;
 		const voice = (tts.speechSettings.activeVoiceId as string) || 'alloy';
 		const instructions = (tts.speechSettings.instructions as string) || buildInstructions('female', 'moderate', 'young adult');
 		const language = (tts.speechSettings.primaryLanguage as string) || 'de';
-		initializeProfile(voice, instructions, language, false);
+		initializeProfile(voice, instructions, language);
 	}
 
 	function initializeAltProfile() {
@@ -138,7 +130,7 @@ const GENDERS = ['male', 'female'] as const;
 		const voice = (tts.speechSettings.altVoiceId as string) || 'alloy';
 		const instructions = (tts.speechSettings.altInstructions as string) || buildInstructions('female', 'moderate', 'young adult');
 		const language = (tts.speechSettings.altLanguage as string) || 'es';
-		initializeProfile(voice, instructions, language, true);
+		initializeProfile(voice, instructions, language);
 	}
 
 	function setPrimaryDesign(gender?: string, pitch?: string, age?: string) {
