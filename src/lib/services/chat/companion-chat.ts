@@ -19,6 +19,7 @@ import { retrieveRelevantContext } from '$lib/engine/memory';
 import { buildSystemPrompt, truncateChatHistory, type PromptContext } from '$lib/ai/prompt-builder';
 import { keepImage, type PreparedImage } from '$lib/services/storage/keepsakes';
 import { cleanSpeechMarkers } from '$lib/services/tts/chat-text';
+import type { TTSOptions } from '$lib/services/tts';
 import { extractReminderTags, tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
 import { reminderStore } from '$lib/stores/reminders.svelte';
 import { getWorkingMemory, ensureSession } from '$lib/engine/memory';
@@ -247,25 +248,32 @@ export async function sendCompanionMessage(
 
 		const ttsConfig = settingsStore.getProviderConfig(displayTtsProvider);
 		const ttsMeta = getTTSProvider(displayTtsProvider);
-		const ttsOptions = {
+		const baseTtsOptions = {
 			provider: displayTtsProvider,
 			apiKey: ttsConfig.apiKey,
 			voiceId: (displaySpeechSettings.activeVoiceId as string) || ttsConfig.voiceId,
 			model: (displaySpeechSettings.activeModel as string) || ttsConfig.modelId,
 			baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
 			speed: (displaySpeechSettings.speed as number) ?? 1,
-			instructions: (displaySpeechSettings.instructions as string) || undefined,
-			altInstructions,
 			language: (displaySpeechSettings.primaryLanguage as string) || undefined,
 			altLanguage: (displaySpeechSettings.altLanguage as string) || undefined,
 			altVoiceId: effectiveAltVoiceId,
 			enableAltLanguage: (displaySpeechSettings.enableAltLanguage as boolean) ?? false,
-			numStep: (displaySpeechSettings.numStep as number) ?? undefined,
-			altSpeed: (displaySpeechSettings.altSpeed as number) ?? undefined,
-			altNumStep: (displaySpeechSettings.altNumStep as number) ?? undefined,
-			positionTemperature: (displaySpeechSettings.positionTemperature as number) ?? undefined,
-			classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefined
+			altSpeed: (displaySpeechSettings.altSpeed as number) ?? undefined
 		};
+
+		const ttsOptions: TTSOptions =
+			displayTtsProvider === 'omnivoice'
+				? {
+						...baseTtsOptions,
+						instructions: (displaySpeechSettings.instructions as string) || undefined,
+						altInstructions,
+						numStep: (displaySpeechSettings.numStep as number) ?? undefined,
+						altNumStep: (displaySpeechSettings.altNumStep as number) ?? undefined,
+						positionTemperature: (displaySpeechSettings.positionTemperature as number) ?? undefined,
+						classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefined
+				  }
+				: baseTtsOptions;
 
 		streamingTTS =
 			speechState?.enabled && displayTtsProvider === 'omnivoice'

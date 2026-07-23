@@ -1,7 +1,7 @@
 import type { TTSProvider } from '$lib/types';
 
-// Common TTS options interface
-export interface TTSOptions {
+// Fields shared by every TTS provider.
+export interface BaseTTSOptions {
 	provider: TTSProvider;
 	apiKey?: string;
 	voiceId?: string;
@@ -16,23 +16,35 @@ export interface TTSOptions {
 	altLanguage?: string;
 	/** Voice ID used when the alternative language is active. */
 	altVoiceId?: string;
-	/** Voice design instructions (OmniVoice: e.g. "female, british accent"). */
-	instructions?: string;
-	/** Voice design instructions for the alternative language. */
-	altInstructions?: string;
-	/** OmniVoice: diffusion steps (4-64). Higher = better quality, slower. Default 32. */
-	numStep?: number;
 	/** Whether the alternative voice/language switch is enabled by the user. */
 	enableAltLanguage?: boolean;
 	/** Alternative voice speed (0.5-2.0). Falls back to `speed` when unset. */
 	altSpeed?: number;
+}
+
+/** OmniVoice-specific options. */
+export interface OmniVoiceTTSOptions extends BaseTTSOptions {
+	provider: 'omnivoice';
+	/** Voice design instructions (e.g. "female, british accent"). */
+	instructions?: string;
+	/** Voice design instructions for the alternative language. */
+	altInstructions?: string;
+	/** Diffusion steps (4-64). Higher = better quality, slower. Default 32. */
+	numStep?: number;
 	/** Alternative voice quality / diffusion steps. Falls back to `numStep` when unset. */
 	altNumStep?: number;
-	/** OmniVoice: voice diversity temperature (0-10). 0 = deterministic. Default 5. */
+	/** Voice diversity temperature (0-10). 0 = deterministic. Default 5. */
 	positionTemperature?: number;
-	/** OmniVoice: token sampling temperature (0-2). 0 = greedy. Default 0. */
+	/** Token sampling temperature (0-2). 0 = greedy. Default 0. */
 	classTemperature?: number;
 }
+
+/** Options for all providers other than OmniVoice. */
+export interface StandardTTSOptions extends BaseTTSOptions {
+	provider: Exclude<TTSProvider, 'omnivoice'>;
+}
+
+export type TTSOptions = OmniVoiceTTSOptions | StandardTTSOptions;
 
 // Result from TTS speak method
 export interface TTSSpeakResult {
@@ -152,22 +164,28 @@ let currentOptionsKey: string | null = null;
  * quality params must invalidate the cache when they change.
  */
 function buildProviderCacheKey(options: TTSOptions): string {
-	return JSON.stringify({
+	const base = {
 		provider: options.provider,
 		apiKey: options.apiKey,
 		voiceId: options.voiceId,
 		model: options.model,
 		baseUrl: options.baseUrl,
 		speed: options.speed,
-		instructions: options.instructions,
 		altVoiceId: options.altVoiceId,
-		altInstructions: options.altInstructions,
-		altSpeed: options.altSpeed,
-		numStep: options.numStep,
-		altNumStep: options.altNumStep,
-		positionTemperature: options.positionTemperature,
-		classTemperature: options.classTemperature
-	});
+		altSpeed: options.altSpeed
+	};
+	const omnivoice =
+		options.provider === 'omnivoice'
+			? {
+					instructions: options.instructions,
+					altInstructions: options.altInstructions,
+					numStep: options.numStep,
+					altNumStep: options.altNumStep,
+					positionTemperature: options.positionTemperature,
+					classTemperature: options.classTemperature
+			  }
+			: {};
+	return JSON.stringify({ ...base, ...omnivoice });
 }
 
 export function getTTSProvider(options: TTSOptions): ITTSProvider {
@@ -177,8 +195,10 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 		return currentProvider;
 	}
 
+	const providerId = options.provider;
+
 	// Create new provider based on type
-	switch (options.provider) {
+	switch (providerId) {
 		case 'elevenlabs':
 			currentProvider = new ElevenLabsTTS(options);
 			break;
@@ -200,7 +220,7 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 
 		default:
 			// Fallback to OpenAI TTS for unsupported providers
-			console.warn(`TTS provider ${options.provider} not implemented, falling back to OpenAI TTS`);
+			console.warn(`TTS provider ${providerId} not implemented, falling back to OpenAI TTS`);
 			currentProvider = new OpenAITTS(options);
 	}
 
