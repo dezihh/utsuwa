@@ -1,5 +1,5 @@
 import type { SpeechSegment } from '../voice-orchestrator.ts';
-import { findClosingBrace, parseJsonArgs } from './speech-compiler.ts';
+import { scanPseudoToolCalls, parseJsonArgs } from './speech-compiler.ts';
 import { splitIntoSegments, stripSpeechArtifacts, stripForSpeech } from '../../utils/sentences.ts';
 
 export interface StreamingSpeechBufferOptions {
@@ -200,42 +200,18 @@ export class StreamingSpeechBuffer {
 	 */
 	private tryEmitLanguageCalls(): boolean {
 		const unprocessed = this.buffer.slice(this.emittedLength);
-		const callStartRe = /(speak|pause|gesture)\s*\(/g;
+		const scanned = scanPseudoToolCalls(unprocessed);
 
 		let consumed = 0;
-		let hadToolCall = false;
-		let match: RegExpExecArray | null;
-
-		while ((match = callStartRe.exec(unprocessed)) !== null) {
-			const name = match[1];
-			const argsStart = match.index + match[0].length;
-
-			// Only accept object-literal arguments; skip things like speak("text").
-			const wsMatch = unprocessed.slice(argsStart).match(/\S/);
-			if (!wsMatch || wsMatch[0] !== '{') continue;
-			const objStart = argsStart + wsMatch.index!;
-
-			const objEnd = findClosingBrace(unprocessed, objStart);
-			if (objEnd === null) {
-				// Incomplete call: stay in tool-call mode and wait for more chunks.
-				hadToolCall = true;
-				break;
-			}
-
-			let after = objEnd + 1;
-			const parenMatch = unprocessed.slice(after).match(/^\s*\)/);
-			if (parenMatch) after += parenMatch[0].length;
-
-			const before = unprocessed.slice(consumed, match.index).trim();
+		for (const call of scanned) {
+			const before = unprocessed.slice(consumed, call.startIndex).trim();
 			if (before) this.emit(before);
 
-			if (name === 'speak') {
-				this.emitToolCall(unprocessed.slice(objStart, objEnd + 1));
+			if (call.name === 'speak') {
+				this.emitToolCall(call.rawArgsStr);
 			}
 
-			consumed = after;
-			hadToolCall = true;
-			callStartRe.lastIndex = after;
+			consumed = call.afterIndex;
 		}
 
 		this.emittedLength += consumed;
@@ -243,7 +219,7 @@ export class StreamingSpeechBuffer {
 		const remaining = this.buffer.slice(this.emittedLength);
 		const hasIncompletePattern = /(?:speak|pause|gesture)\s*\(/.test(remaining);
 
-		return hadToolCall || hasIncompletePattern;
+		return scanned.length > 0 || hasIncompletePattern;
 	}
 
 	private emitToolCall(argsStr: string): void {

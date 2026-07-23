@@ -355,6 +355,55 @@ export function findClosingBrace(text: string, start: number): number | null {
 	return null;
 }
 
+
+export interface ScannedCall {
+	name: 'speak' | 'pause' | 'gesture';
+	args: Record<string, unknown>;
+	rawArgsStr: string;
+	startIndex: number;
+	afterIndex: number;
+}
+
+/**
+ * Scan raw LLM text for complete OmniVoice-style pseudo tool calls.
+ * Returns parsed calls with absolute positions in the original text.
+ * Incomplete calls (unmatched braces) are skipped so callers can decide
+ * whether to wait for more streaming chunks.
+ */
+export function scanPseudoToolCalls(text: string): ScannedCall[] {
+	const calls: ScannedCall[] = [];
+	const callStartRe = /(speak|pause|gesture)\s*\(/g;
+	let match: RegExpExecArray | null;
+
+	while ((match = callStartRe.exec(text)) !== null) {
+		const name = match[1] as ScannedCall['name'];
+		const argsStart = match.index + match[0].length;
+		const rest = text.slice(argsStart);
+		const wsMatch = rest.match(/\S/);
+		if (!wsMatch || wsMatch[0] !== '{') continue;
+
+		const objStart = argsStart + wsMatch.index!;
+		const argsEnd = findClosingBrace(text, objStart);
+		if (argsEnd === null) continue;
+
+		let after = argsEnd + 1;
+		const parenMatch = text.slice(after).match(/^\s*\)/);
+		if (parenMatch) after += parenMatch[0].length;
+
+		const rawArgsStr = text.slice(objStart, argsEnd + 1);
+		calls.push({
+			name,
+			args: parseJsonArgs(rawArgsStr),
+			rawArgsStr,
+			startIndex: match.index,
+			afterIndex: after
+		});
+		callStartRe.lastIndex = after;
+	}
+
+	return calls;
+}
+
 /**
  * Parse pseudo-tool-calls from raw LLM text output.
  *
@@ -375,45 +424,24 @@ export function parsePseudoToolCalls(text: string): ParsedCalls {
 	const parts: string[] = [];
 	let lastIndex = 0;
 
-	const callStartRe = /(speak|pause|gesture)\(/g;
-	let match: RegExpExecArray | null;
-	while ((match = callStartRe.exec(text)) !== null) {
-		const name = match[1];
-		const argsStart = match.index + match[0].length;
-
-		// Only accept object-literal arguments; skip things like speak("text").
-		const firstNonWs = text.slice(argsStart).match(/\S/);
-		if (!firstNonWs || firstNonWs[0] !== '{') continue;
-
-		const argsEnd = findClosingBrace(text, argsStart);
-		if (argsEnd === null) continue;
-
-		const before = text.slice(lastIndex, match.index).trim();
+	for (const scanned of scanPseudoToolCalls(text)) {
+		const before = text.slice(lastIndex, scanned.startIndex).trim();
 		if (before) {
 			parts.push(before);
 			chunks.push({ type: 'prose', text: before });
 		}
 
-		const argsStr = text.slice(argsStart, argsEnd + 1);
-		const args = parseJsonArgs(argsStr);
-		const call: ToolCall = { name, arguments: args };
+		const call: ToolCall = { name: scanned.name, arguments: scanned.args };
 
 		// Inline speak text into the cleaned display text so foreign-language
 		// segments still appear in the chat bubble. Drop pause/gesture markers.
-		if (name === 'speak' && typeof args.text === 'string') {
-			parts.push(args.text);
+		if (scanned.name === 'speak' && typeof scanned.args.text === 'string') {
+			parts.push(scanned.args.text);
 		}
 
 		calls.push(call);
 		chunks.push({ type: 'call', call });
-		lastIndex = argsEnd + 1;
-
-		// Swallow the closing parenthesis of the function call, if present.
-		const closingParen = text.slice(lastIndex).match(/^\s*\)/);
-		if (closingParen) {
-			lastIndex += closingParen[0].length;
-		}
-		callStartRe.lastIndex = lastIndex;
+		lastIndex = scanned.afterIndex;
 	}
 
 	// Remaining text after last call

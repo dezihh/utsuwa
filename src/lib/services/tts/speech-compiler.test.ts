@@ -10,6 +10,7 @@ import {
 	compileFromText,
 	recover,
 	parsePseudoToolCalls,
+	scanPseudoToolCalls,
 	type ToolCall
 } from './speech-compiler.ts';
 
@@ -332,4 +333,33 @@ test('parsePseudoToolCalls keeps single quotes inside double-quoted strings', ()
 	assert.equal(parsed.calls.length, 1);
 	assert.equal(parsed.calls[0].arguments.text, "Das spanische Wort 'perro' bedeutet Hund.");
 	assert.equal(parsed.cleanedText, "Das spanische Wort 'perro' bedeutet Hund.");
+});
+
+
+// ── scanPseudoToolCalls ───────────────────────────────────
+
+test('scanPseudoToolCalls returns absolute positions for every complete call', () => {
+	const input = 'Hello speak({"text":"world","lang":"en"}) pause({"ms":300})';
+	const result = scanPseudoToolCalls(input);
+	assert.equal(result.length, 2);
+	assert.equal(result[0].name, 'speak');
+	assert.equal(result[0].args.text, 'world');
+	assert.equal(result[0].startIndex, 6);
+	assert.ok(result[0].afterIndex > result[0].startIndex);
+	assert.equal(result[1].name, 'pause');
+	assert.equal(result[1].args.ms, 300);
+});
+
+test('scanPseudoToolCalls skips incomplete calls', () => {
+	const input = 'speak({"text":"hello"}) speak({"text":"world"';
+	const result = scanPseudoToolCalls(input);
+	assert.equal(result.length, 1);
+	assert.equal(result[0].args.text, 'hello');
+});
+
+test('scanPseudoToolCalls ignores calls with non-object arguments', () => {
+	const input = 'speak("plain text") speak({"text":"ok"})';
+	const result = scanPseudoToolCalls(input);
+	assert.equal(result.length, 1);
+	assert.equal(result[0].args.text, 'ok');
 });
