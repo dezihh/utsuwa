@@ -30,6 +30,10 @@
 	let previewLoading = $state(false);
 	let previewTarget: 'primary' | 'alt' = $state('primary');
 
+	// Profile regeneration
+	let primaryRegenerating = $state(false);
+	let altRegenerating = $state(false);
+
 	const TEST_PHRASES: Record<string, string> = {
 		de: 'Hallo, dies ist ein Test von OmniVoice.',
 		en: 'Hello, this is a test of OmniVoice text to speech.',
@@ -131,6 +135,43 @@ const GENDERS = ['male', 'female'] as const;
 		const instructions = (tts.speechSettings.altInstructions as string) || buildInstructions('female', 'moderate', 'young adult');
 		const language = (tts.speechSettings.altLanguage as string) || 'es';
 		initializeProfile(voice, instructions, language);
+	}
+
+	async function regenerateProfile(target: 'primary' | 'alt') {
+		const isAlt = target === 'alt';
+		if (isAlt) {
+			altRegenerating = true;
+		} else {
+			primaryRegenerating = true;
+		}
+		try {
+			const voice = isAlt
+				? ((tts.speechSettings.altVoiceId as string) || 'alloy')
+				: ((tts.speechSettings.activeVoiceId as string) || 'alloy');
+			const instructions = isAlt
+				? ((tts.speechSettings.altInstructions as string) || buildInstructions('female', 'moderate', 'young adult'))
+				: ((tts.speechSettings.instructions as string) || buildInstructions('female', 'moderate', 'young adult'));
+			const language = isAlt
+				? ((tts.speechSettings.altLanguage as string) || 'es')
+				: ((tts.speechSettings.primaryLanguage as string) || 'de');
+
+			const res = await fetch(baseUrl() + 'voices/profile/reset', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ voice, instructions, language })
+			});
+			if (!res.ok) {
+				console.error('Profile reset failed:', res.status);
+			}
+		} catch (err) {
+			console.error('Profile reset error:', err);
+		} finally {
+			if (isAlt) {
+				altRegenerating = false;
+			} else {
+				primaryRegenerating = false;
+			}
+		}
 	}
 
 	function setPrimaryDesign(gender?: string, pitch?: string, age?: string) {
@@ -583,6 +624,22 @@ const GENDERS = ['male', 'female'] as const;
 						</button>
 					</div>
 
+					{#if !isPrimaryClone}
+						<div class="omnivoice-voice-row">
+							<span style="flex:1;"></span>
+							<button
+								class="btn btn-sm btn-secondary"
+								onclick={() => regenerateProfile('primary')}
+								disabled={primaryRegenerating}>
+								{#if primaryRegenerating}
+									<span class="omnivoice-spinner"></span> Regenerating...
+								{:else}
+									↻ Regenerate profile
+								{/if}
+							</button>
+						</div>
+					{/if}
+
 						{#if isPrimaryClone}
 						{#if clonedVoices.length > 0}
 							<div class="omnivoice-voice-row">
@@ -730,6 +787,22 @@ const GENDERS = ['male', 'female'] as const;
 								{/if}
 							</button>
 						</div>
+
+						{#if !isAltClone}
+							<div class="omnivoice-voice-row">
+								<span style="flex:1;"></span>
+								<button
+									class="btn btn-sm btn-secondary"
+									onclick={() => regenerateProfile('alt')}
+									disabled={altRegenerating}>
+									{#if altRegenerating}
+										<span class="omnivoice-spinner"></span> Regenerating...
+									{:else}
+										↻ Regenerate profile
+									{/if}
+								</button>
+							</div>
+						{/if}
 
 						{#if isAltClone}
 							{#if clonedVoices.length > 0}

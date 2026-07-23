@@ -174,6 +174,17 @@ def main():
         check("Re-initialize → 200", r.status_code == 200, f"HTTP {r.status_code}")
         check("re-created profile is ready", r.json().get("status") == "ready")
 
+    # 10. Profile reset endpoint (delete + regenerate in one call)
+    print("\n10. Profile reset endpoint")
+    r = requests.post(
+        f"{BASE}/v1/voices/profile/reset",
+        json={"voice": "alloy", "language": "de"},
+    )
+    check("POST /v1/voices/profile/reset → 200", r.status_code == 200, f"HTTP {r.status_code}")
+    reset_result = r.json()
+    check("reset returns status 'ready'", reset_result.get("status") == "ready")
+    check("reset returns profile_key", len(reset_result.get("profile_key", "")) > 0)
+
     print("\nAll tests passed.")
 
 

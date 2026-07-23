@@ -435,6 +435,41 @@ async def delete_profile(profile_key: str):
     return {"deleted": profile_key}
 
 
+@app.post("/v1/voices/profile/reset")
+async def reset_profile(request: Request):
+    """Delete and immediately regenerate a persistent preset profile.
+
+    Body: {"voice": "alloy", "instructions": "...", "language": "de"}
+    Returns the same payload as /v1/voices/initialize.
+    """
+    body = await request.json()
+    voice = body.get("voice", "")
+    instructions = body.get("instructions", "")
+    language = body.get("language", "en")
+
+    if not voice and not instructions:
+        raise HTTPException(status_code=400, detail="'voice' or 'instructions' required")
+
+    effective_instructions = instructions or _PRESET_MAP.get(voice, "")
+    if not effective_instructions:
+        raise HTTPException(status_code=400, detail=f"Unknown voice '{voice}' and no instructions provided")
+
+    # Delete existing profile (and any stale error marker) if present
+    key = _profile_key(voice or "custom", effective_instructions, language)
+    profiles_dir = _get_profiles_dir()
+    path = profiles_dir / f"{key}.pt"
+    if path.exists():
+        path.unlink()
+    err = path.with_suffix(".error")
+    if err.exists():
+        err.unlink()
+
+    # Regenerate
+    profile = await _get_or_create_profile(voice or "custom", effective_instructions, language)
+    status = "ready" if profile is not None else "error"
+    return {"status": status, "profile_key": key}
+
+
 @app.post("/v1/voices/clone")
 async def clone_voice(
     ref_audio: UploadFile = File(...),
