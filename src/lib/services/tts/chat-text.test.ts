@@ -88,3 +88,7 @@ test('cleanSpeechMarkers removes gesture pseudo-tool-call', () => {
 	);
 	assert.equal(result, 'Hello there');
 });
+test('cleanSpeechMarkers strips inline tags even when no pseudo-tool-calls exist', () => {
+	const result = cleanSpeechMarkers('Hola [lang:es]mundo[/lang]', 'en');
+	assert.equal(result, 'Hola mundo');
+});

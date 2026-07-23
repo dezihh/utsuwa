@@ -13,10 +13,11 @@ export function cleanSpeechMarkers(text: string, primaryLanguage = 'de'): string
 	// First normalise pseudo-tool-call syntax: speak() texts are inlined,
 	// pause/gesture calls are dropped.
 	const pseudo = parsePseudoToolCalls(text);
-	const afterPseudo = pseudo.calls.length > 0 ? pseudo.cleanedText : text;
 
-	// Then strip inline markup tags.
-	const { cleanedText } = normalizeLanguageTags(afterPseudo, primaryLanguage);
+	// Then strip inline markup tags. This must always run, even when no
+	// pseudo-tool-calls were found, so that [lang:es]Hola[/lang] and similar
+	// markers are removed from plain responses.
+	const { cleanedText } = normalizeLanguageTags(pseudo.cleanedText, primaryLanguage);
 	return cleanedText;
 }
 
