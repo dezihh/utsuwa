@@ -777,7 +777,7 @@ const GENDERS = ['male', 'female'] as const;
 								<label class="omnivoice-radio">
 									<input type="radio" name="ov-p-ns" value={s}
 										checked={(tts.speechSettings.numStep as number ?? 32) === s}
-										onchange={() => modulesStore.setModuleSetting('speech', 'numStep', s)} />
+										onchange={() => tts.handleTTSNumStepChange(s)} />
 									{s}
 								</label>
 							{/each}
@@ -941,7 +941,7 @@ const GENDERS = ['male', 'female'] as const;
 									<label class="omnivoice-radio">
 										<input type="radio" name="ov-a-ns" value={s}
 											checked={((tts.speechSettings.altNumStep as number) ?? (tts.speechSettings.numStep as number) ?? 32) === s}
-											onchange={() => modulesStore.setModuleSetting('speech', 'altNumStep', s)} />
+											onchange={() => tts.handleTTSAltNumStepChange(s)} />
 										{s}
 									</label>
 								{/each}

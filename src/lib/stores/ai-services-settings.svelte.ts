@@ -348,6 +348,14 @@ export function createTtsSettingsState() {
 		modulesStore.setModuleSetting('speech', 'classTemperature', value);
 	}
 
+	function handleTTSNumStepChange(value: number) {
+		modulesStore.setModuleSetting('speech', 'numStep', value);
+	}
+
+	function handleTTSAltNumStepChange(value: number) {
+		modulesStore.setModuleSetting('speech', 'altNumStep', value);
+	}
+
 	function handleTTSVoiceChange(voiceId: string) {
 		modulesStore.setModuleSetting('speech', 'activeVoiceId', voiceId);
 	}
@@ -422,6 +430,8 @@ export function createTtsSettingsState() {
 		handleTTSAltSpeedChange,
 		handleTTSPositionTemperatureChange,
 		handleTTSClassTemperatureChange,
+		handleTTSNumStepChange,
+		handleTTSAltNumStepChange,
 		handleTTSVoiceChange,
 		handleTTSInstructionsChange,
 		handleTTSAltInstructionsChange,
