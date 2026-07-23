@@ -47,7 +47,7 @@ Kokoro voice names encode region and gender, for example `af_bella` (American fe
 
 [OmniVoice](https://github.com/k2-fsa/OmniVoice) is a local, GPU-accelerated TTS engine with 600+ supported languages, zero-shot voice cloning, and attribute-based voice design. Utsuwa connects to it through the `tools/omnivoice/omnivoice-proxy.py` wrapper, which exposes an OpenAI-compatible `/v1/audio/speech` endpoint and adds CORS headers for browser use.
 
-For a full step-by-step installation — including Python 3.11 setup, CUDA/CPU options, voice cloning, and troubleshooting — see the dedicated [OmniVoice Setup](./omnivoice-setup) guide.
+For a full step-by-step installation — including Docker setup, CUDA/CPU options, voice cloning, persistent voice profiles, and troubleshooting — see the dedicated [OmniVoice Setup](./omnivoice-setup) guide.
 
 ## Custom Base URL
 
