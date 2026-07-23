@@ -6,6 +6,7 @@
 	import { Icon, ProviderDropdown, ModelDropdown } from '$lib/components/ui';
 	import type { TtsSettingsState } from '$lib/stores/ai-services-settings.svelte';
 	import './ai-services-settings.css';
+	import { getFocusableElements, handleModalKeydown } from './tts-modal-a11y';
 
 	let { state: tts }: { state: TtsSettingsState } = $props();
 
@@ -19,6 +20,7 @@
 	let cloneLoading = $state(false);
 	let profileError = $state('');
 	let previewError = $state('');
+	let cloneModalCard: HTMLDivElement | null = $state(null);
 	let clonedVoices = $state([] as Array<{ id: string; name: string }>);
 	let cloneTargetAlt = $state(false);
 	let cloneFetchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -328,6 +330,28 @@ const GENDERS = ['male', 'female'] as const;
 		cloneFileName = '';
 		cloneError = '';
 		showCloneModal = true;
+		requestAnimationFrame(() => {
+			cloneModalCard?.focus();
+		});
+	}
+
+	function handleCloneModalKeydown(e: KeyboardEvent) {
+		if (!cloneModalCard) return;
+		handleModalKeydown(
+			e,
+			getFocusableElements(cloneModalCard),
+			document.activeElement,
+			closeCloneModal
+		);
+	}
+
+	function closeCloneModal() {
+		showCloneModal = false;
+	}
+
+	function onCloneModalKeydown(e: KeyboardEvent) {
+		if (!showCloneModal) return;
+		handleCloneModalKeydown(e);
 	}
 
 	// ── Delete Clone ─────────────────────────────────────────
@@ -451,6 +475,8 @@ const GENDERS = ['male', 'female'] as const;
 		}
 	}
 </script>
+
+<svelte:window onkeydown={onCloneModalKeydown} />
 
 <div class="service-group">
 	<div class="service-header">
@@ -955,17 +981,20 @@ const GENDERS = ['male', 'female'] as const;
 				<!-- Clone Modal                                               -->
 				<!-- ═══════════════════════════════════════════════════════ -->
 				{#if showCloneModal}
-					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-					<div
-						class="omnivoice-modal-backdrop"
-						onclick={() => { showCloneModal = false; }}
-						onkeydown={(e) => { if (e.key === 'Escape') showCloneModal = false; }}
-						role="dialog"
-						tabindex="-1"
-					>
+					<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
+					<div class="omnivoice-modal-backdrop" onclick={closeCloneModal} role="button" tabindex="-1">
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-						<div class="omnivoice-modal-card" role="document" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
-							<h3 class="omnivoice-modal-title">Clone New Voice</h3>
+						<div
+							bind:this={cloneModalCard}
+							class="omnivoice-modal-card"
+							role="dialog"
+							aria-modal="true"
+							aria-labelledby="clone-modal-title"
+							tabindex="-1"
+							onclick={(e) => e.stopPropagation()}
+							onkeydown={handleCloneModalKeydown}
+						>
+							<h3 id="clone-modal-title" class="omnivoice-modal-title">Clone New Voice</h3>
 
 									<div class="omnivoice-modal-field">
 								<label class="omnivoice-modal-label" for="clone-audio">Reference Audio (3–10s, wav/mp3)</label>
@@ -1017,7 +1046,7 @@ const GENDERS = ['male', 'female'] as const;
 							{/if}
 
 							<div class="omnivoice-modal-actions">
-								<button class="btn btn-sm btn-secondary" onclick={() => { showCloneModal = false; }}>
+								<button class="btn btn-sm btn-secondary" onclick={closeCloneModal}>
 									Cancel
 								</button>
 								<button class="btn btn-sm btn-primary" onclick={handleCloneVoice} disabled={cloneLoading}>
