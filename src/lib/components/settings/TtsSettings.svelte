@@ -17,6 +17,8 @@
 	let cloneFileName = $state('');
 	let cloneError = $state('');
 	let cloneLoading = $state(false);
+	let profileError = $state('');
+	let previewError = $state('');
 	let clonedVoices = $state([] as Array<{ id: string; name: string }>);
 	let cloneTargetAlt = $state(false);
 	let cloneFetchTimer: ReturnType<typeof setTimeout> | undefined;
@@ -114,10 +116,11 @@ const GENDERS = ['male', 'female'] as const;
 				body: JSON.stringify({ voice, instructions, language })
 			});
 			if (!res.ok) {
-				console.error('Profile initialization failed:', res.status);
+				const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+				profileError = (err as { detail?: string }).detail || `Profile init failed (HTTP ${res.status})`;
 			}
 		} catch (err) {
-			console.error('Profile initialization error:', err);
+			profileError = err instanceof Error ? err.message : 'Profile initialization failed';
 		}
 	}
 
@@ -167,10 +170,11 @@ const GENDERS = ['male', 'female'] as const;
 				body: JSON.stringify({ voice, instructions, language })
 			});
 			if (!res.ok) {
-				console.error('Profile reset failed:', res.status);
+				const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+				profileError = (err as { detail?: string }).detail || `Profile reset failed (HTTP ${res.status})`;
 			}
 		} catch (err) {
-			console.error('Profile reset error:', err);
+			profileError = err instanceof Error ? err.message : 'Profile reset failed';
 		} finally {
 			if (isAlt) {
 				altRegenerating = false;
@@ -223,7 +227,14 @@ const GENDERS = ['male', 'female'] as const;
 			if (!res.ok) return;
 			const data = await res.json();
 			clonedVoices = (data.clones || []) as Array<{ id: string; name: string }>;
-		} catch { /* proxy not running */ }
+		} catch (err) {
+			// Proxy not running is expected when the user hasn't started it.
+			// Keep the clone list empty instead of showing an error.
+			clonedVoices = [];
+			if (import.meta.env.DEV) {
+				console.debug('Clone list fetch failed:', err);
+			}
+		}
 	}
 
 	function scheduleCloneFetch() {
@@ -343,6 +354,7 @@ const GENDERS = ['male', 'female'] as const;
 	async function handlePreview() {
 		previewTarget = 'primary';
 		previewLoading = true;
+		previewError = '';
 		try {
 			const lang = (tts.speechSettings.primaryLanguage as string) || 'de';
 			const text = TEST_PHRASES[lang] || TEST_PHRASES.de;
@@ -383,7 +395,7 @@ const GENDERS = ['male', 'female'] as const;
 			source.connect(ctx.destination);
 			source.start(0);
 		} catch (err) {
-			console.error('Preview failed:', err);
+			previewError = err instanceof Error ? err.message : 'Preview failed';
 		} finally {
 			previewLoading = false;
 		}
@@ -392,6 +404,7 @@ const GENDERS = ['male', 'female'] as const;
 	async function handleAltPreview() {
 		previewTarget = 'alt';
 		previewLoading = true;
+		previewError = '';
 		try {
 			const lang = (tts.speechSettings.altLanguage as string) || 'es';
 			const text = TEST_PHRASES[lang] || TEST_PHRASES.de;
@@ -432,7 +445,7 @@ const GENDERS = ['male', 'female'] as const;
 			source.connect(ctx.destination);
 			source.start(0);
 		} catch (err) {
-			console.error('Alt preview failed:', err);
+			previewError = err instanceof Error ? err.message : 'Alt preview failed';
 		} finally {
 			previewLoading = false;
 		}
@@ -567,6 +580,16 @@ const GENDERS = ['male', 'female'] as const;
 					</span>
 					<span class="omnivoice-proxy-cmd">python tools/omnivoice/omnivoice-proxy.py --device cuda</span>
 				</div>
+
+				{#if profileError || previewError}
+					<div class="omnivoice-error" role="alert">
+						{profileError || previewError}
+						<button
+							class="omnivoice-error-close"
+							onclick={() => { profileError = ''; previewError = ''; }}
+							aria-label="Dismiss error">×</button>
+					</div>
+				{/if}
 
 				<!-- Base URL -->
 				<div class="api-key-row">
@@ -1241,4 +1264,26 @@ const GENDERS = ['male', 'female'] as const;
 	.omnivoice-delete-btn { padding: 0.25rem 0.5rem; }
 	.omnivoice-file-row { display: flex; align-items: center; gap: 0.5rem; }
 	.omnivoice-hidden-input { display: none; }
+	.omnivoice-error {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.6rem 0.75rem;
+		margin-bottom: 0.75rem;
+		background: var(--color-error-bg, rgba(239, 68, 68, 0.12));
+		color: var(--color-error);
+		border: 1px solid var(--color-error);
+		border-radius: var(--radius-lg);
+		font-size: 0.85rem;
+	}
+	.omnivoice-error-close {
+		background: transparent;
+		border: none;
+		color: inherit;
+		font-size: 1.2rem;
+		line-height: 1;
+		cursor: pointer;
+		padding: 0 0.2rem;
+	}
 </style>
