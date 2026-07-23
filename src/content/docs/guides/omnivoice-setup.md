@@ -96,14 +96,21 @@ OmniVoice is a diffusion model. When using design attributes alone (gender, age,
 ### How it works
 
 1. When you select or change a synthetic voice in **Settings > TTS**, Utsuwa asks the proxy to generate a voice profile for your chosen design and language.
-2. The profile is saved under the proxy's voices directory and survives restarts.
+2. The profile is saved in the Docker volume `omnivoice-voices` (under `profiles/`) and survives container restarts.
 3. Every sentence uses this stored profile as speaker conditioning, regardless of how many sentences the reply contains or how often the language switches.
+4. **Changing the voice later automatically creates a new profile** for the new design + language combination. Old profiles are kept and can be deleted manually if you want to free disk space.
+
+### Preview button
+
+The **Preview** button in **Settings > TTS** still works as before. The first preview for a new voice/language combination may take a few seconds because the proxy generates the persistent profile in the background. Subsequent previews and chat messages use the cached profile and are fast.
 
 ### Language-specific profiles
 
 Voice clone prompts are language-specific: a prompt generated from German reference audio will produce an accent when speaking Spanish, and vice versa. For a language teacher scenario where native pronunciation matters, Utsuwa creates **one profile per language** automatically. When sentences alternate between German and Spanish, each language uses its own native-sounding profile — both generated from the same design attributes (same gender, age, pitch) but with native pronunciation.
 
-### Cloned voices across languages
+### Cloned voices
+
+**Cloned voices do not need persistent profiles.** They already use your uploaded reference audio as a fixed speaker prompt, so their identity is naturally stable. The profile feature is only for synthetic preset voices built from attributes.
 
 If you clone a voice from a German audio clip, it will sound native in German but carry a German accent in other languages. For native pronunciation in multiple languages, clone separate voices per language (ideally from the same speaker). Alternatively, accept the accent as a natural characteristic.
 
@@ -111,12 +118,32 @@ If you clone a voice from a German audio clip, it will sound native in German bu
 
 Set the same voice preset (e.g. "alloy") for both Primary and Alternative voice. Utsuwa will use the correct language-specific profile for each sentence automatically. The speaker identity stays consistent; only the pronunciation rules change.
 
+### Managing profiles
+
+Profiles are identified by a stable key derived from voice, instructions, and language. You can list, delete, or regenerate them via the proxy API.
+
+Generate a profile eagerly (also happens automatically on first use):
+
+```bash
+curl -X POST http://localhost:8880/v1/voices/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"voice":"alloy","instructions":"female, young adult, moderate pitch","language":"de"}'
+```
+
+Delete a profile to force regeneration on the next request:
+
+```bash
+# Replace <profile_key> with the key returned by /v1/voices/initialize
+curl -X DELETE http://localhost:8880/v1/voices/profile/<profile_key>
+```
+
+To remove all generated profiles, delete the `profiles/` directory inside the `omnivoice-voices` Docker volume.
+
 ### Tips
 
 - Use `young adult` or `middle-aged` for clearer output.
 - Low temperatures (`position_temperature: 1`, `class_temperature: 0.2`) improve consistency between sentences.
 - For clone voices, use a 3–10 second clean reference clip in the target language.
-- You can regenerate a profile at any time by clicking the regenerate button in Settings, or by deleting the profile via the API and re-selecting the voice.
 
 ## Proxy options
 

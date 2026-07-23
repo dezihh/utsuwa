@@ -95,6 +95,28 @@ curl -X POST http://localhost:8880/v1/voices/clone \
   -F "ref_text=The quick brown fox jumps over the lazy dog."
 ```
 
+## Persistent voice profiles (synthetic voices)
+
+Synthetic preset voices are built from attributes (gender, age, pitch, accent). Because OmniVoice is a diffusion model, each request can produce a slightly different speaker realization. To keep the voice consistent across sentences, the proxy generates a reference audio on first use, creates a `VoiceClonePrompt` from it, and stores it under `~/.omnivoice-proxy/voices/profiles/`.
+
+- One profile is created per **voice + instructions + language** combination.
+- Switching voices or languages creates additional profiles automatically.
+- Cloned voices do not use this mechanism; they are already anchored to your reference audio.
+
+Eagerly generate a profile (also happens automatically on first synthesis):
+
+```bash
+curl -X POST http://localhost:8880/v1/voices/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"voice":"alloy","instructions":"female, young adult, moderate pitch","language":"de"}'
+```
+
+Delete a profile to force regeneration:
+
+```bash
+curl -X DELETE http://localhost:8880/v1/voices/profile/<profile_key>
+```
+
 ## Proxy command-line options
 
 ```
