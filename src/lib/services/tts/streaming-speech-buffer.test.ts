@@ -77,3 +77,98 @@ test('skips segments containing only punctuation and whitespace', () => {
 	buffer.flush();
 	assert.equal(segments.length, 0);
 });
+
+// OmniVoice-style language-marked tool calls -------------------------------
+
+function createLanguageBuffer(defaultLanguage = 'de') {
+	const segments: { text: string; language?: string }[] = [];
+	const buffer = new StreamingSpeechBuffer({
+		defaultLanguage,
+		onSegment: (seg) => segments.push(seg)
+	});
+	return { buffer, segments };
+}
+
+test('emits a complete speak call immediately', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('speak({"text":"Hallo","lang":"de"})');
+	assert.deepEqual(segments, [{ text: 'Hallo', language: 'de' }]);
+});
+
+test('emits a speak call split across multiple chunks only when complete', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('speak({"text":"Hall');
+	assert.equal(segments.length, 0);
+	buffer.feed('o","lang":"de"})');
+	assert.deepEqual(segments, [{ text: 'Hallo', language: 'de' }]);
+});
+
+test('does not emit completed language calls twice when more chunks arrive', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('speak({"text":"Hallo","lang":"de"})');
+	assert.equal(segments.length, 1);
+	buffer.feed(' speak({"text":"Welt","lang":"de"})');
+	assert.equal(segments.length, 2);
+	assert.deepEqual(segments, [
+		{ text: 'Hallo', language: 'de' },
+		{ text: 'Welt', language: 'de' }
+	]);
+});
+
+test('flush does not emit completed language calls twice', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('speak({"text":"hola","lang":"es"})');
+	buffer.flush();
+	assert.deepEqual(segments, [{ text: 'hola', language: 'es' }]);
+});
+
+test('preserves language switches within one sentence as separate segments', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('speak({"text":"Auf Spanisch sagt man ","lang":"de"})');
+	buffer.feed(' speak({"text":"por favor,","lang":"es"})');
+	buffer.feed(' speak({"text":" bitte.","lang":"de"})');
+
+	assert.deepEqual(segments, [
+		{ text: 'Auf Spanisch sagt man', language: 'de' },
+		{ text: 'por favor,', language: 'es' },
+		{ text: 'bitte.', language: 'de' }
+	]);
+});
+
+test('keeps explicit language codes unchanged', () => {
+	const { buffer, segments } = createLanguageBuffer('en');
+	buffer.feed('speak({"text":"Hola","lang":"es"})');
+	buffer.feed(' speak({"text":"Hello","lang":"en"})');
+	buffer.feed(' speak({"text":"Bonjour","lang":"fr"})');
+
+	assert.deepEqual(segments, [
+		{ text: 'Hola', language: 'es' },
+		{ text: 'Hello', language: 'en' },
+		{ text: 'Bonjour', language: 'fr' }
+	]);
+});
+
+test('never speaks raw or incomplete speak syntax', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('speak({"text":"Hallo"');
+	assert.equal(segments.length, 0);
+
+	buffer.feed(',"lang":"de"})');
+	assert.deepEqual(segments, [{ text: 'Hallo', language: 'de' }]);
+});
+
+test('does not speak incomplete tool calls on explicit flush', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('speak({"text":"Hal');
+	buffer.flush();
+	assert.equal(segments.length, 0);
+});
+
+test('plaintext before a speak call is still emitted', () => {
+	const { buffer, segments } = createLanguageBuffer();
+	buffer.feed('Hello world. speak({"text":"Hola","lang":"es"})');
+	assert.deepEqual(segments, [
+		{ text: 'Hello world.', language: 'de' },
+		{ text: 'Hola', language: 'es' }
+	]);
+});

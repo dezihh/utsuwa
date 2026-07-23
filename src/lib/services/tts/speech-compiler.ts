@@ -231,7 +231,7 @@ export interface ParsedCalls {
  * they can be parsed as JSON. Models often emit `{ lang: "es", text: "..." }`
  * instead of strict JSON.
  */
-function parseJsonArgs(raw: string): Record<string, unknown> {
+export function parseJsonArgs(raw: string): Record<string, unknown> {
 	try {
 		return JSON.parse(raw);
 	} catch {
@@ -252,7 +252,7 @@ function parseJsonArgs(raw: string): Record<string, unknown> {
  * Find the index of the closing brace that matches the first opening brace
  * after `start`, respecting strings and nested braces.
  */
-function findClosingBrace(text: string, start: number): number | null {
+export function findClosingBrace(text: string, start: number): number | null {
 	let depth = 0;
 	let inStr = false;
 	let strChar = '';

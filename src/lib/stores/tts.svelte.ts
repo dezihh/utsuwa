@@ -10,6 +10,7 @@ import {
 } from '$lib/services/tts/speech-compiler';
 import { normalizeLanguageTags } from '$lib/services/tts/language-tag-normalizer';
 import { SpeechScheduler } from '$lib/services/tts/speech-scheduler';
+import { StreamingSpeechBuffer } from '$lib/services/tts/streaming-speech-buffer';
 import {
 	canSpeak,
 	clearQueue,
@@ -25,6 +26,8 @@ function createTTSStore() {
 	let queue = $state<QueueItem[]>([]);
 	let lastError = $state<string | null>(null);
 	let errorTimer: ReturnType<typeof setTimeout> | null = null;
+	let streamingBuffer: StreamingSpeechBuffer | null = null;
+	let streamingSessionId = 0;
 
 	const orchestrator = new VoiceOrchestrator();
 
@@ -119,7 +122,63 @@ function createTTSStore() {
 		await runQueue(engine);
 	}
 
+	function beginStreaming(options: TTSOptions): boolean {
+		if (options.provider !== 'omnivoice' || !canSpeak(options)) return false;
+
+		stop();
+		const sessionId = ++streamingSessionId;
+		streamingBuffer = new StreamingSpeechBuffer({
+			defaultLanguage: options.language || 'de',
+			onSegment: (segment) => {
+				if (sessionId === streamingSessionId) orchestrator.pushSegment(segment);
+			}
+		});
+		orchestrator.beginSession(options, {
+			onAnalyserUpdate: (analyser) => {
+				if (sessionId === streamingSessionId) currentAnalyser = analyser;
+			}
+		});
+		isSpeaking = true;
+		return true;
+	}
+
+	function feedStreaming(chunk: string): void {
+		streamingBuffer?.feed(chunk);
+	}
+
+	async function endStreaming(): Promise<void> {
+		const buffer = streamingBuffer;
+		if (!buffer) return;
+		const sessionId = streamingSessionId;
+		streamingBuffer = null;
+		buffer.flush();
+
+		try {
+			await orchestrator.endSession();
+		} catch (error) {
+			console.error('Streaming TTS error:', error);
+			reportError(error);
+		} finally {
+			if (sessionId === streamingSessionId) {
+				isSpeaking = false;
+				currentAnalyser = null;
+			}
+		}
+	}
+
+	function cancelStreaming(): void {
+		streamingSessionId++;
+		streamingBuffer?.reset();
+		streamingBuffer = null;
+		orchestrator.interrupt();
+		isSpeaking = false;
+		currentAnalyser = null;
+	}
+
 	function stop() {
+		streamingSessionId++;
+		streamingBuffer?.reset();
+		streamingBuffer = null;
 		orchestrator.interrupt();
 		const cleared = clearQueue({ isSpeaking, queue });
 		isSpeaking = cleared.isSpeaking;
@@ -138,6 +197,10 @@ function createTTSStore() {
 			return lastError;
 		},
 		speak,
+		beginStreaming,
+		feedStreaming,
+		endStreaming,
+		cancelStreaming,
 		stop
 	};
 }

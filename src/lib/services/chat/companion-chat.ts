@@ -188,6 +188,8 @@ export async function sendCompanionMessage(
 		characterStore.updateDaysKnown();
 	}
 
+	let streamingTTS = false;
+
 	try {
 		const consciousnessSettings = modulesStore.getModuleSettings('consciousness');
 		const provider = consciousnessSettings.activeProvider as string;
@@ -214,12 +216,60 @@ export async function sendCompanionMessage(
 		let messages = buildMessages(images);
 		const displaySpeechSettings = modulesStore.getModuleSettings('speech');
 		const displayTtsProvider = displaySpeechSettings.activeProvider as TTSProvider;
+		const speechState = modulesStore.getModuleState('speech');
+
+		// Fallback: older saved settings may have altInstructions but no
+		// altVoiceId. Pick a matching OmniVoice preset so the switch works.
+		function resolveAltVoiceId(instructions: string | undefined, fallback: string): string {
+			if (!instructions) return fallback;
+			const i = instructions.toLowerCase();
+			if (i.includes('male') && !i.includes('female')) return 'onyx';
+			return 'alloy';
+		}
+
+		const configuredAltVoiceId = (displaySpeechSettings.altVoiceId as string) || undefined;
+		const altInstructions = (displaySpeechSettings.altInstructions as string) || undefined;
+		const effectiveAltVoiceId = configuredAltVoiceId || resolveAltVoiceId(altInstructions, 'onyx');
+
+		const ttsConfig = settingsStore.getProviderConfig(displayTtsProvider);
+		const ttsMeta = getTTSProvider(displayTtsProvider);
+		const ttsOptions = {
+			provider: displayTtsProvider,
+			apiKey: ttsConfig.apiKey,
+			voiceId: (displaySpeechSettings.activeVoiceId as string) || ttsConfig.voiceId,
+			model: (displaySpeechSettings.activeModel as string) || ttsConfig.modelId,
+			baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
+			speed: (displaySpeechSettings.speed as number) ?? 1,
+			instructions: (displaySpeechSettings.instructions as string) || undefined,
+			altInstructions,
+			language: (displaySpeechSettings.primaryLanguage as string) || undefined,
+			altLanguage: (displaySpeechSettings.altLanguage as string) || undefined,
+			altVoiceId: effectiveAltVoiceId,
+			enableAltLanguage: (displaySpeechSettings.enableAltLanguage as boolean) ?? false,
+			numStep: (displaySpeechSettings.numStep as number) ?? undefined,
+			altSpeed: (displaySpeechSettings.altSpeed as number) ?? undefined,
+			altNumStep: (displaySpeechSettings.altNumStep as number) ?? undefined,
+			positionTemperature: (displaySpeechSettings.positionTemperature as number) ?? undefined,
+			classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefined
+		};
+
+		streamingTTS =
+			speechState?.enabled && displayTtsProvider === 'omnivoice'
+				? ttsStore.beginStreaming(ttsOptions)
+				: false;
+		let streamedLength = 0;
+
 		const onDelta = (full: string) => {
 			const display =
 				displayTtsProvider === 'omnivoice'
 					? cleanSpeechMarkers(full, (displaySpeechSettings.primaryLanguage as string) || 'de')
 					: full;
 			chatStore.updateLastMessage(display);
+
+			if (streamingTTS && full.length > streamedLength) {
+				ttsStore.feedStreaming(full.slice(streamedLength));
+			}
+			streamedLength = full.length;
 		};
 
 		// Truncate message history to the configured context window. This applies
@@ -277,6 +327,10 @@ export async function sendCompanionMessage(
 				},
 				onDelta
 			);
+		}
+
+		if (streamingTTS) {
+			void ttsStore.endStreaming();
 		}
 
 		hooks.setTyping(false);
@@ -345,50 +399,12 @@ export async function sendCompanionMessage(
 		if (turn.dialogue) {
 			vrmStore.startTalking(displayDialogue);
 
-			const speechState = modulesStore.getModuleState('speech');
-			const speechSettings = modulesStore.getModuleSettings('speech');
-
-			// Fallback: older saved settings may have altInstructions but no
-			// altVoiceId. Pick a matching OmniVoice preset so the switch works.
-			function resolveAltVoiceId(instructions: string | undefined, fallback: string): string {
-				if (!instructions) return fallback;
-				const i = instructions.toLowerCase();
-				if (i.includes('male') && !i.includes('female')) return 'onyx';
-				return 'alloy';
-			}
-
-			const configuredAltVoiceId = (speechSettings.altVoiceId as string) || undefined;
-			const altInstructions = (speechSettings.altInstructions as string) || undefined;
-			const effectiveAltVoiceId =
-				configuredAltVoiceId || resolveAltVoiceId(altInstructions, 'onyx');
-
-			if (speechState?.enabled) {
-				const ttsProvider = speechSettings.activeProvider as TTSProvider;
-				const ttsConfig = settingsStore.getProviderConfig(ttsProvider);
-				const ttsMeta = getTTSProvider(ttsProvider);
-				const ttsSpeakOptions = {
-					provider: ttsProvider,
-					apiKey: ttsConfig.apiKey,
-					voiceId: (speechSettings.activeVoiceId as string) || ttsConfig.voiceId,
-					model: (speechSettings.activeModel as string) || ttsConfig.modelId,
-					baseUrl: ttsConfig.baseUrl || ttsMeta?.defaultBaseUrl,
-					speed: (speechSettings.speed as number) ?? 1,
-					instructions: (speechSettings.instructions as string) || undefined,
-					altInstructions: (speechSettings.altInstructions as string) || undefined,
-					language: (speechSettings.primaryLanguage as string) || undefined,
-					altLanguage: (speechSettings.altLanguage as string) || undefined,
-					altVoiceId: effectiveAltVoiceId,
-					enableAltLanguage: (speechSettings.enableAltLanguage as boolean) ?? false,
-					numStep: (speechSettings.numStep as number) ?? undefined,
-					altSpeed: (speechSettings.altSpeed as number) ?? undefined,
-					altNumStep: (speechSettings.altNumStep as number) ?? undefined,
-					positionTemperature: (speechSettings.positionTemperature as number) ?? undefined,
-					classTemperature: (speechSettings.classTemperature as number) ?? undefined
-				};
-				ttsStore.speak(turn.dialogue, ttsSpeakOptions);
+			if (speechState?.enabled && !streamingTTS) {
+				ttsStore.speak(turn.dialogue, ttsOptions);
 			}
 		}
 	} catch (err) {
+		if (streamingTTS) ttsStore.cancelStreaming();
 		chatStore.setError(err instanceof Error ? err.message : 'Unknown error');
 		hooks.setTyping(false);
 	} finally {
