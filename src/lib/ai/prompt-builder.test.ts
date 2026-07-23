@@ -386,3 +386,40 @@ test('truncateChatHistory handles image content placeholders', () => {
 	assert.ok(result.length > 0);
 	assert.equal(result[result.length - 1].content, 'newest message');
 });
+
+// ── OmniVoice layer ─────────────────────────────────────
+
+test('omnivoice layer is injected in dating-sim mode', () => {
+	const prompt = buildSystemPrompt(makeContext({ ttsProvider: 'omnivoice' }));
+	assert.ok(prompt.includes('<speech_output_control>'));
+	assert.ok(prompt.includes('speak({ text:'));
+	assert.ok(prompt.includes('pause({ ms:'));
+	assert.ok(prompt.includes('gesture({ type:'));
+});
+
+test('omnivoice layer is injected in companion mode', () => {
+	const prompt = buildSystemPrompt(
+		makeContext({ ttsProvider: 'omnivoice', state: makeState({ appMode: 'companion' }) })
+	);
+	assert.ok(prompt.includes('<speech_output_control>'));
+	assert.ok(prompt.includes('speak({ text:'));
+});
+
+test('omnivoice layer is omitted for non-omnivoice providers', () => {
+	const prompt = buildSystemPrompt(makeContext({ ttsProvider: 'elevenlabs' }));
+	assert.ok(!prompt.includes('<speech_output_control>'));
+	assert.ok(!prompt.includes('speak({ text:'));
+});
+
+test('omnivoice layer forbids inline language markup tags', () => {
+	const prompt = buildSystemPrompt(makeContext({ ttsProvider: 'omnivoice' }));
+	assert.ok(prompt.includes('Do NOT use inline language markup tags'));
+	assert.ok(prompt.includes('[lang:es]'));
+	assert.ok(prompt.includes('<speak:es>'));
+});
+
+test('omnivoice layer requires every sentence in speak() calls', () => {
+	const prompt = buildSystemPrompt(makeContext({ ttsProvider: 'omnivoice' }));
+	assert.ok(prompt.includes('ALWAYS wrap every sentence you say in a speak() call'));
+	assert.ok(prompt.includes('NEVER write spoken text as plain prose outside of speak() calls'));
+});
