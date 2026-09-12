@@ -8,6 +8,8 @@ import {
 	combineServerResults,
 	isServerMcpEnabled,
 	isAllowedMcpHttpUrl,
+	isBlockedMcpHost,
+	isStdioCommandAllowed,
 	mcpUrlCandidates,
 	normalizeMcpUrl,
 	parseEnvLines,
@@ -191,6 +193,32 @@ test('parseToolNameList returns an empty list when unset or blank', () => {
 	assert.deepEqual(parseToolNameList(null), []);
 	assert.deepEqual(parseToolNameList(''), []);
 	assert.deepEqual(parseToolNameList(' , , '), []);
+});
+
+test('isBlockedMcpHost blocks link-local and metadata hosts', () => {
+	assert.equal(isBlockedMcpHost('169.254.169.254'), true);
+	assert.equal(isBlockedMcpHost('::ffff:169.254.169.254'), true);
+	assert.equal(isBlockedMcpHost('fe80::1'), true);
+	assert.equal(isBlockedMcpHost('[fe80::1]'), true);
+	assert.equal(isBlockedMcpHost('metadata.google.internal'), true);
+});
+
+test('isBlockedMcpHost keeps loopback, RFC1918 and public hosts reachable', () => {
+	assert.equal(isBlockedMcpHost('127.0.0.1'), false);
+	assert.equal(isBlockedMcpHost('192.168.10.3'), false);
+	assert.equal(isBlockedMcpHost('homeassistant.local'), false);
+	assert.equal(isBlockedMcpHost('api.githubcopilot.com'), false);
+});
+
+test('isStdioCommandAllowed allows everything without an allowlist', () => {
+	assert.equal(isStdioCommandAllowed('rm', []), true);
+	assert.equal(isStdioCommandAllowed(undefined, []), true);
+});
+
+test('isStdioCommandAllowed enforces a configured allowlist', () => {
+	assert.equal(isStdioCommandAllowed('npx', ['npx', 'node']), true);
+	assert.equal(isStdioCommandAllowed('rm', ['npx', 'node']), false);
+	assert.equal(isStdioCommandAllowed(undefined, ['npx']), false);
 });
 
 test('singleFlight collapses concurrent calls into one invocation', async () => {

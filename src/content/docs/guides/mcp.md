@@ -116,6 +116,8 @@ stdio servers are spawned per request with a 15-second timeout and run with the 
 
 The desktop app is the MCP host itself: there is no backend to gate, so no `MCP_ENABLED` variable exists there. **HTTP** servers connect directly through the Tauri HTTP plugin (CORS-free) and work exactly as on web; **stdio** servers are not available in v1 (the app cannot spawn local MCP processes yet).
 
+The Tauri HTTP permission is intentionally unrestricted (`http://**`, `https://**`): MCP servers are configured at runtime, so a static allowlist cannot know them. The plugin only issues the requests the MCP client makes — tool results go to the model and are never rendered as HTML in the UI. If you consider the desktop app's network surface sensitive, keep only the servers you trust enabled.
+
 The per-server **On/Off** switch is the desktop off switch: turn all servers off and the companion stops using MCP tools. A local server that only offers stdio (like Brave) can still be used on desktop by running it in HTTP mode yourself and pointing Utsuwa at it:
 
 ```bash
@@ -128,7 +130,7 @@ Brave's HTTP mode is unauthenticated and binds to loopback only — fine for a l
 
 ## Using tools in chat
 
-Once at least one server is enabled and its tools are listed, Utsuwa sends them to the model with every reply. The model can call several tools before answering — up to **5 tool rounds** per reply; results are fed back automatically and the final answer streams as usual (including voice).
+Once at least one server is enabled and its tools are listed, Utsuwa sends them to the model with every reply. The model can call several tools before answering — up to **5 tool rounds** per reply; results are fed back automatically and the final answer streams as usual (including voice). On the last round the model is told that the tool budget is spent and answers with the results it already has.
 
 If a local or SLIM model ignores tool results, enable **Inject text tool results as user messages** on that server.
 
@@ -144,6 +146,7 @@ Two opt-in switches cover the baseline of a tool-approval policy. Both default t
 
 - **`PUBLIC_MCP_PROMPT_HARDENING`** (`true` or `1`) — adds a security layer to the system prompt on turns with MCP tools: tool results are untrusted data (never instructions), and state-changing or destructive actions require an explicit user request.
 - **`PUBLIC_MCP_CONFIRM_TOOLS`** — comma-separated, case-sensitive tool names (blank entries are ignored), for example `unlock_door,set_alarm`. Listed tools are **never executed automatically**: the chat loop feeds back a "requires manual user confirmation" result so the model asks you first, and the `/api/mcp/call` route rejects direct calls with `403`. The tools stay visible to the model, and the block applies even when prompt hardening is off.
+- **`MCP_STDIO_ALLOWED_COMMANDS`** (server builds only) — comma-separated allowlist of stdio commands, for example `npx,node,uvx`. When set, any other command is rejected before a process is spawned (per-server error in the tool list, `403` on `/api/mcp/call`). Unset means any command is allowed — set it if your deployment could be reached by untrusted users.
 
 A full interactive approval dialog (per-tool metadata such as `read-only` / `requires-confirmation`) is future work.
 
@@ -163,8 +166,9 @@ A full interactive approval dialog (per-tool metadata such as `read-only` / `req
 ## Security notes
 
 - Tool results are treated as untrusted data: they are never executed, only passed to the model. `PUBLIC_MCP_PROMPT_HARDENING` states the same rule to the model, and `PUBLIC_MCP_CONFIRM_TOOLS` can block selected tools from ever running automatically.
-- Tokens never reach the model and are never logged.
+- Tokens never reach the model and are never logged by Utsuwa. They do travel to your own server inside the proxy request body, so a reverse proxy or body-logging layer in front of the deployment could capture them — keep access logs clean.
+- On the server-side HTTP path, link-local and cloud-metadata addresses (`169.254.0.0/16`, `fe80::/10`, `metadata.google.internal`, also via DNS resolution) are rejected before any request. Loopback and RFC1918 stay reachable by design, because self-hosted MCP servers like Home Assistant live on the local network — never enable MCP on a deployment untrusted users can reach.
 - HTTP servers may only use `http:`/`https:` URLs; other schemes are rejected before any request is made (web proxy and desktop transport alike).
-- stdio servers run commands on the Utsuwa host with the server process's environment plus the variables you configure, and can spawn any executable. `MCP_ENABLED=server` therefore means: the operator trusts everyone who can configure MCP servers. Utsuwa has no per-user accounts — anyone who can reach the app can add servers and trigger tool calls. Keep MCP off on shared or hosted deployments.
+- stdio servers run commands on the Utsuwa host with the server process's environment plus the variables you configure, and can spawn any executable. `MCP_STDIO_ALLOWED_COMMANDS` restricts them to an allowlist; without it, `MCP_ENABLED=server` means: the operator trusts everyone who can configure MCP servers. Utsuwa has no per-user accounts — anyone who can reach the app can add servers and trigger tool calls. Keep MCP off on shared or hosted deployments.
 - The model can call any tool you expose. Expose only what you are comfortable with (Home Assistant's MCP integration lets you pick which entities are exposed).
 - Disabling a server (or all servers) takes effect immediately: no further requests are made and its tools leave the chat.

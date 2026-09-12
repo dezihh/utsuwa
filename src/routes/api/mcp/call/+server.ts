@@ -7,7 +7,12 @@ import { env as publicEnv } from '$env/dynamic/public';
 import type { RequestHandler } from './$types';
 import type { McpServerConfig } from '$lib/types/mcp';
 import { callTool } from '$lib/services/mcp/client.server';
-import { isAllowedMcpHttpUrl, isServerMcpEnabled, parseToolNameList } from '$lib/services/mcp/protocol';
+import {
+	isAllowedMcpHttpUrl,
+	isServerMcpEnabled,
+	isStdioCommandAllowed,
+	parseToolNameList
+} from '$lib/services/mcp/protocol';
 
 export const POST: RequestHandler = async ({ request }) => {
 	if (!isServerMcpEnabled(env.MCP_ENABLED)) {
@@ -40,6 +45,20 @@ export const POST: RequestHandler = async ({ request }) => {
 			status: 400,
 			headers: { 'Content-Type': 'application/json' }
 		});
+	}
+
+	// Env-gated safety net: stdio commands are restricted to the allowlist
+	// when MCP_STDIO_ALLOWED_COMMANDS is set.
+	if (
+		server.transport === 'stdio' &&
+		!isStdioCommandAllowed(server.command, parseToolNameList(env.MCP_STDIO_ALLOWED_COMMANDS))
+	) {
+		return new Response(
+			JSON.stringify({
+				error: `stdio command "${server.command}" is not allowed (MCP_STDIO_ALLOWED_COMMANDS)`
+			}),
+			{ status: 403, headers: { 'Content-Type': 'application/json' } }
+		);
 	}
 
 	// Env-gated safety net: tools on the confirmation list are never executed

@@ -533,6 +533,18 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 				if (streamingTTS) ttsStore.feedStreaming(pseudo);
 			};
 
+			const isFinalRound = round === maxRounds - 1;
+			// The budget is spent: tell the model to answer with what it has.
+			// The tools stay defined — providers reject calls for tools that are
+			// not offered, so stripping them would turn a stray call into an error.
+			if (isFinalRound && useMcpLoop) {
+				messages.push({
+					role: 'user',
+					content:
+						'System note: tool budget reached — answer now with the information you already have, without further tool calls.'
+				});
+			}
+
 			if (isTauri() || providerMeta?.isLocal) {
 				// Desktop and local providers call the provider API directly.
 				await new Promise<void>((resolve, reject) => {
@@ -597,8 +609,11 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 			// the model gets an error result and can still answer.
 			const settled = await Promise.allSettled(
 				roundCalls.map(async (call) => {
-					if (!mcpToolNames.has(call.name)) {
+					if (pseudoCallFromTool(call.name, call.args) !== null) {
 						return { call, content: speechToolAck(call.args) };
+					}
+					if (!mcpToolNames.has(call.name)) {
+						return { call, content: `Error: unknown tool "${call.name}"` };
 					}
 					if (confirmToolNames.has(call.name)) {
 						return {

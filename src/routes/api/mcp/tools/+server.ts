@@ -7,7 +7,7 @@ import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import type { McpServerConfig } from '$lib/types/mcp';
 import { listTools } from '$lib/services/mcp/client.server';
-import { combineServerResults, isServerMcpEnabled } from '$lib/services/mcp/protocol';
+import { combineServerResults, isServerMcpEnabled, isStdioCommandAllowed, parseToolNameList } from '$lib/services/mcp/protocol';
 
 export const POST: RequestHandler = async ({ request }) => {
 	if (!isServerMcpEnabled(env.MCP_ENABLED)) {
@@ -22,7 +22,18 @@ export const POST: RequestHandler = async ({ request }) => {
 		? body.servers.filter((s) => s?.enabled && (s.transport === 'http' || s.transport === 'stdio'))
 		: [];
 
-	const settled = await Promise.allSettled(enabled.map((server) => listTools(server)));
+	const stdioAllowed = parseToolNameList(env.MCP_STDIO_ALLOWED_COMMANDS);
+	const settled = await Promise.allSettled(
+		enabled.map((server) =>
+			server.transport === 'stdio' && !isStdioCommandAllowed(server.command, stdioAllowed)
+				? Promise.reject(
+						new Error(
+							`stdio command "${server.command}" is not allowed (MCP_STDIO_ALLOWED_COMMANDS)`
+						)
+					)
+				: listTools(server)
+		)
+	);
 	const { values, errors } = combineServerResults(settled, enabled);
 
 	return new Response(JSON.stringify({ tools: values.flat(), errors }), {

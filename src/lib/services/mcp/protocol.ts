@@ -237,3 +237,33 @@ export function parseToolNameList(raw: string | undefined | null): string[] {
 		.map((name) => name.trim())
 		.filter(Boolean);
 }
+
+/**
+ * Link-local and cloud-metadata hosts are blocked on the server-side HTTP
+ * path. Loopback and RFC1918 stay allowed on purpose — Home Assistant and
+ * other self-hosted MCP servers live on the local network.
+ */
+export function isBlockedMcpHost(rawHostname: string): boolean {
+	const host = rawHostname.trim().toLowerCase().replace(/^\[|\]$/g, '');
+	if (!host) return false;
+	if (host === 'metadata.google.internal' || host === 'metadata.goog') return true;
+	// IPv4-mapped IPv6 (::ffff:169.254.x.x)
+	const mapped = host.startsWith('::ffff:') ? host.slice(7) : host;
+	const v4 = mapped.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+	if (v4) return Number(v4[1]) === 169 && Number(v4[2]) === 254;
+	// IPv6 link-local fe80::/10 (fe80–febf)
+	return /^fe[89ab][0-9a-f]:/.test(host);
+}
+
+/**
+ * stdio commands can be restricted with an env allowlist. An empty list
+ * allows every command (backward compatible).
+ */
+export function isStdioCommandAllowed(
+	command: string | undefined | null,
+	allowed: string[]
+): boolean {
+	if (allowed.length === 0) return true;
+	if (!command) return false;
+	return allowed.includes(command);
+}

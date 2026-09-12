@@ -273,7 +273,17 @@ test('companion chat preserves native speech across direct and hosted state bloc
 			let providerRound = 0;
 			let toolCalls = 0;
 			t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
-				if (url === '/api/chat') return POST({ request: new Request('http://localhost/api/chat', init) });
+				if (url === '/api/chat') {
+					if (providerRound === 4) {
+						const body = JSON.parse(String(init.body));
+						const note = body.messages.find(
+							(m: { role: string; content?: string }) =>
+								m.role === 'user' && String(m.content).includes('tool budget reached')
+						);
+						assert.ok(note, 'the final round tells the model the budget is spent');
+					}
+					return POST({ request: new Request('http://localhost/api/chat', init) });
+				}
 				if (url === '/api/mcp/call') {
 					toolCalls++;
 					return new Response(JSON.stringify({ toolName: 'get_state', content: 'ok', isError: false }), {
@@ -437,6 +447,74 @@ test('companion chat preserves native speech across direct and hosted state bloc
 			assert.match(body.error ?? '', /requires manual user confirmation/);
 			delete fixtures.publicEnv.PUBLIC_MCP_CONFIRM_TOOLS;
 			delete fixtures.privateEnv.MCP_ENABLED;
+		});
+		await t.test('the MCP call route rejects stdio commands outside the allowlist', async () => {
+			fixtures.privateEnv.MCP_ENABLED = 'server';
+			fixtures.privateEnv.MCP_STDIO_ALLOWED_COMMANDS = 'npx';
+			const { POST: callPOST } = await server.ssrLoadModule('/src/routes/api/mcp/call/+server.ts');
+			const response = await callPOST({
+				request: new Request('http://localhost/api/mcp/call', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						server: { id: 'evil', name: 'Evil', transport: 'stdio', command: 'rm', args: ['-rf', '/'], enabled: true },
+						toolName: 'do_it',
+						args: {}
+					})
+				})
+			});
+			assert.equal(response.status, 403);
+			const body = (await response.json()) as { error?: string };
+			assert.match(body.error ?? '', /MCP_STDIO_ALLOWED_COMMANDS/);
+			delete fixtures.privateEnv.MCP_ENABLED;
+			delete fixtures.privateEnv.MCP_STDIO_ALLOWED_COMMANDS;
+		});
+		await t.test('an unknown tool call is answered with an error result', async (t) => {
+			direct = true; llmProvider = 'openai-compatible';
+			speechEnabled = false; messages.length = 0; spoken = []; turns.length = 0;
+			const mcp = fixtures.mcpStore as {
+				hasActiveTools: boolean;
+				tools: unknown[];
+				servers: unknown[];
+			};
+			mcp.hasActiveTools = true;
+			mcp.tools = [{
+				serverId: 'ha', serverName: 'Home Assistant', name: 'get_state',
+				description: 'Read an entity state', inputSchema: { type: 'object' }
+			}];
+			mcp.servers = [{ id: 'ha', name: 'Home Assistant', transport: 'http', url: 'http://ha.local/api/mcp', enabled: true }];
+
+			let providerRound = 0;
+			const round0 = `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [
+				{ index: 0, id: 'call_1', type: 'function', function: { name: 'get_state', arguments: '{}' } },
+				{ index: 1, id: 'call_2', type: 'function', function: { name: 'make_coffee', arguments: '{}' } }
+			] } }] })}\n\n` + 'data: [DONE]\n\n';
+			const round1 = `data: ${JSON.stringify({ choices: [{ delta: { content: 'Done.' } }] })}\n\n` + 'data: [DONE]\n\n';
+
+			t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+				if (url === '/api/mcp/call') {
+					return new Response(JSON.stringify({ toolName: 'get_state', content: 'ok', isError: false }), {
+						headers: { 'Content-Type': 'application/json' }
+					});
+				}
+				if (providerRound === 1) {
+					const body = JSON.parse(String(init.body));
+					const toolMessages = body.messages.filter((m: { role: string }) => m.role === 'tool');
+					const unknown = toolMessages.find((m: { content: string }) =>
+						String(m.content).includes('unknown tool')
+					);
+					assert.ok(unknown, 'the hallucinated tool gets an error result');
+					assert.match(String(unknown.content), /make_coffee/);
+				}
+				const wire = providerRound === 0 ? round0 : round1;
+				providerRound++;
+				return new Response(new TextEncoder().encode(wire), { headers: { 'Content-Type': 'text/event-stream' } });
+			});
+
+			await sendCompanionMessage('Check it', [], hooks);
+			assert.equal(chatStore.error, null);
+			assert.equal(providerRound, 2, 'the model runs again after the mixed tool round');
+			mcp.hasActiveTools = false; mcp.tools = []; mcp.servers = [];
 		});
 	} finally {
 		buffer?.reset();

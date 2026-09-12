@@ -32,7 +32,9 @@ function persist(next: McpServerConfig[]) {
 let servers = $state<McpServerConfig[]>(loadSaved());
 let tools = $state<McpTool[]>([]);
 let serverErrors = $state<McpServerError[]>([]);
-let isLoadingTools = $state(false);
+	let isLoadingTools = $state(false);
+	/** Set when a mutation lands while a fetch is in flight (coalesced). */
+	let refetchQueued = false;
 let toolsError = $state<string | null>(null);
 let capability = $state<McpCapabilityState>('unknown');
 
@@ -72,6 +74,12 @@ async function fetchTools(): Promise<void> {
 		serverErrors = [];
 		return;
 	}
+	if (isLoadingTools) {
+		// Coalesce rapid server mutations: one follow-up fetch picks up the
+		// latest state instead of racing parallel list requests.
+		refetchQueued = true;
+		return;
+	}
 
 	isLoadingTools = true;
 	toolsError = null;
@@ -85,6 +93,10 @@ async function fetchTools(): Promise<void> {
 		serverErrors = [];
 	} finally {
 		isLoadingTools = false;
+		if (refetchQueued) {
+			refetchQueued = false;
+			void fetchTools();
+		}
 	}
 }
 

@@ -4,11 +4,12 @@
  * and stateless; long-lived sessions can come later if a server needs them.
  */
 import type { McpServerConfig, McpTool, McpToolResult } from '$lib/types/mcp';
-import { createHttpMcpClient } from './http-client.ts';
+import { createHttpMcpClient, type FetchLike } from './http-client.ts';
 import {
 	buildInitializedNotification,
 	buildInitializeRequest,
 	buildRpcRequest,
+	isBlockedMcpHost,
 	nextRpcId,
 	parseToolsList,
 	stringifyToolResult
@@ -16,7 +17,53 @@ import {
 
 const STDIO_REQUEST_TIMEOUT_MS = 15_000;
 
-const httpClient = createHttpMcpClient((input, init) => fetch(input, init));
+const hostCheckCache = new Map<string, { blocked: boolean; checkedAt: number }>();
+const HOST_CHECK_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Server-side SSRF guard: link-local and metadata hosts are rejected before
+ * any request, including hostnames that resolve to such an address. Loopback
+ * and RFC1918 stay allowed — self-hosted MCP servers live there.
+ */
+async function assertAllowedHost(rawUrl: string): Promise<void> {
+	let hostname: string;
+	try {
+		hostname = new URL(rawUrl).hostname;
+	} catch {
+		return; // let fetch report the invalid URL
+	}
+	if (isBlockedMcpHost(hostname)) {
+		throw new Error(`MCP HTTP host "${hostname}" is blocked (link-local/metadata)`);
+	}
+	// Literal addresses are covered above; only resolve names.
+	if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':')) return;
+	const cached = hostCheckCache.get(hostname);
+	if (cached && Date.now() - cached.checkedAt < HOST_CHECK_TTL_MS) {
+		if (cached.blocked) {
+			throw new Error(`MCP HTTP host "${hostname}" is blocked (resolves to link-local/metadata)`);
+		}
+		return;
+	}
+	try {
+		const { lookup } = await import('node:dns/promises');
+		const addresses = await lookup(hostname, { all: true });
+		const blocked = addresses.some((entry) => isBlockedMcpHost(entry.address));
+		hostCheckCache.set(hostname, { blocked, checkedAt: Date.now() });
+		if (blocked) {
+			throw new Error(`MCP HTTP host "${hostname}" is blocked (resolves to link-local/metadata)`);
+		}
+	} catch (err) {
+		// DNS failures surface through fetch with their real message.
+		if (err instanceof Error && err.message.includes('is blocked')) throw err;
+	}
+}
+
+const serverFetch: FetchLike = async (input, init) => {
+	await assertAllowedHost(String(input));
+	return fetch(input, init);
+};
+
+const httpClient = createHttpMcpClient(serverFetch);
 
 interface StdioSession {
 	request(method: string, params: Record<string, unknown>): Promise<unknown>;
@@ -94,6 +141,19 @@ async function createStdioSession(config: McpServerConfig): Promise<StdioSession
 
 	function close() {
 		proc.stdin.end();
+		// A server that ignores stdin EOF must not leak: give it a short grace
+		// period, then terminate. unref() keeps the timer from holding the
+		// process open.
+		const killTimer = setTimeout(() => {
+			if (proc.exitCode === null && proc.signalCode === null) {
+				try {
+					proc.kill('SIGTERM');
+				} catch {
+					// already gone
+				}
+			}
+		}, 1000);
+		killTimer.unref?.();
 	}
 
 	// Initialize handshake before the session is usable.
