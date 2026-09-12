@@ -251,7 +251,7 @@
 								id="mcp-env"
 								class="form-input form-textarea"
 								bind:value={formEnv}
-								placeholder="SEARXNG_URL=http://192.168.10.4:8090"
+								placeholder="SEARXNG_URL=http://your-searxng-host:8080"
 								rows="3"
 							></textarea>
 						</div>

@@ -105,7 +105,7 @@ Any MCP server that speaks stdio can be spawned by the server build. Example wit
 - **Arguments**: `-y mcp-searxng`
 - **Env Vars**:
   ```
-  SEARXNG_URL=http://your-searxng-host:8090
+  SEARXNG_URL=http://your-searxng-host:8080
   ```
 
 stdio servers are spawned per request with a 15-second timeout and run with the server's environment plus the variables you configure here. Only enable MCP on a deployment you control — stdio effectively means running local commands.
