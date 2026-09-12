@@ -51,6 +51,12 @@ test('companion chat preserves native speech across direct and hosted state bloc
 			endStreaming: async () => { buffer?.flush(); },
 			cancelStreaming: () => buffer?.reset()
 		},
+		mcpStore: {
+			ensureTools: async () => {},
+			hasActiveTools: false,
+			tools: [],
+			servers: []
+		},
 		isTauri: () => direct,
 		processCompanionTurn: async ({ companionResponse }: { companionResponse: string }) => {
 			const parsed = parseResponse(companionResponse);
@@ -70,7 +76,7 @@ test('companion chat preserves native speech across direct and hosted state bloc
 	};
 	for (const [path, name] of Object.entries({
 		chat: 'chatStore', character: 'characterStore', persona: 'personaStore', settings: 'settingsStore',
-		modules: 'modulesStore', vrm: 'vrmStore', reminders: 'reminderStore', tts: 'ttsStore'
+		modules: 'modulesStore', vrm: 'vrmStore', reminders: 'reminderStore', tts: 'ttsStore', mcp: 'mcpStore'
 	})) replacements[`src/lib/stores/${path}.svelte`] = `export const ${name} = globalThis.__utsuwaChatIntegration.${name};`;
 	const server = await createServer({
 		root, configFile: false, server: { middlewareMode: true }, appType: 'custom',
@@ -149,6 +155,58 @@ test('companion chat preserves native speech across direct and hosted state bloc
 				assert.equal(latest, 'Hello there.');
 				assert.equal(speechStarted, enabled);
 			}
+		});
+		await t.test('MCP tool loop executes the tool, feeds the result back and then speaks', async (t) => {
+			direct = false; llmProvider = 'openai-compatible';
+			speechEnabled = true; messages.length = 0; spoken = []; turns.length = 0;
+			const mcp = fixtures.mcpStore as {
+				hasActiveTools: boolean;
+				tools: unknown[];
+				servers: unknown[];
+			};
+			mcp.hasActiveTools = true;
+			mcp.tools = [{
+				serverId: 'ha', serverName: 'Home Assistant', name: 'get_state',
+				description: 'Read an entity state', inputSchema: { type: 'object' }
+			}];
+			mcp.servers = [{ id: 'ha', name: 'Home Assistant', transport: 'http', url: 'http://ha.local/api/mcp', enabled: true }];
+
+			let providerRound = 0;
+			const toolCallWire = `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'get_state', arguments: '{}' } }] } }] })}\n\n` + 'data: [DONE]\n\n';
+			const speechWire = `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_2', type: 'function', function: { name: 'speak_segment', arguments: JSON.stringify({ text: 'It is 21 degrees.', language: 'en' }) } }] } }] })}\n\n` + 'data: [DONE]\n\n';
+
+			t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+				if (url === '/api/chat') {
+					if (providerRound === 1) {
+						const body = JSON.parse(String(init.body));
+						const toolMessage = body.messages.find((m: { role: string }) => m.role === 'tool');
+						assert.ok(toolMessage, 'the tool result is fed back into the second round');
+						assert.equal(toolMessage.content, '21 degrees');
+						assert.equal(body.messages.some((m: { role: string; tool_calls?: unknown }) => m.role === 'assistant' && m.tool_calls), true);
+					}
+					return POST({ request: new Request('http://localhost/api/chat', init) });
+				}
+				if (url === '/api/mcp/call') {
+					const body = JSON.parse(String(init.body));
+					assert.equal(body.toolName, 'get_state');
+					return new Response(JSON.stringify({ toolName: 'get_state', content: '21 degrees', isError: false }), {
+						headers: { 'Content-Type': 'application/json' }
+					});
+				}
+				const wire = providerRound === 0 ? toolCallWire : speechWire;
+				providerRound++;
+				return new Response(new ReadableStream({ start(controller) {
+					controller.enqueue(new TextEncoder().encode(wire));
+					controller.close();
+				} }), { headers: { 'Content-Type': 'text/event-stream' } });
+			});
+
+			await sendCompanionMessage('How warm is it?', [], hooks);
+			assert.equal(chatStore.error, null);
+			assert.equal(providerRound, 2, 'the model runs again after the tool result');
+			assert.deepEqual(spoken.map((s) => [s.text, s.language]), [['It is 21 degrees.', 'en']]);
+			assert.equal(latest, 'It is 21 degrees.');
+			mcp.hasActiveTools = false; mcp.tools = []; mcp.servers = [];
 		});
 	} finally {
 		buffer?.reset();

@@ -1,0 +1,192 @@
+/**
+ * MCP protocol core — pure, dependency-free helpers shared by the server-side
+ * client (Node fetch + stdio) and the client-side client (Tauri HTTP plugin).
+ * MCP is plain JSON-RPC 2.0, so no SDK is needed.
+ */
+import type { McpAuth, McpServerError } from '$lib/types/mcp';
+
+export const MCP_PROTOCOL_VERSION = '2024-11-05';
+export const MCP_CLIENT_NAME = 'utsuwa';
+export const MCP_CLIENT_VERSION = '1.0.0';
+
+let rpcIdCounter = 1;
+
+/** Monotonic JSON-RPC request id. */
+export function nextRpcId(): number {
+	return rpcIdCounter++;
+}
+
+/**
+ * Server gate for the MCP API routes: `MCP_ENABLED=server` (or `both`) turns
+ * them on. Anything else — including unset — keeps them off, so a hosted
+ * deployment stays untouched unless it opts in.
+ */
+export function isServerMcpEnabled(raw: string | undefined | null): boolean {
+	return raw === 'server' || raw === 'both';
+}
+
+/**
+ * MCP Streamable HTTP endpoints are mounted differently across servers: most
+ * accept a trailing slash (and some redirect to it), while strict routers like
+ * Home Assistant 404 on it. Candidates are tried in order — the URL as the user
+ * configured it first, then the trailing-slash variant.
+ */
+export function mcpUrlCandidates(raw: string): string[] {
+	const trimmed = raw.trim().replace(/\/+$/, '');
+	if (!trimmed) return [];
+	return [trimmed, `${trimmed}/`];
+}
+
+/** Trailing-slash variant of a URL (used for the fire-and-forget notification). */
+export function normalizeMcpUrl(url: string): string {
+	return url.replace(/\/?$/, '/');
+}
+
+export function buildRpcRequest<P = Record<string, unknown>>(id: number, method: string, params: P = {} as P) {
+	return { jsonrpc: '2.0' as const, id, method, params };
+}
+
+export function buildInitializeRequest(id: number) {
+	return buildRpcRequest(id, 'initialize', {
+		protocolVersion: MCP_PROTOCOL_VERSION,
+		capabilities: { tools: {} },
+		clientInfo: { name: MCP_CLIENT_NAME, version: MCP_CLIENT_VERSION }
+	});
+}
+
+export function buildInitializedNotification() {
+	return { jsonrpc: '2.0' as const, method: 'notifications/initialized', params: {} };
+}
+
+/** Authentication headers for HTTP requests. No auth means no header at all. */
+export function buildAuthHeaders(auth?: McpAuth): Record<string, string> {
+	if (auth?.type === 'bearer' && auth.token) {
+		return { Authorization: `Bearer ${auth.token}` };
+	}
+	return {};
+}
+
+interface JsonRpcError {
+	code?: number;
+	message?: string;
+}
+
+function rpcErrorMessage(error: JsonRpcError | undefined): string {
+	return error?.message ? `MCP error: ${error.message}` : 'MCP error: unknown error';
+}
+
+/**
+ * Parse a JSON-RPC response body. Throws on protocol-level errors so callers
+ * surface a readable message instead of a malformed result.
+ */
+export function parseJsonRpcResult(json: unknown): unknown {
+	const body = json as { result?: unknown; error?: JsonRpcError } | null;
+	if (!body || typeof body !== 'object') {
+		throw new Error('MCP error: empty response');
+	}
+	if (body.error) {
+		throw new Error(rpcErrorMessage(body.error));
+	}
+	return body.result;
+}
+
+/**
+ * Parse the first `data:` line of an SSE response. Streamable HTTP servers may
+ * answer JSON-RPC requests with `text/event-stream` instead of plain JSON.
+ */
+export function parseSseResult(text: string): unknown {
+	for (const line of text.split('\n')) {
+		if (!line.startsWith('data:')) continue;
+		const payload = line.slice('data:'.length).trim();
+		if (!payload || payload === '[DONE]') continue;
+		const json = JSON.parse(payload) as { result?: unknown; error?: JsonRpcError };
+		if (json.error) {
+			throw new Error(rpcErrorMessage(json.error));
+		}
+		return json.result;
+	}
+	throw new Error('MCP error: no data found in SSE response');
+}
+
+interface RawMcpTool {
+	name?: unknown;
+	description?: unknown;
+	inputSchema?: unknown;
+}
+
+/** Map a `tools/list` result to the tool shape used across the app. */
+export function parseToolsList(result: unknown): Array<{
+	name: string;
+	description: string;
+	inputSchema: { type: 'object'; properties?: Record<string, unknown>; required?: string[]; [key: string]: unknown };
+}> {
+	const tools = (result as { tools?: RawMcpTool[] } | null)?.tools;
+	if (!Array.isArray(tools)) return [];
+	return tools
+		.filter((tool): tool is RawMcpTool & { name: string } => typeof tool?.name === 'string' && tool.name.length > 0)
+		.map((tool) => ({
+			name: tool.name,
+			description: typeof tool.description === 'string' ? tool.description : '',
+			inputSchema: (typeof tool.inputSchema === 'object' && tool.inputSchema !== null
+				? tool.inputSchema
+				: { type: 'object' }) as { type: 'object'; [key: string]: unknown }
+		}));
+}
+
+/**
+ * Flatten an MCP `tools/call` result to plain text. Text parts are joined;
+ * anything else (images, resources) falls back to the raw JSON so the model
+ * still receives the data.
+ */
+export function stringifyToolResult(result: unknown): string {
+	const content = (result as { content?: Array<{ type?: string; text?: string }> } | null)?.content;
+	if (Array.isArray(content)) {
+		const text = content
+			.filter((part) => part?.type === 'text' && typeof part.text === 'string')
+			.map((part) => part.text as string)
+			.join('\n');
+		if (text) return text;
+	}
+	if (result === undefined || result === null) return '';
+	return JSON.stringify(result);
+}
+
+/**
+ * Split per-server `Promise.allSettled` results into collected values and
+ * readable per-server errors (one broken server must not hide the others).
+ */
+export function combineServerResults<T>(
+	results: Array<PromiseSettledResult<T>>,
+	servers: Array<{ id: string; name: string }>
+): { values: T[]; errors: McpServerError[] } {
+	const values: T[] = [];
+	const errors: McpServerError[] = [];
+	results.forEach((result, index) => {
+		if (result.status === 'fulfilled') {
+			values.push(result.value);
+			return;
+		}
+		errors.push({
+			serverId: servers[index]?.id ?? '',
+			serverName: servers[index]?.name ?? 'Unknown server',
+			message: result.reason instanceof Error ? result.reason.message : String(result.reason)
+		});
+	});
+	return { values, errors };
+}
+
+/**
+ * Parse the settings textarea format: one `KEY=value` per line, `#` comments
+ * and blank lines ignored.
+ */
+export function parseEnvLines(raw: string): Record<string, string> {
+	const result: Record<string, string> = {};
+	for (const line of raw.split('\n')) {
+		const trimmed = line.trim();
+		if (!trimmed || trimmed.startsWith('#')) continue;
+		const eq = trimmed.indexOf('=');
+		if (eq < 1) continue;
+		result[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+	}
+	return result;
+}

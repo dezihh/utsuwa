@@ -1,0 +1,171 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+	buildAuthHeaders,
+	buildInitializedNotification,
+	buildInitializeRequest,
+	buildRpcRequest,
+	combineServerResults,
+	isServerMcpEnabled,
+	mcpUrlCandidates,
+	normalizeMcpUrl,
+	parseEnvLines,
+	parseJsonRpcResult,
+	parseSseResult,
+	parseToolsList,
+	stringifyToolResult
+} from './protocol.ts';
+
+test('isServerMcpEnabled: server and both enable the routes', () => {
+	assert.equal(isServerMcpEnabled('server'), true);
+	assert.equal(isServerMcpEnabled('both'), true);
+});
+
+test('isServerMcpEnabled: unset, off and reserved modes stay off', () => {
+	assert.equal(isServerMcpEnabled(undefined), false);
+	assert.equal(isServerMcpEnabled(null), false);
+	assert.equal(isServerMcpEnabled(''), false);
+	assert.equal(isServerMcpEnabled('off'), false);
+	assert.equal(isServerMcpEnabled('client'), false);
+	assert.equal(isServerMcpEnabled('true'), false);
+});
+
+test('mcpUrlCandidates tries the configured form first, then the slash variant', () => {
+	assert.deepEqual(mcpUrlCandidates('http://ha.local:8123/api/mcp'), [
+		'http://ha.local:8123/api/mcp',
+		'http://ha.local:8123/api/mcp/'
+	]);
+});
+
+test('mcpUrlCandidates normalizes trailing slashes and whitespace', () => {
+	assert.deepEqual(mcpUrlCandidates('  http://ha.local:8123/api/mcp/  '), [
+		'http://ha.local:8123/api/mcp',
+		'http://ha.local:8123/api/mcp/'
+	]);
+	assert.deepEqual(mcpUrlCandidates('http://ha.local:8123'), [
+		'http://ha.local:8123',
+		'http://ha.local:8123/'
+	]);
+});
+
+test('mcpUrlCandidates returns no candidates for empty input', () => {
+	assert.deepEqual(mcpUrlCandidates(''), []);
+	assert.deepEqual(mcpUrlCandidates('   '), []);
+});
+
+test('normalizeMcpUrl adds a trailing slash exactly once', () => {
+	assert.equal(normalizeMcpUrl('http://ha.local:8123/api/mcp'), 'http://ha.local:8123/api/mcp/');
+	assert.equal(normalizeMcpUrl('http://ha.local:8123/api/mcp/'), 'http://ha.local:8123/api/mcp/');
+	assert.equal(normalizeMcpUrl(''), '/');
+});
+
+test('buildAuthHeaders: bearer with token adds the Authorization header', () => {
+	assert.deepEqual(buildAuthHeaders({ type: 'bearer', token: 'abc' }), {
+		Authorization: 'Bearer abc'
+	});
+});
+
+test('buildAuthHeaders: none and empty bearer add no header', () => {
+	assert.deepEqual(buildAuthHeaders({ type: 'none' }), {});
+	assert.deepEqual(buildAuthHeaders(undefined), {});
+	assert.deepEqual(buildAuthHeaders({ type: 'bearer', token: '' }), {});
+});
+
+test('buildRpcRequest and initialize request carry the JSON-RPC shape', () => {
+	assert.deepEqual(buildRpcRequest(7, 'tools/list', {}), {
+		jsonrpc: '2.0',
+		id: 7,
+		method: 'tools/list',
+		params: {}
+	});
+	const init = buildInitializeRequest(1);
+	assert.equal(init.method, 'initialize');
+	assert.equal(init.params.protocolVersion, '2024-11-05');
+	assert.equal(buildInitializedNotification().method, 'notifications/initialized');
+});
+
+test('parseJsonRpcResult returns the result and throws on errors', () => {
+	assert.deepEqual(parseJsonRpcResult({ result: { tools: [] } }), { tools: [] });
+	assert.throws(() => parseJsonRpcResult({ error: { message: 'boom' } }), /boom/);
+	assert.throws(() => parseJsonRpcResult(null), /empty response/);
+});
+
+test('parseSseResult reads the first data line', () => {
+	const sse = 'event: message\ndata: {"result":{"ok":true}}\n\n';
+	assert.deepEqual(parseSseResult(sse), { ok: true });
+});
+
+test('parseSseResult skips keep-alive lines and [DONE]', () => {
+	const sse = 'data: [DONE]\n\ndata: {"result":42}\n';
+	assert.equal(parseSseResult(sse), 42);
+});
+
+test('parseSseResult throws without a data line and on JSON-RPC errors', () => {
+	assert.throws(() => parseSseResult('event: ping\n\n'), /no data/);
+	assert.throws(() => parseSseResult('data: {"error":{"message":"nope"}}\n'), /nope/);
+});
+
+test('parseToolsList maps tools and tolerates missing fields', () => {
+	const tools = parseToolsList({
+		tools: [
+			{ name: 'get_state', description: 'Read a state', inputSchema: { type: 'object' } },
+			{ description: 'nameless tool' },
+			null
+		]
+	});
+	assert.equal(tools.length, 1);
+	assert.equal(tools[0].name, 'get_state');
+	assert.equal(tools[0].description, 'Read a state');
+});
+
+test('parseToolsList returns an empty list for malformed results', () => {
+	assert.deepEqual(parseToolsList(undefined), []);
+	assert.deepEqual(parseToolsList({}), []);
+	assert.deepEqual(parseToolsList({ tools: 'nope' }), []);
+});
+
+test('stringifyToolResult joins text parts and falls back to JSON', () => {
+	assert.equal(
+		stringifyToolResult({ content: [{ type: 'text', text: 'line 1' }, { type: 'text', text: 'line 2' }] }),
+		'line 1\nline 2'
+	);
+	assert.equal(
+		stringifyToolResult({ content: [{ type: 'image', data: 'x' }] }),
+		JSON.stringify({ content: [{ type: 'image', data: 'x' }] })
+	);
+	assert.equal(stringifyToolResult(null), '');
+});
+
+test('combineServerResults collects fulfilled values in order', () => {
+	const { values, errors } = combineServerResults(
+		[{ status: 'fulfilled', value: ['a'] }, { status: 'fulfilled', value: ['b'] }],
+		[{ id: 's1', name: 'One' }, { id: 's2', name: 'Two' }]
+	);
+	assert.deepEqual(values, [['a'], ['b']]);
+	assert.deepEqual(errors, []);
+});
+
+test('combineServerResults turns rejections into per-server errors', () => {
+	const { values, errors } = combineServerResults(
+		[{ status: 'fulfilled', value: ['a'] }, { status: 'rejected', reason: new Error('401: Unauthorized') }],
+		[{ id: 's1', name: 'One' }, { id: 's2', name: 'Two' }]
+	);
+	assert.deepEqual(values, [['a']]);
+	assert.deepEqual(errors, [{ serverId: 's2', serverName: 'Two', message: '401: Unauthorized' }]);
+});
+
+test('combineServerResults stringifies non-Error reasons and labels missing servers', () => {
+	const { errors } = combineServerResults([{ status: 'rejected', reason: 'boom' }], []);
+	assert.equal(errors[0].message, 'boom');
+	assert.equal(errors[0].serverName, 'Unknown server');
+	assert.equal(errors[0].serverId, '');
+});
+
+test('parseEnvLines parses KEY=value, ignores comments and blanks', () => {
+	assert.deepEqual(parseEnvLines('A=1\n# comment\n\nB = two words \nbroken\nC='), {
+		A: '1',
+		B: 'two words',
+		C: ''
+	});
+	assert.deepEqual(parseEnvLines(''), {});
+});
