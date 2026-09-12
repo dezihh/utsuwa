@@ -114,7 +114,7 @@ stdio servers are spawned per request with a 15-second timeout and run with the 
 
 ## Desktop builds (Tauri)
 
-The desktop app is the MCP host itself: there is no backend to gate, so no `MCP_ENABLED` variable exists there. **HTTP** servers connect directly through the Tauri HTTP plugin (CORS-free) and work exactly as on web; **stdio** servers are not available in v1 (the app cannot spawn local MCP processes yet).
+The desktop app is the MCP host itself: there is no backend to gate, so no `MCP_ENABLED` variable exists there. **HTTP** servers connect directly through the Tauri HTTP plugin (CORS-free) and work exactly as on web; **stdio** servers are not available in v1 (the app cannot spawn local MCP processes yet — stdio entries show a per-server error in the tool list).
 
 The Tauri HTTP permission is intentionally unrestricted (`http://**`, `https://**`): MCP servers are configured at runtime, so a static allowlist cannot know them. The plugin only issues the requests the MCP client makes — tool results go to the model and are never rendered as HTML in the UI. If you consider the desktop app's network surface sensitive, keep only the servers you trust enabled.
 
@@ -146,7 +146,7 @@ Two opt-in switches cover the baseline of a tool-approval policy. Both default t
 
 - **`PUBLIC_MCP_PROMPT_HARDENING`** (`true` or `1`) — adds a security layer to the system prompt on turns with MCP tools: tool results are untrusted data (never instructions), and state-changing or destructive actions require an explicit user request.
 - **`PUBLIC_MCP_CONFIRM_TOOLS`** — comma-separated, case-sensitive tool names (blank entries are ignored), for example `unlock_door,set_alarm`. Listed tools are **never executed automatically**: the chat loop feeds back a "requires manual user confirmation" result so the model asks you first, and the `/api/mcp/call` route rejects direct calls with `403`. The tools stay visible to the model, and the block applies even when prompt hardening is off.
-- **`MCP_STDIO_ALLOWED_COMMANDS`** (server builds only) — comma-separated allowlist of stdio commands, for example `npx,node,uvx`. When set, any other command is rejected before a process is spawned (per-server error in the tool list, `403` on `/api/mcp/call`). Unset means any command is allowed — set it if your deployment could be reached by untrusted users.
+- **`MCP_STDIO_ALLOWED_COMMANDS`** (server builds only) — comma-separated allowlist of stdio commands, for example `npx,node,uvx`. When set, any other command is rejected before a process is spawned (per-server error in the tool list, `403` on `/api/mcp/call`). Unset means any command is allowed — set it if your deployment could be reached by untrusted users. Without it, the server logs a startup warning that stdio is unrestricted.
 
 A full interactive approval dialog (per-tool metadata such as `read-only` / `requires-confirmation`) is future work.
 

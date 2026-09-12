@@ -19,6 +19,15 @@ const STDIO_REQUEST_TIMEOUT_MS = 15_000;
 
 const hostCheckCache = new Map<string, { blocked: boolean; checkedAt: number }>();
 const HOST_CHECK_TTL_MS = 5 * 60 * 1000;
+let warnedDnsUnavailable = false;
+
+function warnDnsCheckUnavailable(): void {
+	if (warnedDnsUnavailable) return;
+	warnedDnsUnavailable = true;
+	console.warn(
+		'[MCP] node:dns is unavailable — only literal link-local/metadata addresses are filtered.'
+	);
+}
 
 /**
  * Server-side SSRF guard: link-local and metadata hosts are rejected before
@@ -44,8 +53,14 @@ async function assertAllowedHost(rawUrl: string): Promise<void> {
 		}
 		return;
 	}
+	let lookup: typeof import('node:dns/promises').lookup;
 	try {
-		const { lookup } = await import('node:dns/promises');
+		({ lookup } = await import('node:dns/promises'));
+	} catch {
+		warnDnsCheckUnavailable();
+		return;
+	}
+	try {
 		const addresses = await lookup(hostname, { all: true });
 		const blocked = addresses.some((entry) => isBlockedMcpHost(entry.address));
 		hostCheckCache.set(hostname, { blocked, checkedAt: Date.now() });

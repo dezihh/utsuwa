@@ -654,10 +654,11 @@ export function truncateMessagesToContext(
 export function truncateChatHistory<T extends { role: string; content: unknown }>(
 	messages: T[],
 	systemPrompt: string,
-	contextSize: number
+	contextSize: number,
+	extraContext?: string
 ): T[] {
 	const messagesWithSystem = [
-		{ role: 'system' as const, content: systemPrompt },
+		{ role: 'system' as const, content: extraContext ? `${systemPrompt}\n\n${extraContext}` : systemPrompt },
 		...messages.map((m) => ({
 			role: m.role,
 			content: typeof m.content === 'string' ? m.content : '[image content]'

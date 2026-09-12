@@ -156,27 +156,27 @@
 
 					<div class="form-row">
 						<span class="form-label">Transport</span>
-						<div class="transport-toggle" role="radiogroup" aria-label="Transport">
-							<button
-								type="button"
-								role="radio"
-								aria-checked={formTransport === 'http'}
-								class="transport-opt"
-								class:active={formTransport === 'http'}
-								onclick={() => (formTransport = 'http')}
-							>
+						<div class="transport-toggle">
+							<label class="transport-opt" class:active={formTransport === 'http'}>
+								<input
+									type="radio"
+									name="mcp-transport"
+									value="http"
+									checked={formTransport === 'http'}
+									onchange={() => (formTransport = 'http')}
+								/>
 								HTTP
-							</button>
-							<button
-								type="button"
-								role="radio"
-								aria-checked={formTransport === 'stdio'}
-								class="transport-opt"
-								class:active={formTransport === 'stdio'}
-								onclick={() => (formTransport = 'stdio')}
-							>
+							</label>
+							<label class="transport-opt" class:active={formTransport === 'stdio'}>
+								<input
+									type="radio"
+									name="mcp-transport"
+									value="stdio"
+									checked={formTransport === 'stdio'}
+									onchange={() => (formTransport = 'stdio')}
+								/>
 								stdio
-							</button>
+							</label>
 						</div>
 					</div>
 
@@ -193,27 +193,27 @@
 						</div>
 						<div class="form-row">
 							<span class="form-label">Auth</span>
-							<div class="transport-toggle" role="radiogroup" aria-label="Authentication">
-								<button
-									type="button"
-									role="radio"
-									aria-checked={formAuthType === 'none'}
-									class="transport-opt"
-									class:active={formAuthType === 'none'}
-									onclick={() => (formAuthType = 'none')}
-								>
+							<div class="transport-toggle">
+								<label class="transport-opt" class:active={formAuthType === 'none'}>
+									<input
+										type="radio"
+										name="mcp-auth"
+										value="none"
+										checked={formAuthType === 'none'}
+										onchange={() => (formAuthType = 'none')}
+									/>
 									None
-								</button>
-								<button
-									type="button"
-									role="radio"
-									aria-checked={formAuthType === 'bearer'}
-									class="transport-opt"
-									class:active={formAuthType === 'bearer'}
-									onclick={() => (formAuthType = 'bearer')}
-								>
+								</label>
+								<label class="transport-opt" class:active={formAuthType === 'bearer'}>
+									<input
+										type="radio"
+										name="mcp-auth"
+										value="bearer"
+										checked={formAuthType === 'bearer'}
+										onchange={() => (formAuthType = 'bearer')}
+									/>
 									Bearer
-								</button>
+								</label>
 							</div>
 						</div>
 						{#if formAuthType === 'bearer'}
@@ -306,10 +306,20 @@
 							>
 								{server.enabled ? 'On' : 'Off'}
 							</button>
-							<button class="icon-btn" onclick={() => openEditForm(server)} title="Edit server">
+							<button
+								class="icon-btn"
+								onclick={() => openEditForm(server)}
+								title="Edit server"
+								aria-label="Edit server"
+							>
 								<Icon name="pencil" size={13} />
 							</button>
-							<button class="icon-btn danger" onclick={() => mcpStore.removeServer(server.id)} title="Remove server">
+							<button
+								class="icon-btn danger"
+								onclick={() => mcpStore.removeServer(server.id)}
+								title="Remove server"
+								aria-label="Remove server"
+							>
 								<Icon name="trash" size={13} />
 							</button>
 						</div>
@@ -512,6 +522,9 @@
 	}
 
 	.transport-opt {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 		padding: 0.25rem 0.65rem;
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--border-light);
@@ -519,6 +532,16 @@
 		cursor: pointer;
 		background: var(--bg-primary);
 		color: var(--text-secondary);
+	}
+
+	.transport-opt input {
+		margin: 0;
+		accent-color: var(--accent);
+	}
+
+	.transport-opt:focus-within {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
 	}
 
 	.transport-opt.active {

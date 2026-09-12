@@ -19,7 +19,11 @@ function getHttpClient() {
 }
 
 export async function listTools(config: McpServerConfig): Promise<McpTool[]> {
-	if (config.transport === 'stdio') return [];
+	if (config.transport === 'stdio') {
+		// Surface this through the per-server error channel instead of an
+		// empty list (callTool reports the same for stdio on desktop).
+		throw new Error('stdio MCP servers are only available in the server (web) build.');
+	}
 	const client = await getHttpClient();
 	return client.listTools(config);
 }

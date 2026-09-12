@@ -32,9 +32,9 @@ function persist(next: McpServerConfig[]) {
 let servers = $state<McpServerConfig[]>(loadSaved());
 let tools = $state<McpTool[]>([]);
 let serverErrors = $state<McpServerError[]>([]);
-	let isLoadingTools = $state(false);
-	/** Set when a mutation lands while a fetch is in flight (coalesced). */
-	let refetchQueued = false;
+let isLoadingTools = $state(false);
+/** Set when a mutation lands while a fetch is in flight (coalesced). */
+let refetchQueued = false;
 let toolsError = $state<string | null>(null);
 let capability = $state<McpCapabilityState>('unknown');
 
@@ -56,7 +56,9 @@ const detectCapability = singleFlight(async (): Promise<void> => {
 		});
 		capability = res.status === 404 ? 'none' : res.ok ? 'server' : 'none';
 	} catch {
-		capability = 'none';
+		// Network hiccup: keep a capability we already know instead of
+		// downgrading (re-probes happen on every settings visit now).
+		if (capability === 'unknown') capability = 'none';
 	}
 });
 
@@ -109,6 +111,16 @@ async function ensureTools(): Promise<void> {
 	if (capability === 'unknown') await detectCapability();
 	if (capability === 'none') return;
 	if (tools.length > 0 || isLoadingTools) return;
+	await fetchTools();
+}
+
+/**
+ * Explicit refresh (settings page mount, refresh button): re-probe the server
+ * capability first so a changed `MCP_ENABLED` setting is picked up without a
+ * full reload, then reload the tool list.
+ */
+async function refreshTools(): Promise<void> {
+	await detectCapability();
 	await fetchTools();
 }
 
@@ -166,7 +178,7 @@ export const mcpStore = {
 		void fetchTools();
 	},
 
-	refreshTools: fetchTools,
+	refreshTools,
 	ensureTools,
 	detectCapability
 };

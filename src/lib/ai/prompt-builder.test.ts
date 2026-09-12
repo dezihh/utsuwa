@@ -480,6 +480,19 @@ test('truncateChatHistory combines system prompt budgeting with original message
 	assert.equal(result[result.length - 1].content, 'newest message');
 });
 
+test('truncateChatHistory counts extra tool context against the budget', () => {
+	const messages = [
+		{ role: 'user', content: 'a'.repeat(400) },
+		{ role: 'assistant', content: 'b'.repeat(400) },
+		{ role: 'user', content: 'newest message' }
+	];
+	const systemPrompt = 'x'.repeat(400);
+	const withoutTools = truncateChatHistory(messages, systemPrompt, 900);
+	const withTools = truncateChatHistory(messages, systemPrompt, 900, 'y'.repeat(1200));
+	assert.ok(withTools.length < withoutTools.length, 'tool schemas shrink the history budget');
+	assert.equal(withTools[withTools.length - 1].content, 'newest message');
+});
+
 test('truncateChatHistory handles image content placeholders', () => {
 	const messages = [
 		{ role: 'user', content: 'a'.repeat(400) },

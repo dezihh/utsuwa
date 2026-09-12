@@ -421,12 +421,17 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 			if (security) systemPrompt += '\n\n' + security;
 		}
 
+		// Tool schemas are sent with every round; count them against the context
+		// budget so large MCP schemas cannot silently overflow the window.
+		const toolSchemaContext =
+			mcpTools.length > 0 ? JSON.stringify(mcpTools.map(toOpenAiTool)) : undefined;
+
 		// Truncate message history to the configured context window. This applies
 		// to every provider so users can size prompts to their model's limit.
 		// Image turns use a non-string content shape; token estimation for them is
 		// handled by substituting a placeholder inside the helper.
 		if (contextSize && contextSize > 0 && messages.length > 0) {
-			messages = truncateChatHistory(messages, systemPrompt, contextSize);
+			messages = truncateChatHistory(messages, systemPrompt, contextSize, toolSchemaContext);
 		}
 
 		// Advanced parameters are only supported for OpenAI-compatible endpoints.
