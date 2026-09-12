@@ -28,11 +28,19 @@ export interface HttpMcpClient {
 	): Promise<McpToolResult>;
 }
 
-export function createHttpMcpClient(fetchImpl: FetchLike): HttpMcpClient {
-	/** Session ids returned by Streamable HTTP initialize responses, per URL. */
+export function createHttpMcpClient(
+	fetchImpl: FetchLike,
+	options: { timeoutMs?: number } = {}
+): HttpMcpClient {
+	const timeoutMs = options.timeoutMs ?? 15_000;
+	/** Session ids returned by Streamable HTTP initialize responses, per server+URL. */
 	const sessionIds = new Map<string, string>();
 	/** Working URL variant per configured URL (some servers 404 on a trailing slash). */
 	const resolvedUrls = new Map<string, string>();
+
+	function sessionKey(config: McpServerConfig, url: string): string {
+		return `${config.id ?? ''}|${config.name ?? ''}|${url}`;
+	}
 
 	function candidatesFor(config: McpServerConfig): string[] {
 		const key = (config.url ?? '').trim();
@@ -46,9 +54,24 @@ export function createHttpMcpClient(fetchImpl: FetchLike): HttpMcpClient {
 			Accept: 'application/json, text/event-stream',
 			...buildAuthHeaders(config.auth)
 		};
-		const sessionId = sessionIds.get(url);
+		const sessionId = sessionIds.get(sessionKey(config, url));
 		if (sessionId) headers['mcp-session-id'] = sessionId;
 		return headers;
+	}
+
+	async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), timeoutMs);
+		try {
+			return await fetchImpl(url, { ...init, signal: controller.signal });
+		} catch (err) {
+			if (controller.signal.aborted) {
+				throw new Error(`MCP HTTP timeout after ${timeoutMs}ms`);
+			}
+			throw err;
+		} finally {
+			clearTimeout(timer);
+		}
 	}
 
 	async function rpc(config: McpServerConfig, method: string, params: unknown = {}): Promise<unknown> {
@@ -61,7 +84,7 @@ export function createHttpMcpClient(fetchImpl: FetchLike): HttpMcpClient {
 
 		let lastError: Error | null = null;
 		for (const url of urls) {
-			const res = await fetchImpl(url, {
+			const res = await fetchWithTimeout(url, {
 				method: 'POST',
 				headers: headersFor(config, url),
 				body: JSON.stringify(buildRpcRequest(nextRpcId(), method, params))
@@ -86,7 +109,7 @@ export function createHttpMcpClient(fetchImpl: FetchLike): HttpMcpClient {
 
 			// The server may refresh the session id at any point.
 			const newSessionId = res.headers.get('mcp-session-id');
-			if (newSessionId) sessionIds.set(url, newSessionId);
+			if (newSessionId) sessionIds.set(sessionKey(config, url), newSessionId);
 
 			const contentType = res.headers.get('content-type') ?? '';
 			if (contentType.includes('text/event-stream')) {
@@ -112,7 +135,7 @@ export function createHttpMcpClient(fetchImpl: FetchLike): HttpMcpClient {
 			const url = resolvedUrls.get(key) ?? mcpUrlCandidates(key)[0];
 			if (!url) return;
 			// Fire-and-forget notification, exactly as the spec prescribes.
-			await fetchImpl(url, {
+			await fetchWithTimeout(url, {
 				method: 'POST',
 				headers: headersFor(config, url),
 				body: JSON.stringify(buildInitializedNotification())

@@ -256,14 +256,69 @@ export function isBlockedMcpHost(rawHostname: string): boolean {
 }
 
 /**
- * stdio commands can be restricted with an env allowlist. An empty list
- * allows every command (backward compatible).
+ * stdio is fail-closed: without an allowlist no command runs. `*` is the
+ * explicit opt-in to allow every command.
  */
 export function isStdioCommandAllowed(
 	command: string | undefined | null,
 	allowed: string[]
 ): boolean {
-	if (allowed.length === 0) return true;
+	if (allowed.includes('*')) return true;
 	if (!command) return false;
 	return allowed.includes(command);
+}
+
+/** Human-readable reason when a stdio command is denied, else null. */
+export function stdioDenyReason(
+	command: string | undefined | null,
+	allowed: string[]
+): string | null {
+	if (isStdioCommandAllowed(command, allowed)) return null;
+	if (allowed.length === 0) {
+		return 'stdio is disabled — set MCP_STDIO_ALLOWED_COMMANDS to allowlist commands';
+	}
+	return `stdio command "${command ?? ''}" is not allowed (MCP_STDIO_ALLOWED_COMMANDS)`;
+}
+
+/**
+ * Environment variables that must never be overridden by per-server config:
+ * they change how a spawned process resolves binaries or loads code.
+ */
+const STDIO_ENV_DENYLIST = new Set([
+	'PATH',
+	'HOME',
+	'NODE_OPTIONS',
+	'NODE_PATH',
+	'LD_PRELOAD',
+	'LD_LIBRARY_PATH',
+	'DYLD_INSERT_LIBRARIES',
+	'DYLD_LIBRARY_PATH'
+]);
+
+/** Merge per-server env vars over the base env, blocking critical keys. */
+export function mergeStdioEnv(
+	base: Record<string, string | undefined>,
+	extra: Record<string, string> | undefined | null
+): Record<string, string> {
+	const merged: Record<string, string> = {};
+	for (const [key, value] of Object.entries(base)) {
+		if (value !== undefined) merged[key] = value;
+	}
+	for (const [key, value] of Object.entries(extra ?? {})) {
+		if (STDIO_ENV_DENYLIST.has(key.toUpperCase())) continue;
+		merged[key] = value;
+	}
+	return merged;
+}
+
+/**
+ * Split a command-line string into arguments, honoring single and double
+ * quotes so paths with spaces survive.
+ */
+export function parseQuotedArgs(raw: string): string[] {
+	const args: string[] = [];
+	for (const match of raw.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)) {
+		args.push(match[1] ?? match[2] ?? match[3]);
+	}
+	return args;
 }

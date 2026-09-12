@@ -41,10 +41,14 @@ import { mcpStore } from '$lib/stores/mcp.svelte';
 import { callTool } from '$lib/services/mcp/capability';
 import {
 	MCP_MAX_ROUNDS,
+	MAX_TOOL_CALLS_PER_ROUND,
 	buildAssistantToolMessage,
 	buildToolResultMessages,
+	capToolResult,
+	ensureToolPairs,
 	findMcpTool,
 	mcpCallsOnly,
+	splitToolCalls,
 	speechToolAck,
 	stripFromStateFence,
 	toOpenAiTool,
@@ -401,8 +405,15 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 				// Tool discovery must never break the chat turn — MCP stays off.
 			}
 		}
+		// Snapshot only tools whose server is still enabled: a server disabled
+		// while tools were cached must not stay callable in this turn.
+		const enabledServerIds = new Set(
+			mcpStore.servers.filter((s) => s.enabled).map((s) => s.id)
+		);
 		const mcpTools =
-			mcpConfigured && provider !== 'anthropic' && mcpStore.hasActiveTools ? mcpStore.tools : [];
+			mcpConfigured && provider !== 'anthropic' && mcpStore.hasActiveTools
+				? mcpStore.tools.filter((tool) => enabledServerIds.has(tool.serverId))
+				: [];
 		const mcpToolNames = new Set(mcpTools.map((tool) => tool.name));
 		const useMcpLoop = mcpTools.length > 0;
 
@@ -425,14 +436,6 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 		// budget so large MCP schemas cannot silently overflow the window.
 		const toolSchemaContext =
 			mcpTools.length > 0 ? JSON.stringify(mcpTools.map(toOpenAiTool)) : undefined;
-
-		// Truncate message history to the configured context window. This applies
-		// to every provider so users can size prompts to their model's limit.
-		// Image turns use a non-string content shape; token estimation for them is
-		// handled by substituting a placeholder inside the helper.
-		if (contextSize && contextSize > 0 && messages.length > 0) {
-			messages = truncateChatHistory(messages, systemPrompt, contextSize, toolSchemaContext);
-		}
 
 		// Advanced parameters are only supported for OpenAI-compatible endpoints.
 		const advancedParams = providerMeta?.custom
@@ -528,9 +531,21 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 			displayCapped = false;
 			const roundCalls: McpCollectedToolCall[] = [];
 
+			// Re-budget before every round: tool results from earlier rounds grow
+			// the history. Truncation runs per round (not once before the loop)
+			// and repairs assistant/tool pairs the cut may have separated.
+			if (contextSize && contextSize > 0 && messages.length > 0) {
+				messages = ensureToolPairs(
+					messages,
+					truncateChatHistory(messages, systemPrompt, contextSize, toolSchemaContext)
+				);
+			}
+
 			const onToolCall = (name: string, args: Record<string, unknown>, id?: string) => {
 				roundCalls.push({ id: id ?? `call_${round}_${roundCalls.length}`, name, args });
-				const pseudo = pseudoCallFromTool(name, args);
+				// An MCP tool that happens to be named like a speech tool must not
+				// be treated as one.
+				const pseudo = mcpToolNames.has(name) ? null : pseudoCallFromTool(name, args);
 				if (!pseudo) return;
 				nativeContent += pseudo + '\n';
 				displayCleaner.push(pseudo + '\n');
@@ -610,15 +625,19 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 			// a result — the OpenAI protocol requires it — including speech
 			// tools, which get a small ack instead of an execution.
 			messages.push(buildAssistantToolMessage(roundText, roundCalls));
+			// Bound the work one round may trigger: excess calls are answered
+			// with an error instead of spawning dozens of processes/requests.
+			const { run, skipped } = splitToolCalls(roundCalls);
 			// allSettled: one unexpected failure must not abort the whole turn —
 			// the model gets an error result and can still answer.
 			const settled = await Promise.allSettled(
-				roundCalls.map(async (call) => {
-					if (pseudoCallFromTool(call.name, call.args) !== null) {
-						return { call, content: speechToolAck(call.args) };
-					}
+				run.map(async (call) => {
 					if (!mcpToolNames.has(call.name)) {
-						return { call, content: `Error: unknown tool "${call.name}"` };
+						// Speech tools (speak/pause/gesture) are acknowledged; a
+						// name that is neither speech nor MCP is hallucinated.
+						return pseudoCallFromTool(call.name, call.args) !== null
+							? { call, content: speechToolAck(call.args) }
+							: { call, content: `Error: unknown tool "${call.name}"` };
 					}
 					if (confirmToolNames.has(call.name)) {
 						return {
@@ -627,24 +646,36 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 						};
 					}
 					const tool = findMcpTool(mcpTools, call.name);
-					const server = tool ? mcpStore.servers.find((s) => s.id === tool.serverId) : undefined;
+					const server = tool
+						? mcpStore.servers.find((s) => s.id === tool.serverId && s.enabled)
+						: undefined;
 					if (!server) {
-						return { call, content: `Error: no MCP server configured for tool "${call.name}"` };
+						return {
+							call,
+							content: `Error: no enabled MCP server configured for tool "${call.name}"`
+						};
 					}
 					const result = await callTool(server, call.name, call.args);
-					return { call, content: result.content, injectAsUser: server.injectResultsAsUser };
+					const content = result.isError ? `Error: ${result.content}` : result.content;
+					return { call, content: capToolResult(content), injectAsUser: server.injectResultsAsUser };
 				})
 			);
-			const results = settled.map((entry, index) =>
-				entry.status === 'fulfilled'
-					? entry.value
-					: {
-							call: roundCalls[index],
-							content: `Error: ${
-								entry.reason instanceof Error ? entry.reason.message : String(entry.reason)
-							}`
-						}
-			);
+			const results = [
+				...settled.map((entry, index) =>
+					entry.status === 'fulfilled'
+						? entry.value
+						: {
+								call: run[index],
+								content: `Error: ${
+									entry.reason instanceof Error ? entry.reason.message : String(entry.reason)
+								}`
+							}
+				),
+				...skipped.map((call) => ({
+					call,
+					content: `Error: too many tool calls in one round (limit ${MAX_TOOL_CALLS_PER_ROUND}) — this call was not executed.`
+				}))
+			];
 			messages.push(...buildToolResultMessages(results));
 		}
 

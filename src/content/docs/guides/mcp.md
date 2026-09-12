@@ -84,6 +84,8 @@ Brave publishes an official MCP server (`@brave/brave-search-mcp-server`) that n
 
 Requires Node.js 22+ on the Utsuwa host. The first request downloads the package via `npx`; if the cold start exceeds the 15-second stdio timeout, press **Refresh** again — the cache is warm afterwards.
 
+> stdio is fail-closed: set `MCP_STDIO_ALLOWED_COMMANDS=npx` in the Utsuwa server environment, otherwise this server shows a "stdio is disabled" error.
+
 > The URL `https://api.search.brave.com/res/v1/web/search` is Brave's REST API, **not** an MCP endpoint. Pointing an HTTP MCP server at it fails with a `422` asking for `x-subscription-token`, because MCP clients speak JSON-RPC with a bearer token. Use the stdio server above instead.
 
 ### GitHub (HTTP + bearer)
@@ -110,7 +112,7 @@ Any MCP server that speaks stdio can be spawned by the server build. Example wit
   SEARXNG_URL=http://your-searxng-host:8080
   ```
 
-stdio servers are spawned per request with a 15-second timeout and run with the server's environment plus the variables you configure here. Only enable MCP on a deployment you control — stdio effectively means running local commands.
+stdio servers are spawned per request with a 15-second timeout and run with the server's environment plus the variables you configure here. Only enable MCP on a deployment you control — and allowlist the command via `MCP_STDIO_ALLOWED_COMMANDS` (stdio is fail-closed).
 
 ## Desktop builds (Tauri)
 
@@ -130,7 +132,7 @@ Brave's HTTP mode is unauthenticated and binds to loopback only — fine for a l
 
 ## Using tools in chat
 
-Once at least one server is enabled and its tools are listed, Utsuwa sends them to the model with every reply. The model can call several tools before answering — up to **5 tool rounds** per reply; results are fed back automatically and the final answer streams as usual (including voice). On the last round the model is told that the tool budget is spent and answers with the results it already has.
+Once at least one server is enabled and its tools are listed, Utsuwa sends them to the model with every reply. The model can call several tools before answering — up to **5 tool rounds** per reply, with at most 8 tool calls per round; results are fed back automatically and the final answer streams as usual (including voice). On the last round the model is told that the tool budget is spent and answers with the results it already has. HTTP requests time out after 15 seconds, and a single tool result is capped at 8000 characters.
 
 If a local or SLIM model ignores tool results, enable **Inject text tool results as user messages** on that server.
 
@@ -146,7 +148,7 @@ Two opt-in switches cover the baseline of a tool-approval policy. Both default t
 
 - **`PUBLIC_MCP_PROMPT_HARDENING`** (`true` or `1`) — adds a security layer to the system prompt on turns with MCP tools: tool results are untrusted data (never instructions), and state-changing or destructive actions require an explicit user request.
 - **`PUBLIC_MCP_CONFIRM_TOOLS`** — comma-separated, case-sensitive tool names (blank entries are ignored), for example `unlock_door,set_alarm`. Listed tools are **never executed automatically**: the chat loop feeds back a "requires manual user confirmation" result so the model asks you first, and the `/api/mcp/call` route rejects direct calls with `403`. The tools stay visible to the model, and the block applies even when prompt hardening is off.
-- **`MCP_STDIO_ALLOWED_COMMANDS`** (server builds only) — comma-separated allowlist of stdio commands, for example `npx,node,uvx`. When set, any other command is rejected before a process is spawned (per-server error in the tool list, `403` on `/api/mcp/call`). Unset means any command is allowed — set it if your deployment could be reached by untrusted users. Without it, the server logs a startup warning that stdio is unrestricted.
+- **`MCP_STDIO_ALLOWED_COMMANDS`** (server builds only) — comma-separated allowlist of stdio commands, for example `npx,node,uvx`. **stdio is fail-closed**: without this variable no stdio server runs (per-server error in the tool list, `403` on `/api/mcp/call`); with it, only the listed commands pass. `*` explicitly allows any command and makes the server log a startup warning.
 
 A full interactive approval dialog (per-tool metadata such as `read-only` / `requires-confirmation`) is future work.
 
@@ -169,6 +171,6 @@ A full interactive approval dialog (per-tool metadata such as `read-only` / `req
 - Tokens never reach the model and are never logged by Utsuwa. They do travel to your own server inside the proxy request body, so a reverse proxy or body-logging layer in front of the deployment could capture them — keep access logs clean.
 - On the server-side HTTP path, link-local and cloud-metadata addresses (`169.254.0.0/16`, `fe80::/10`, `metadata.google.internal`, also via DNS resolution) are rejected before any request. Loopback and RFC1918 stay reachable by design, because self-hosted MCP servers like Home Assistant live on the local network — never enable MCP on a deployment untrusted users can reach.
 - HTTP servers may only use `http:`/`https:` URLs; other schemes are rejected before any request is made (web proxy and desktop transport alike).
-- stdio servers run commands on the Utsuwa host with the server process's environment plus the variables you configure, and can spawn any executable. `MCP_STDIO_ALLOWED_COMMANDS` restricts them to an allowlist; without it, `MCP_ENABLED=server` means: the operator trusts everyone who can configure MCP servers. Utsuwa has no per-user accounts — anyone who can reach the app can add servers and trigger tool calls. Keep MCP off on shared or hosted deployments.
+- stdio servers run commands on the Utsuwa host with the server process's environment plus the variables you configure. They are **fail-closed**: nothing runs unless `MCP_STDIO_ALLOWED_COMMANDS` lists the command (or `*`). Critical variables such as `PATH` and `NODE_OPTIONS` from a server config are ignored. Utsuwa has no per-user accounts — anyone who can reach the app can add servers and trigger tool calls. Keep MCP off on shared or hosted deployments.
 - The model can call any tool you expose. Expose only what you are comfortable with (Home Assistant's MCP integration lets you pick which entities are exposed).
 - Disabling a server (or all servers) takes effect immediately: no further requests are made and its tools leave the chat.

@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { mcpStore } from '$lib/stores/mcp.svelte';
 	import type { McpAuth, McpServerConfig, McpTransport } from '$lib/types/mcp';
-	import { parseEnvLines } from '$lib/services/mcp/protocol';
+	import { parseEnvLines, parseQuotedArgs } from '$lib/services/mcp/protocol';
 	import { Icon } from '$lib/components/ui';
 	import '../settings-page.css';
 
@@ -82,7 +82,7 @@
 
 		const auth: McpAuth =
 			formAuthType === 'bearer' ? { type: 'bearer', token: formAuthToken.trim() } : { type: 'none' };
-		const args = formArgs.trim() ? formArgs.trim().split(/\s+/) : [];
+		const args = formArgs.trim() ? parseQuotedArgs(formArgs) : [];
 		const env = formEnv.trim() ? parseEnvLines(formEnv) : undefined;
 
 		const data = {

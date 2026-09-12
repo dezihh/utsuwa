@@ -10,14 +10,17 @@ import {
 	isAllowedMcpHttpUrl,
 	isBlockedMcpHost,
 	isStdioCommandAllowed,
+	mergeStdioEnv,
 	mcpUrlCandidates,
 	normalizeMcpUrl,
 	parseEnvLines,
 	parseJsonRpcResult,
+	parseQuotedArgs,
 	parseSseResult,
 	parseToolNameList,
 	parseToolsList,
 	singleFlight,
+	stdioDenyReason,
 	stringifyToolResult
 } from './protocol.ts';
 
@@ -210,15 +213,45 @@ test('isBlockedMcpHost keeps loopback, RFC1918 and public hosts reachable', () =
 	assert.equal(isBlockedMcpHost('api.githubcopilot.com'), false);
 });
 
-test('isStdioCommandAllowed allows everything without an allowlist', () => {
-	assert.equal(isStdioCommandAllowed('rm', []), true);
-	assert.equal(isStdioCommandAllowed(undefined, []), true);
+test('isStdioCommandAllowed is fail-closed without an allowlist', () => {
+	assert.equal(isStdioCommandAllowed('rm', []), false);
+	assert.equal(isStdioCommandAllowed('npx', []), false);
+	assert.equal(isStdioCommandAllowed(undefined, []), false);
 });
 
-test('isStdioCommandAllowed enforces a configured allowlist', () => {
+test('isStdioCommandAllowed enforces a configured allowlist and the wildcard', () => {
 	assert.equal(isStdioCommandAllowed('npx', ['npx', 'node']), true);
 	assert.equal(isStdioCommandAllowed('rm', ['npx', 'node']), false);
 	assert.equal(isStdioCommandAllowed(undefined, ['npx']), false);
+	assert.equal(isStdioCommandAllowed('rm', ['*']), true);
+});
+
+test('stdioDenyReason explains disabled vs not-allowed', () => {
+	assert.equal(stdioDenyReason('npx', ['npx']), null);
+	assert.match(stdioDenyReason('npx', []) ?? '', /disabled/);
+	assert.match(stdioDenyReason('rm', ['npx']) ?? '', /not allowed/);
+});
+
+test('mergeStdioEnv blocks critical variables from the server config', () => {
+	const merged = mergeStdioEnv(
+		{ PATH: '/usr/bin', HOME: '/home/u' },
+		{ SEARXNG_URL: 'http://x', PATH: '/evil', NODE_OPTIONS: '--require ./x' }
+	);
+	assert.equal(merged.SEARXNG_URL, 'http://x');
+	assert.equal(merged.PATH, '/usr/bin');
+	assert.equal(merged.HOME, '/home/u');
+	assert.equal(merged.NODE_OPTIONS, undefined);
+});
+
+test('parseQuotedArgs keeps quoted arguments with spaces intact', () => {
+	assert.deepEqual(parseQuotedArgs('-y mcp-searxng'), ['-y', 'mcp-searxng']);
+	assert.deepEqual(parseQuotedArgs('--config "/path/with spaces/x.json" --flag'), [
+		'--config',
+		'/path/with spaces/x.json',
+		'--flag'
+	]);
+	assert.deepEqual(parseQuotedArgs("--name 'a b'"), ['--name', 'a b']);
+	assert.deepEqual(parseQuotedArgs(''), []);
 });
 
 test('singleFlight collapses concurrent calls into one invocation', async () => {

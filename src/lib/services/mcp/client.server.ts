@@ -10,6 +10,7 @@ import {
 	buildInitializeRequest,
 	buildRpcRequest,
 	isBlockedMcpHost,
+	mergeStdioEnv,
 	nextRpcId,
 	parseToolsList,
 	stringifyToolResult
@@ -91,7 +92,7 @@ async function createStdioSession(config: McpServerConfig): Promise<StdioSession
 	if (!config.command) throw new Error('MCP stdio server has no command configured');
 
 	const proc = spawn(config.command, config.args ?? [], {
-		env: { ...process.env, ...(config.env ?? {}) },
+		env: mergeStdioEnv(process.env, config.env),
 		stdio: ['pipe', 'pipe', 'inherit']
 	});
 
@@ -156,19 +157,29 @@ async function createStdioSession(config: McpServerConfig): Promise<StdioSession
 
 	function close() {
 		proc.stdin.end();
-		// A server that ignores stdin EOF must not leak: give it a short grace
-		// period, then terminate. unref() keeps the timer from holding the
-		// process open.
-		const killTimer = setTimeout(() => {
+		// A server that ignores stdin EOF must not leak: SIGTERM after a short
+		// grace, SIGKILL if it still does not exit. unref() keeps the timers
+		// from holding the process open.
+		const termTimer = setTimeout(() => {
 			if (proc.exitCode === null && proc.signalCode === null) {
 				try {
 					proc.kill('SIGTERM');
 				} catch {
 					// already gone
 				}
+				const killTimer = setTimeout(() => {
+					if (proc.exitCode === null && proc.signalCode === null) {
+						try {
+							proc.kill('SIGKILL');
+						} catch {
+							// already gone
+						}
+					}
+				}, 2000);
+				killTimer.unref?.();
 			}
 		}, 1000);
-		killTimer.unref?.();
+		termTimer.unref?.();
 	}
 
 	// Initialize handshake before the session is usable.

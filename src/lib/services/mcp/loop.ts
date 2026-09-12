@@ -12,6 +12,40 @@ import { STATE_FENCE_OPEN } from '../../ai/response-parser.ts';
 /** Maximum tool rounds per companion turn (safety bound). */
 export const MCP_MAX_ROUNDS = 5;
 
+/** Safety bound for tool calls the model may trigger in one round. */
+export const MAX_TOOL_CALLS_PER_ROUND = 8;
+
+/** Upper bound for a single tool result fed back to the model. */
+export const MAX_TOOL_RESULT_CHARS = 8000;
+
+/** Split a round's tool calls into the ones that run and the excess. */
+export function splitToolCalls<T>(
+	calls: T[],
+	max = MAX_TOOL_CALLS_PER_ROUND
+): { run: T[]; skipped: T[] } {
+	return { run: calls.slice(0, max), skipped: calls.slice(max) };
+}
+
+/** Cap a tool result so a single answer cannot flood the context window. */
+export function capToolResult(content: string, maxChars = MAX_TOOL_RESULT_CHARS): string {
+	if (content.length <= maxChars) return content;
+	return `${content.slice(0, maxChars)}\n…[truncated]`;
+}
+
+/**
+ * Keep the trailing history slice valid: a tool message without its preceding
+ * assistant tool_calls message is rejected by providers, so walk back to the
+ * parent when truncation cut between them.
+ */
+export function ensureToolPairs<T extends { role: string }>(all: T[], kept: T[]): T[] {
+	if (kept.length === 0) return kept;
+	const firstIndex = all.indexOf(kept[0]);
+	if (firstIndex <= 0 || all[firstIndex].role !== 'tool') return kept;
+	let start = firstIndex;
+	while (start > 0 && all[start].role === 'tool') start--;
+	return all.slice(start);
+}
+
 export interface OpenAiToolCall {
 	id: string;
 	type: 'function';

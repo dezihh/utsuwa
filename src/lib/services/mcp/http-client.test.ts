@@ -87,3 +87,47 @@ test('auth errors are final — no variant probing and a readable tool error', a
 	// initialize + tools/call, both only against the configured form.
 	assert.equal(calls.every((url) => !url.endsWith('/api/mcp/')), true);
 });
+
+test('HTTP requests abort after the configured timeout', async () => {
+	const hanging: FetchLike = (_input, init) =>
+		new Promise<Response>((_resolve, reject) => {
+			init?.signal?.addEventListener('abort', () =>
+				reject(new DOMException('aborted', 'TimeoutError'))
+			);
+		});
+
+	const client = createHttpMcpClient(hanging, { timeoutMs: 20 });
+	const result = await client.callTool(CONFIG, 'get_state', {});
+
+	assert.equal(result.isError, true);
+	assert.match(result.content, /timeout after 20ms/);
+});
+
+test('session ids are scoped to the server, not just the URL', async () => {
+	const requests: Array<{ method: string; session: string | undefined; auth: string | undefined }> = [];
+	const fetchImpl: FetchLike = async (_input, init) => {
+		const headers = (init?.headers ?? {}) as Record<string, string>;
+		const body = JSON.parse(String(init?.body)) as { id?: number; method?: string };
+		requests.push({
+			method: body.method ?? '',
+			session: headers['mcp-session-id'],
+			auth: headers.Authorization ?? headers.authorization
+		});
+		if (body.method === 'initialize') {
+			return new Response(JSON.stringify({ jsonrpc: '2.0', id: body.id, result: {} }), {
+				status: 200,
+				headers: { 'Content-Type': 'application/json', 'mcp-session-id': 'session-1' }
+			});
+		}
+		return jsonResponse({ jsonrpc: '2.0', id: body.id, result: { tools: [] } });
+	};
+
+	const client = createHttpMcpClient(fetchImpl);
+	await client.listTools(CONFIG);
+	// Same URL, different server identity: must not inherit the session.
+	await client.listTools({ ...CONFIG, id: 'ha-2', auth: { type: 'bearer', token: 'other-token' } });
+
+	const secondInit = requests.filter((r) => r.method === 'initialize')[1];
+	assert.equal(secondInit.session, undefined, 'the second server starts a fresh session');
+	assert.equal(secondInit.auth, 'Bearer other-token');
+});

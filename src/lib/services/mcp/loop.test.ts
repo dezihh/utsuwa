@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import {
 	buildAssistantToolMessage,
 	buildToolResultMessages,
+	capToolResult,
+	ensureToolPairs,
 	findMcpTool,
 	mcpCallsOnly,
+	splitToolCalls,
 	speechToolAck,
 	stripFromStateFence,
 	toOpenAiTool
@@ -101,4 +104,34 @@ test('mcpCallsOnly filters speech calls out and keeps MCP calls', () => {
 test('findMcpTool finds by name and returns undefined otherwise', () => {
 	assert.equal(findMcpTool([TOOL], 'get_state')?.serverId, 's1');
 	assert.equal(findMcpTool([TOOL], 'missing'), undefined);
+});
+
+test('splitToolCalls caps the calls that run and reports the excess', () => {
+	const calls = Array.from({ length: 10 }, (_, i) => i);
+	const { run, skipped } = splitToolCalls(calls, 8);
+	assert.deepEqual(run, [0, 1, 2, 3, 4, 5, 6, 7]);
+	assert.deepEqual(skipped, [8, 9]);
+	assert.deepEqual(splitToolCalls([1, 2]).skipped, []);
+});
+
+test('capToolResult truncates oversized results with a marker', () => {
+	assert.equal(capToolResult('short'), 'short');
+	const capped = capToolResult('x'.repeat(100), 50);
+	assert.equal(capped, `${'x'.repeat(50)}\n…[truncated]`);
+});
+
+test('ensureToolPairs re-attaches the assistant parent of a kept tool message', () => {
+	const all = [
+		{ role: 'user' as const },
+		{ role: 'assistant' as const },
+		{ role: 'tool' as const },
+		{ role: 'tool' as const },
+		{ role: 'assistant' as const }
+	];
+	const repaired = ensureToolPairs(all, all.slice(2));
+	assert.equal(repaired.length, 4);
+	assert.equal(repaired[0].role, 'assistant');
+	assert.equal(repaired[1].role, 'tool');
+	assert.deepEqual(ensureToolPairs(all, all.slice(4)), all.slice(4));
+	assert.deepEqual(ensureToolPairs(all, []), []);
 });
