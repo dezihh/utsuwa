@@ -13,6 +13,7 @@ import {
 	parseEnvLines,
 	parseJsonRpcResult,
 	parseSseResult,
+	parseToolNameList,
 	parseToolsList,
 	singleFlight,
 	stringifyToolResult
@@ -178,6 +179,18 @@ test('isAllowedMcpHttpUrl rejects non-http schemes and garbage', () => {
 	assert.equal(isAllowedMcpHttpUrl('ftp://example.com/mcp'), false);
 	assert.equal(isAllowedMcpHttpUrl('not a url'), false);
 	assert.equal(isAllowedMcpHttpUrl(''), false);
+});
+
+test('parseToolNameList trims and drops blank entries', () => {
+	assert.deepEqual(parseToolNameList('unlock_door, set_alarm'), ['unlock_door', 'set_alarm']);
+	assert.deepEqual(parseToolNameList(' get_state ,, set_state ,'), ['get_state', 'set_state']);
+});
+
+test('parseToolNameList returns an empty list when unset or blank', () => {
+	assert.deepEqual(parseToolNameList(undefined), []);
+	assert.deepEqual(parseToolNameList(null), []);
+	assert.deepEqual(parseToolNameList(''), []);
+	assert.deepEqual(parseToolNameList(' , , '), []);
 });
 
 test('singleFlight collapses concurrent calls into one invocation', async () => {

@@ -26,7 +26,7 @@ import { streamChatDirect } from '$lib/services/chat/client-chat';
 
 import { processCompanionTurn } from '$lib/services/chat/companion-turn';
 import { retrieveRelevantContext } from '$lib/engine/memory';
-import { buildSystemPrompt, truncateChatHistory, type PromptContext } from '$lib/ai/prompt-builder';
+import { buildSystemPrompt, buildMcpSecurityInstructions, truncateChatHistory, type PromptContext } from '$lib/ai/prompt-builder';
 import { keepImage, type PreparedImage } from '$lib/services/storage/keepsakes';
 import { extractReminderTags, tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
 import { reminderStore } from '$lib/stores/reminders.svelte';
@@ -35,6 +35,8 @@ import { toOpenAIContent, type ContentPart } from '$lib/services/chat/content';
 import { pseudoCallFromTool } from '$lib/services/tts/speech-compiler';
 import { shouldUseSpeechTools } from '$lib/services/tts/tool-definitions';
 import { isTauri } from '$lib/services/platform';
+import { env as publicEnv } from '$env/dynamic/public';
+import { parseToolNameList } from '$lib/services/mcp/protocol';
 import { mcpStore } from '$lib/stores/mcp.svelte';
 import { callTool } from '$lib/services/mcp/capability';
 import {
@@ -259,7 +261,7 @@ export async function sendCompanionMessage(
 			throw new Error(`Please configure API key for ${providerMeta.name} in Settings > Providers`);
 		}
 
-		const systemPrompt = await buildCompanionPrompt(
+		let systemPrompt = await buildCompanionPrompt(
 			content,
 			images.length > 0,
 			provider,
@@ -386,6 +388,39 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 			roundTextLen = roundFull.length;
 		};
 
+		// MCP tools for this turn (client-side loop). Without configured servers
+		// the whole path is skipped — no probe, no request fields, so users who
+		// never touch MCP see the exact same chat behavior as before.
+		// Anthropic requests carry no tool definitions at all, so MCP stays out
+		// of that path.
+		const mcpConfigured = mcpStore.servers.some((s) => s.enabled);
+		if (mcpConfigured) {
+			try {
+				await mcpStore.ensureTools();
+			} catch {
+				// Tool discovery must never break the chat turn — MCP stays off.
+			}
+		}
+		const mcpTools =
+			mcpConfigured && provider !== 'anthropic' && mcpStore.hasActiveTools ? mcpStore.tools : [];
+		const mcpToolNames = new Set(mcpTools.map((tool) => tool.name));
+		const useMcpLoop = mcpTools.length > 0;
+
+		// Optional env-gated hardening (default off): tool results are untrusted
+		// data and state-changing actions need an explicit user request. Added
+		// before truncation so the layer counts against the context budget.
+		const confirmToolNames = new Set(parseToolNameList(publicEnv.PUBLIC_MCP_CONFIRM_TOOLS));
+		const hardeningEnabled =
+			publicEnv.PUBLIC_MCP_PROMPT_HARDENING === 'true' || publicEnv.PUBLIC_MCP_PROMPT_HARDENING === '1';
+		if (mcpTools.length > 0) {
+			const security = buildMcpSecurityInstructions({
+				mcpActive: true,
+				hardeningEnabled,
+				confirmTools: [...confirmToolNames]
+			});
+			if (security) systemPrompt += '\n\n' + security;
+		}
+
 		// Truncate message history to the configured context window. This applies
 		// to every provider so users can size prompts to their model's limit.
 		// Image turns use a non-string content shape; token estimation for them is
@@ -406,23 +441,6 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 			: {};
 
 		let fullContent = '';
-		// MCP tools for this turn (client-side loop). Without configured servers
-		// the whole path is skipped — no probe, no request fields, so users who
-		// never touch MCP see the exact same chat behavior as before.
-		// Anthropic requests carry no tool definitions at all, so MCP stays out
-		// of that path.
-		const mcpConfigured = mcpStore.servers.some((s) => s.enabled);
-		if (mcpConfigured) {
-			try {
-				await mcpStore.ensureTools();
-			} catch {
-				// Tool discovery must never break the chat turn — MCP stays off.
-			}
-		}
-		const mcpTools =
-			mcpConfigured && provider !== 'anthropic' && mcpStore.hasActiveTools ? mcpStore.tools : [];
-		const mcpToolNames = new Set(mcpTools.map((tool) => tool.name));
-		const useMcpLoop = mcpTools.length > 0;
 
 		// Tool definitions for OmniVoice speech segments.
 		// When the LLM supports function calling, speak_segment provides
@@ -581,6 +599,12 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 				roundCalls.map(async (call) => {
 					if (!mcpToolNames.has(call.name)) {
 						return { call, content: speechToolAck(call.args) };
+					}
+					if (confirmToolNames.has(call.name)) {
+						return {
+							call,
+							content: `Tool "${call.name}" requires manual user confirmation and was NOT executed. Ask the user how to proceed.`
+						};
 					}
 					const tool = findMcpTool(mcpTools, call.name);
 					const server = tool ? mcpStore.servers.find((s) => s.id === tool.serverId) : undefined;

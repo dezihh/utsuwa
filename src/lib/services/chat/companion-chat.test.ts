@@ -57,6 +57,8 @@ test('companion chat preserves native speech across direct and hosted state bloc
 			tools: [],
 			servers: []
 		},
+		publicEnv: {} as Record<string, string>,
+		privateEnv: {} as Record<string, string>,
 		isTauri: () => direct,
 		processCompanionTurn: async ({ companionResponse }: { companionResponse: string }) => {
 			const parsed = parseResponse(companionResponse);
@@ -67,7 +69,8 @@ test('companion chat preserves native speech across direct and hosted state bloc
 	const globals = globalThis as unknown as Record<string, unknown>;
 	globals.__utsuwaChatIntegration = fixtures;
 	const replacements: Record<string, string> = {
-		'$env/dynamic/private': 'export const env = {};',
+		'$env/dynamic/private': 'export const env = globalThis.__utsuwaChatIntegration.privateEnv;',
+		'$env/dynamic/public': 'export const env = globalThis.__utsuwaChatIntegration.publicEnv;',
 		'src/lib/engine/memory': `export const retrieveRelevantContext = async () => ({ recentTurns: [], relevantFacts: [], triggeredMemories: [], recentSessions: [] });
 			export const getWorkingMemory = () => ({}); export const ensureSession = async () => null;`,
 		'src/lib/services/storage/keepsakes': 'export const keepImage = async () => {};',
@@ -360,6 +363,80 @@ test('companion chat preserves native speech across direct and hosted state bloc
 			await sendCompanionMessage('Hello', [], hooks);
 			assert.equal(chatStore.error, null);
 			mcp.hasActiveTools = false; mcp.tools = []; mcp.servers = [];
+		});
+		await t.test('a confirmation-listed tool is never executed and reported back', async (t) => {
+			direct = false; llmProvider = 'openai-compatible';
+			speechEnabled = true; messages.length = 0; spoken = []; turns.length = 0;
+			const mcp = fixtures.mcpStore as {
+				hasActiveTools: boolean;
+				tools: unknown[];
+				servers: unknown[];
+			};
+			mcp.hasActiveTools = true;
+			mcp.tools = [{
+				serverId: 'ha', serverName: 'Home Assistant', name: 'get_state',
+				description: 'Read an entity state', inputSchema: { type: 'object' }
+			}];
+			mcp.servers = [{ id: 'ha', name: 'Home Assistant', transport: 'http', url: 'http://ha.local/api/mcp', enabled: true }];
+			fixtures.publicEnv.PUBLIC_MCP_CONFIRM_TOOLS = 'get_state';
+
+			let providerRound = 0;
+			let mcpCalls = 0;
+			const toolCallWire = `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'get_state', arguments: '{}' } }] } }] })}\n\n` + 'data: [DONE]\n\n';
+			const speechWire = `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_2', type: 'function', function: { name: 'speak_segment', arguments: JSON.stringify({ text: 'It needs your confirmation.', language: 'en' }) } }] } }] })}\n\n` + 'data: [DONE]\n\n';
+
+			t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+				if (url === '/api/chat') {
+					if (providerRound === 1) {
+						const body = JSON.parse(String(init.body));
+						const toolMessage = body.messages.find((m: { role: string }) => m.role === 'tool');
+						assert.ok(toolMessage, 'the blocked call still gets a tool result');
+						assert.match(toolMessage.content, /requires manual user confirmation/);
+					}
+					return POST({ request: new Request('http://localhost/api/chat', init) });
+				}
+				if (url === '/api/mcp/call') {
+					mcpCalls++;
+					return new Response(JSON.stringify({ toolName: 'get_state', content: 'should not run', isError: false }), {
+						headers: { 'Content-Type': 'application/json' }
+					});
+				}
+				const wire = providerRound === 0 ? toolCallWire : speechWire;
+				providerRound++;
+				return new Response(new ReadableStream({ start(controller) {
+					controller.enqueue(new TextEncoder().encode(wire));
+					controller.close();
+				} }), { headers: { 'Content-Type': 'text/event-stream' } });
+			});
+
+			await sendCompanionMessage('Check the sensor', [], hooks);
+			assert.equal(chatStore.error, null);
+			assert.equal(mcpCalls, 0, 'the blocked tool never reaches the MCP call route');
+			assert.equal(providerRound, 2, 'the model still answers after the blocked call');
+			assert.deepEqual(spoken.map((s) => [s.text, s.language]), [['It needs your confirmation.', 'en']]);
+			delete fixtures.publicEnv.PUBLIC_MCP_CONFIRM_TOOLS;
+			mcp.hasActiveTools = false; mcp.tools = []; mcp.servers = [];
+		});
+		await t.test('the MCP call route rejects confirmation-listed tools', async () => {
+			fixtures.publicEnv.PUBLIC_MCP_CONFIRM_TOOLS = 'get_state';
+			fixtures.privateEnv.MCP_ENABLED = 'server';
+			const { POST: callPOST } = await server.ssrLoadModule('/src/routes/api/mcp/call/+server.ts');
+			const response = await callPOST({
+				request: new Request('http://localhost/api/mcp/call', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						server: { id: 'ha', name: 'Home Assistant', transport: 'http', url: 'http://ha.local/api/mcp', enabled: true },
+						toolName: 'get_state',
+						args: {}
+					})
+				})
+			});
+			assert.equal(response.status, 403);
+			const body = (await response.json()) as { error?: string };
+			assert.match(body.error ?? '', /requires manual user confirmation/);
+			delete fixtures.publicEnv.PUBLIC_MCP_CONFIRM_TOOLS;
+			delete fixtures.privateEnv.MCP_ENABLED;
 		});
 	} finally {
 		buffer?.reset();

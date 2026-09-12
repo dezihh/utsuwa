@@ -35,6 +35,8 @@ Works the same for every deployment style: Docker Compose (`environment:` / an o
 
 When MCP is disabled, the **MCP entry is hidden from the settings navigation** on web (the page probes the server once and disappears if the route answers 404). A direct link still shows a notice explaining that the administrator has not enabled MCP.
 
+Optional hardening switches (prompt hardening, never-auto-execute tool list) are documented under [Optional hardening](#optional-hardening-env-gated).
+
 ## The MCP settings page
 
 Open **Settings → MCP**.
@@ -136,6 +138,15 @@ Known limitations:
 - Tools from all servers share one flat namespace. If two servers expose the same tool name, the first server in the list wins — keep names unique.
 - Authentication supports `none` and `bearer` only. Servers that need custom headers (for example `X-Api-Key`) are not supported yet.
 
+## Optional hardening (env-gated)
+
+Two opt-in switches cover the baseline of a tool-approval policy. Both default to off and change nothing until set; on web they are read at runtime, in the desktop build they are baked in at build time. They work independently — either one can be used alone.
+
+- **`PUBLIC_MCP_PROMPT_HARDENING`** (`true` or `1`) — adds a security layer to the system prompt on turns with MCP tools: tool results are untrusted data (never instructions), and state-changing or destructive actions require an explicit user request.
+- **`PUBLIC_MCP_CONFIRM_TOOLS`** — comma-separated, case-sensitive tool names (blank entries are ignored), for example `unlock_door,set_alarm`. Listed tools are **never executed automatically**: the chat loop feeds back a "requires manual user confirmation" result so the model asks you first, and the `/api/mcp/call` route rejects direct calls with `403`. The tools stay visible to the model, and the block applies even when prompt hardening is off.
+
+A full interactive approval dialog (per-tool metadata such as `read-only` / `requires-confirmation`) is future work.
+
 ## Troubleshooting
 
 | Symptom | Likely cause |
@@ -147,10 +158,11 @@ Known limitations:
 | `MCP stdio timeout` | Command too slow to start. First `npx` run downloads the package — press **Refresh** again. |
 | `spawn ... ENOENT` | Command not found on the Utsuwa host (check the command name and Node.js version). |
 | Empty tool list, no error | The server is reachable but exposes no tools (or all are filtered server-side). |
+| Tool result says "requires manual user confirmation" | The tool is listed in `PUBLIC_MCP_CONFIRM_TOOLS` — confirm the action with the user, or remove the name from the list. |
 
 ## Security notes
 
-- Tool results are treated as untrusted data: they are never executed, only passed to the model.
+- Tool results are treated as untrusted data: they are never executed, only passed to the model. `PUBLIC_MCP_PROMPT_HARDENING` states the same rule to the model, and `PUBLIC_MCP_CONFIRM_TOOLS` can block selected tools from ever running automatically.
 - Tokens never reach the model and are never logged.
 - HTTP servers may only use `http:`/`https:` URLs; other schemes are rejected before any request is made (web proxy and desktop transport alike).
 - stdio servers run commands on the Utsuwa host with the server process's environment plus the variables you configure, and can spawn any executable. `MCP_ENABLED=server` therefore means: the operator trusts everyone who can configure MCP servers. Utsuwa has no per-user accounts — anyone who can reach the app can add servers and trigger tool calls. Keep MCP off on shared or hosted deployments.

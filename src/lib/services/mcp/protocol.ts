@@ -226,3 +226,14 @@ export function singleFlight<T>(fn: () => Promise<T>): () => Promise<T> {
 		return inFlight;
 	};
 }
+
+/**
+ * Parse a comma-separated tool-name list (env config). Blank entries are
+ * dropped, so an unset or empty value yields an empty list.
+ */
+export function parseToolNameList(raw: string | undefined | null): string[] {
+	return (raw ?? '')
+		.split(',')
+		.map((name) => name.trim())
+		.filter(Boolean);
+}

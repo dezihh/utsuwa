@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
 	buildSystemPrompt,
 	buildExtractionSystemPrompt,
+	buildMcpSecurityInstructions,
 	truncateMessagesToContext,
 	truncateChatHistory,
 	estimateTokens,
@@ -508,4 +509,35 @@ test('speech tool policy keeps Anthropic on the inline prompt and honors speech 
 	assert.equal(shouldUseSpeechTools('openai', true, { ...settings, enableAltLanguage: false }), false);
 	assert.equal(shouldUseSpeechTools('openai', true, { ...settings, enableToolCalling: false }), false);
 	assert.equal(shouldUseSpeechTools('openai', true, { ...settings, activeProvider: 'openai-tts' }), false);
+});
+
+test('buildMcpSecurityInstructions is off unless MCP is active and hardening is enabled', () => {
+	assert.equal(buildMcpSecurityInstructions({ mcpActive: false, hardeningEnabled: true }), null);
+	assert.equal(buildMcpSecurityInstructions({ mcpActive: true, hardeningEnabled: false }), null);
+});
+
+test('buildMcpSecurityInstructions marks tool results as untrusted data', () => {
+	const layer = buildMcpSecurityInstructions({ mcpActive: true, hardeningEnabled: true });
+	assert.ok(layer);
+	assert.match(layer, /UNTRUSTED external DATA/);
+	assert.match(layer, /never instructions/i);
+	assert.match(layer, /explicitly asked/);
+	assert.doesNotMatch(layer, /blocked and never run/);
+});
+
+test('buildMcpSecurityInstructions lists confirmation tools when configured', () => {
+	const layer = buildMcpSecurityInstructions({
+		mcpActive: true,
+		hardeningEnabled: true,
+		confirmTools: ['unlock_door', 'set_alarm', '']
+	});
+	assert.ok(layer);
+	assert.match(layer, /blocked and never run automatically: unlock_door, set_alarm/);
+	assert.doesNotMatch(layer, /unlock_door, set_alarm,/);
+});
+
+test('buildMcpSecurityInstructions omits the confirmation rule for an empty list', () => {
+	const layer = buildMcpSecurityInstructions({ mcpActive: true, hardeningEnabled: true, confirmTools: [] });
+	assert.ok(layer);
+	assert.doesNotMatch(layer, /blocked and never run/);
 });
