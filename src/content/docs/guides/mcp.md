@@ -163,6 +163,7 @@ A full interactive approval dialog (per-tool metadata such as `read-only` / `req
 | `MCP stdio timeout` | Command too slow to start. First `npx` run downloads the package — press **Refresh** again. |
 | `spawn ... ENOENT` | Command not found on the Utsuwa host (check the command name and Node.js version). |
 | Empty tool list, no error | The server is reachable but exposes no tools (or all are filtered server-side). |
+| stdio server shows "stdio is disabled" | No stdio allowlist is set. Add `MCP_STDIO_ALLOWED_COMMANDS` (e.g. `npx`) to the Utsuwa server environment and restart it. |
 | Tool result says "requires manual user confirmation" | The tool is listed in `PUBLIC_MCP_CONFIRM_TOOLS` — confirm the action with the user, or remove the name from the list. |
 
 ## Security notes

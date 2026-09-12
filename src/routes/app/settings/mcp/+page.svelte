@@ -180,6 +180,13 @@
 						</div>
 					</div>
 
+					{#if formTransport === 'stdio'}
+						<p class="form-hint">
+							stdio is fail-closed: set <code>MCP_STDIO_ALLOWED_COMMANDS</code> (e.g.
+							<code>npx</code>) in the server environment, otherwise this server stays disabled.
+						</p>
+					{/if}
+
 					{#if formTransport === 'http'}
 						<div class="form-row">
 							<label class="form-label" for="mcp-url">URL</label>
