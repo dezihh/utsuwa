@@ -13,6 +13,7 @@ import {
 	parseJsonRpcResult,
 	parseSseResult,
 	parseToolsList,
+	singleFlight,
 	stringifyToolResult
 } from './protocol.ts';
 
@@ -159,6 +160,39 @@ test('combineServerResults stringifies non-Error reasons and labels missing serv
 	assert.equal(errors[0].message, 'boom');
 	assert.equal(errors[0].serverName, 'Unknown server');
 	assert.equal(errors[0].serverId, '');
+});
+
+test('singleFlight collapses concurrent calls into one invocation', async () => {
+	let calls = 0;
+	let resolve!: (value: string) => void;
+	const run = singleFlight(() => {
+		calls++;
+		return new Promise<string>((r) => (resolve = r));
+	});
+	const first = run();
+	const second = run();
+	assert.equal(calls, 1);
+	resolve('done');
+	assert.deepEqual(await Promise.all([first, second]), ['done', 'done']);
+});
+
+test('singleFlight runs again after the previous call settled', async () => {
+	let calls = 0;
+	const run = singleFlight(async () => ++calls);
+	assert.equal(await run(), 1);
+	assert.equal(await run(), 2);
+});
+
+test('singleFlight resets after a rejection so a retry can run', async () => {
+	let calls = 0;
+	const run = singleFlight(async () => {
+		calls++;
+		if (calls === 1) throw new Error('boom');
+		return 'ok';
+	});
+	await assert.rejects(() => run(), /boom/);
+	assert.equal(await run(), 'ok');
+	assert.equal(calls, 2);
 });
 
 test('parseEnvLines parses KEY=value, ignores comments and blanks', () => {

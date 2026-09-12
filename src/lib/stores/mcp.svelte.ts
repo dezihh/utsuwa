@@ -7,6 +7,7 @@
 import { browser } from '$app/environment';
 import type { McpServerConfig, McpServerError, McpTool } from '$lib/types/mcp';
 import { getMcpCapability, listTools } from '$lib/services/mcp/capability';
+import { singleFlight } from '$lib/services/mcp/protocol';
 
 const STORAGE_KEY = 'utsuwa-mcp-v1';
 
@@ -40,7 +41,7 @@ let capability = $state<McpCapabilityState>('unknown');
  * so the settings page can explain why nothing works and the chat never sends
  * MCP tools.
  */
-async function detectCapability(): Promise<void> {
+const detectCapability = singleFlight(async (): Promise<void> => {
 	if (getMcpCapability() === 'client') {
 		capability = 'client';
 		return;
@@ -55,7 +56,7 @@ async function detectCapability(): Promise<void> {
 	} catch {
 		capability = 'none';
 	}
-}
+});
 
 async function fetchTools(): Promise<void> {
 	const enabled = servers.filter((s) => s.enabled);

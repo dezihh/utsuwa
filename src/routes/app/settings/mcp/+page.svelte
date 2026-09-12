@@ -105,7 +105,6 @@
 	}
 
 	onMount(() => {
-		void mcpStore.detectCapability();
 		void mcpStore.refreshTools();
 	});
 </script>
@@ -157,8 +156,11 @@
 
 					<div class="form-row">
 						<span class="form-label">Transport</span>
-						<div class="transport-toggle">
+						<div class="transport-toggle" role="radiogroup" aria-label="Transport">
 							<button
+								type="button"
+								role="radio"
+								aria-checked={formTransport === 'http'}
 								class="transport-opt"
 								class:active={formTransport === 'http'}
 								onclick={() => (formTransport = 'http')}
@@ -166,6 +168,9 @@
 								HTTP
 							</button>
 							<button
+								type="button"
+								role="radio"
+								aria-checked={formTransport === 'stdio'}
 								class="transport-opt"
 								class:active={formTransport === 'stdio'}
 								onclick={() => (formTransport = 'stdio')}
@@ -188,8 +193,11 @@
 						</div>
 						<div class="form-row">
 							<span class="form-label">Auth</span>
-							<div class="transport-toggle">
+							<div class="transport-toggle" role="radiogroup" aria-label="Authentication">
 								<button
+									type="button"
+									role="radio"
+									aria-checked={formAuthType === 'none'}
 									class="transport-opt"
 									class:active={formAuthType === 'none'}
 									onclick={() => (formAuthType = 'none')}
@@ -197,6 +205,9 @@
 									None
 								</button>
 								<button
+									type="button"
+									role="radio"
+									aria-checked={formAuthType === 'bearer'}
 									class="transport-opt"
 									class:active={formAuthType === 'bearer'}
 									onclick={() => (formAuthType = 'bearer')}

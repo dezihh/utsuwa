@@ -190,3 +190,20 @@ export function parseEnvLines(raw: string): Record<string, string> {
 	}
 	return result;
 }
+
+/**
+ * Collapse concurrent calls into one in-flight promise. Used for the MCP
+ * capability probe so the settings layout and page mounts share a single
+ * request; once it settles, the next call runs again.
+ */
+export function singleFlight<T>(fn: () => Promise<T>): () => Promise<T> {
+	let inFlight: Promise<T> | null = null;
+	return () => {
+		if (!inFlight) {
+			inFlight = fn().finally(() => {
+				inFlight = null;
+			});
+		}
+		return inFlight;
+	};
+}
