@@ -152,6 +152,7 @@ Known limitations:
 
 - Tool results are treated as untrusted data: they are never executed, only passed to the model.
 - Tokens never reach the model and are never logged.
-- stdio servers run commands on the Utsuwa host. Keep `MCP_ENABLED` off on shared/hosted deployments unless you trust every user who can configure servers.
+- HTTP servers may only use `http:`/`https:` URLs; other schemes are rejected before any request is made (web proxy and desktop transport alike).
+- stdio servers run commands on the Utsuwa host with the server process's environment plus the variables you configure, and can spawn any executable. `MCP_ENABLED=server` therefore means: the operator trusts everyone who can configure MCP servers. Utsuwa has no per-user accounts — anyone who can reach the app can add servers and trigger tool calls. Keep MCP off on shared or hosted deployments.
 - The model can call any tool you expose. Expose only what you are comfortable with (Home Assistant's MCP integration lets you pick which entities are exposed).
 - Disabling a server (or all servers) takes effect immediately: no further requests are made and its tools leave the chat.

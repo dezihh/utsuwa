@@ -6,7 +6,7 @@ import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import type { McpServerConfig } from '$lib/types/mcp';
 import { callTool } from '$lib/services/mcp/client.server';
-import { isServerMcpEnabled } from '$lib/services/mcp/protocol';
+import { isAllowedMcpHttpUrl, isServerMcpEnabled } from '$lib/services/mcp/protocol';
 
 export const POST: RequestHandler = async ({ request }) => {
 	if (!isServerMcpEnabled(env.MCP_ENABLED)) {
@@ -31,7 +31,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		typeof server === 'object' &&
 		typeof toolName === 'string' &&
 		toolName.length > 0 &&
-		((server.transport === 'http' && typeof server.url === 'string' && server.url.length > 0) ||
+		((server.transport === 'http' && typeof server.url === 'string' && isAllowedMcpHttpUrl(server.url)) ||
 			(server.transport === 'stdio' && typeof server.command === 'string' && server.command.length > 0));
 
 	if (!valid) {

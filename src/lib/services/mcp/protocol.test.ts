@@ -7,6 +7,7 @@ import {
 	buildRpcRequest,
 	combineServerResults,
 	isServerMcpEnabled,
+	isAllowedMcpHttpUrl,
 	mcpUrlCandidates,
 	normalizeMcpUrl,
 	parseEnvLines,
@@ -160,6 +161,19 @@ test('combineServerResults stringifies non-Error reasons and labels missing serv
 	assert.equal(errors[0].message, 'boom');
 	assert.equal(errors[0].serverName, 'Unknown server');
 	assert.equal(errors[0].serverId, '');
+});
+
+test('isAllowedMcpHttpUrl accepts http and https endpoints', () => {
+	assert.equal(isAllowedMcpHttpUrl('http://homeassistant.local:8123/api/mcp'), true);
+	assert.equal(isAllowedMcpHttpUrl('https://api.githubcopilot.com/mcp/'), true);
+});
+
+test('isAllowedMcpHttpUrl rejects non-http schemes and garbage', () => {
+	assert.equal(isAllowedMcpHttpUrl('file:///etc/passwd'), false);
+	assert.equal(isAllowedMcpHttpUrl('data:text/plain,hi'), false);
+	assert.equal(isAllowedMcpHttpUrl('ftp://example.com/mcp'), false);
+	assert.equal(isAllowedMcpHttpUrl('not a url'), false);
+	assert.equal(isAllowedMcpHttpUrl(''), false);
 });
 
 test('singleFlight collapses concurrent calls into one invocation', async () => {

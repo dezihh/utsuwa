@@ -42,6 +42,20 @@ export function normalizeMcpUrl(url: string): string {
 	return url.replace(/\/?$/, '/');
 }
 
+/**
+ * Only `http:`/`https:` endpoints may be contacted. Blocks `file:`, `data:`,
+ * `ftp:` and similar schemes before any request is made (server proxy and
+ * desktop transport share this check).
+ */
+export function isAllowedMcpHttpUrl(raw: string): boolean {
+	try {
+		const protocol = new URL(raw).protocol;
+		return protocol === 'http:' || protocol === 'https:';
+	} catch {
+		return false;
+	}
+}
+
 export function buildRpcRequest<P = Record<string, unknown>>(id: number, method: string, params: P = {} as P) {
 	return { jsonrpc: '2.0' as const, id, method, params };
 }

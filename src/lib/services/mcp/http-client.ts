@@ -8,6 +8,7 @@ import {
 	buildAuthHeaders,
 	buildInitializedNotification,
 	buildRpcRequest,
+	isAllowedMcpHttpUrl,
 	mcpUrlCandidates,
 	nextRpcId,
 	parseJsonRpcResult,
@@ -52,6 +53,9 @@ export function createHttpMcpClient(fetchImpl: FetchLike): HttpMcpClient {
 
 	async function rpc(config: McpServerConfig, method: string, params: unknown = {}): Promise<unknown> {
 		const key = (config.url ?? '').trim();
+		if (!isAllowedMcpHttpUrl(key)) {
+			throw new Error('MCP HTTP URL must use http: or https:');
+		}
 		const urls = candidatesFor(config);
 		if (urls.length === 0) throw new Error('MCP HTTP server has no URL configured');
 
