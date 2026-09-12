@@ -40,6 +40,11 @@ test('stripFromStateFence cuts at the first fence', () => {
 	assert.equal(stripFromStateFence('```json\n{}\n```'), '');
 });
 
+test('stripFromStateFence cuts at the first of multiple fences', () => {
+	const text = 'First.\n```json\n{"a":1}\n```\nrepeat\n```json\n{"b":2}\n```\nend';
+	assert.equal(stripFromStateFence(text), 'First.\n');
+});
+
 test('buildAssistantToolMessage keeps text and stringifies call args', () => {
 	const calls: McpCollectedToolCall[] = [{ id: 'c1', name: 'get_state', args: { entity_id: 'light.kitchen' } }];
 	const message = buildAssistantToolMessage('Let me check.', calls);

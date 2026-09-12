@@ -115,7 +115,7 @@ export async function streamChatDirect(
 					messages: messagesWithSystem.map((m) => ({
 						role: m.role,
 						content: toOpenAIContent(m.content),
-						...(m.tool_calls && { tool_calls: m.tool_calls }),
+						...(m.tool_calls?.length ? { tool_calls: m.tool_calls } : {}),
 						...(m.tool_call_id && { tool_call_id: m.tool_call_id })
 					})),
 					stream: true,

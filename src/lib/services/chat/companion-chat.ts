@@ -158,7 +158,11 @@ async function streamServerRoute(
 			fullContent += JSON.parse(line.slice(2));
 			onDelta(fullContent);
 		} else if (line.startsWith('t:')) {
-			const { id, name, args } = JSON.parse(line.slice(2));
+			const { id, name, args } = JSON.parse(line.slice(2)) as {
+				id?: string;
+				name: string;
+				args: Record<string, unknown>;
+			};
 			onToolCall?.(name, args, id);
 		} else if (line.startsWith('e:')) {
 			throw new Error(JSON.parse(line.slice(2)).error);
@@ -408,7 +412,13 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 		// Anthropic requests carry no tool definitions at all, so MCP stays out
 		// of that path.
 		const mcpConfigured = mcpStore.servers.some((s) => s.enabled);
-		if (mcpConfigured) await mcpStore.ensureTools();
+		if (mcpConfigured) {
+			try {
+				await mcpStore.ensureTools();
+			} catch {
+				// Tool discovery must never break the chat turn — MCP stays off.
+			}
+		}
 		const mcpTools =
 			mcpConfigured && provider !== 'anthropic' && mcpStore.hasActiveTools ? mcpStore.tools : [];
 		const mcpToolNames = new Set(mcpTools.map((tool) => tool.name));
@@ -535,7 +545,7 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 						messages: messages.map((m) => ({
 							role: m.role,
 							content: toOpenAIContent(m.content),
-							...(m.tool_calls && { tool_calls: m.tool_calls }),
+							...(m.tool_calls?.length ? { tool_calls: m.tool_calls } : {}),
 							...(m.tool_call_id && { tool_call_id: m.tool_call_id })
 						})),
 						provider,
@@ -565,7 +575,9 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 			// a result — the OpenAI protocol requires it — including speech
 			// tools, which get a small ack instead of an execution.
 			messages.push(buildAssistantToolMessage(roundText, roundCalls));
-			const results = await Promise.all(
+			// allSettled: one unexpected failure must not abort the whole turn —
+			// the model gets an error result and can still answer.
+			const settled = await Promise.allSettled(
 				roundCalls.map(async (call) => {
 					if (!mcpToolNames.has(call.name)) {
 						return { call, content: speechToolAck(call.args) };
@@ -578,6 +590,16 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 					const result = await callTool(server, call.name, call.args);
 					return { call, content: result.content, injectAsUser: server.injectResultsAsUser };
 				})
+			);
+			const results = settled.map((entry, index) =>
+				entry.status === 'fulfilled'
+					? entry.value
+					: {
+							call: roundCalls[index],
+							content: `Error: ${
+								entry.reason instanceof Error ? entry.reason.message : String(entry.reason)
+							}`
+						}
 			);
 			messages.push(...buildToolResultMessages(results));
 		}

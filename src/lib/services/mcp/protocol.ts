@@ -113,7 +113,12 @@ export function parseSseResult(text: string): unknown {
 		if (!line.startsWith('data:')) continue;
 		const payload = line.slice('data:'.length).trim();
 		if (!payload || payload === '[DONE]') continue;
-		const json = JSON.parse(payload) as { result?: unknown; error?: JsonRpcError };
+		let json: { result?: unknown; error?: JsonRpcError };
+		try {
+			json = JSON.parse(payload) as { result?: unknown; error?: JsonRpcError };
+		} catch {
+			throw new Error('MCP error: invalid JSON in SSE response');
+		}
 		if (json.error) {
 			throw new Error(rpcErrorMessage(json.error));
 		}

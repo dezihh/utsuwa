@@ -208,6 +208,159 @@ test('companion chat preserves native speech across direct and hosted state bloc
 			assert.equal(latest, 'It is 21 degrees.');
 			mcp.hasActiveTools = false; mcp.tools = []; mcp.servers = [];
 		});
+		await t.test('a failing MCP tool call is fed back as an error result', async (t) => {
+			direct = false; llmProvider = 'openai-compatible';
+			speechEnabled = true; messages.length = 0; spoken = []; turns.length = 0;
+			const mcp = fixtures.mcpStore as {
+				hasActiveTools: boolean;
+				tools: unknown[];
+				servers: unknown[];
+			};
+			mcp.hasActiveTools = true;
+			mcp.tools = [{
+				serverId: 'ha', serverName: 'Home Assistant', name: 'get_state',
+				description: 'Read an entity state', inputSchema: { type: 'object' }
+			}];
+			mcp.servers = [{ id: 'ha', name: 'Home Assistant', transport: 'http', url: 'http://ha.local/api/mcp', enabled: true }];
+
+			let providerRound = 0;
+			const toolCallWire = `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'get_state', arguments: '{}' } }] } }] })}\n\n` + 'data: [DONE]\n\n';
+			const speechWire = `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_2', type: 'function', function: { name: 'speak_segment', arguments: JSON.stringify({ text: 'The sensor is offline.', language: 'en' }) } }] } }] })}\n\n` + 'data: [DONE]\n\n';
+
+			t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+				if (url === '/api/chat') {
+					if (providerRound === 1) {
+						const body = JSON.parse(String(init.body));
+						const toolMessage = body.messages.find((m: { role: string }) => m.role === 'tool');
+						assert.ok(toolMessage, 'the failed tool result is still fed back');
+						assert.match(toolMessage.content, /Error: network down/);
+					}
+					return POST({ request: new Request('http://localhost/api/chat', init) });
+				}
+				if (url === '/api/mcp/call') throw new Error('network down');
+				const wire = providerRound === 0 ? toolCallWire : speechWire;
+				providerRound++;
+				return new Response(new ReadableStream({ start(controller) {
+					controller.enqueue(new TextEncoder().encode(wire));
+					controller.close();
+				} }), { headers: { 'Content-Type': 'text/event-stream' } });
+			});
+
+			await sendCompanionMessage('How warm is it?', [], hooks);
+			assert.equal(chatStore.error, null, 'the turn survives a failing tool call');
+			assert.equal(providerRound, 2, 'the model runs again after the failed tool result');
+			assert.deepEqual(spoken.map((s) => [s.text, s.language]), [['The sensor is offline.', 'en']]);
+			mcp.hasActiveTools = false; mcp.tools = []; mcp.servers = [];
+		});
+		await t.test('the MCP loop stops at the round budget and strips intermediate state fences', async (t) => {
+			direct = false; llmProvider = 'openai-compatible';
+			speechEnabled = false; messages.length = 0; spoken = []; turns.length = 0;
+			const mcp = fixtures.mcpStore as {
+				hasActiveTools: boolean;
+				tools: unknown[];
+				servers: unknown[];
+			};
+			mcp.hasActiveTools = true;
+			mcp.tools = [{
+				serverId: 'ha', serverName: 'Home Assistant', name: 'get_state',
+				description: 'Read an entity state', inputSchema: { type: 'object' }
+			}];
+			mcp.servers = [{ id: 'ha', name: 'Home Assistant', transport: 'http', url: 'http://ha.local/api/mcp', enabled: true }];
+
+			let providerRound = 0;
+			let toolCalls = 0;
+			t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+				if (url === '/api/chat') return POST({ request: new Request('http://localhost/api/chat', init) });
+				if (url === '/api/mcp/call') {
+					toolCalls++;
+					return new Response(JSON.stringify({ toolName: 'get_state', content: 'ok', isError: false }), {
+						headers: { 'Content-Type': 'application/json' }
+					});
+				}
+				const n = providerRound++;
+				const fence = '\n```json\n{"new_memory":"round ' + n + '"}\n```\nrepeat ' + n;
+				const events = [
+					{ choices: [{ delta: { content: 'Round ' + n + '.' + fence } }] },
+					{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + n, type: 'function', function: { name: 'get_state', arguments: '{}' } }] } }] }
+				];
+				const wire = events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('') + 'data: [DONE]\n\n';
+				return new Response(new TextEncoder().encode(wire), { headers: { 'Content-Type': 'text/event-stream' } });
+			});
+
+			await sendCompanionMessage('Status?', [], hooks);
+			assert.equal(chatStore.error, null);
+			assert.equal(providerRound, 5, 'the loop stops after MCP_MAX_ROUNDS rounds');
+			assert.equal(toolCalls, 4, 'the final round executes no further tools');
+			assert.equal(turns.at(-1)?.stateUpdates?.newMemory, 'round 4', 'only the final round state block is parsed');
+			mcp.hasActiveTools = false; mcp.tools = []; mcp.servers = [];
+		});
+		await t.test('text and an MCP tool call in the same round are both preserved', async (t) => {
+			direct = false; llmProvider = 'openai-compatible';
+			speechEnabled = true; messages.length = 0; spoken = []; turns.length = 0;
+			const mcp = fixtures.mcpStore as {
+				hasActiveTools: boolean;
+				tools: unknown[];
+				servers: unknown[];
+			};
+			mcp.hasActiveTools = true;
+			mcp.tools = [{
+				serverId: 'ha', serverName: 'Home Assistant', name: 'get_state',
+				description: 'Read an entity state', inputSchema: { type: 'object' }
+			}];
+			mcp.servers = [{ id: 'ha', name: 'Home Assistant', transport: 'http', url: 'http://ha.local/api/mcp', enabled: true }];
+
+			let providerRound = 0;
+			const mixedWire = `data: ${JSON.stringify({ choices: [{ delta: { content: 'Let me check the sensor. ' } }] })}\n\n` +
+				`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'get_state', arguments: '{}' } }] } }] })}\n\n` + 'data: [DONE]\n\n';
+			const speechWire = `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_2', type: 'function', function: { name: 'speak_segment', arguments: JSON.stringify({ text: 'It is 21 degrees.', language: 'en' }) } }] } }] })}\n\n` + 'data: [DONE]\n\n';
+
+			t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+				if (url === '/api/chat') return POST({ request: new Request('http://localhost/api/chat', init) });
+				if (url === '/api/mcp/call') {
+					const body = JSON.parse(String(init.body));
+					assert.equal(body.toolName, 'get_state');
+					return new Response(JSON.stringify({ toolName: 'get_state', content: '21 degrees', isError: false }), {
+						headers: { 'Content-Type': 'application/json' }
+					});
+				}
+				const wire = providerRound === 0 ? mixedWire : speechWire;
+				providerRound++;
+				return new Response(new TextEncoder().encode(wire), { headers: { 'Content-Type': 'text/event-stream' } });
+			});
+
+			await sendCompanionMessage('How warm is it?', [], hooks);
+			assert.equal(chatStore.error, null);
+			assert.equal(providerRound, 2, 'the model runs again after the tool result');
+			const dialogue = turns.at(-1)?.dialogue ?? '';
+			assert.match(dialogue, /Let me check the sensor\./);
+			assert.match(dialogue, /It is 21 degrees\./);
+			mcp.hasActiveTools = false; mcp.tools = []; mcp.servers = [];
+		});
+		await t.test('Anthropic never receives MCP tool definitions', async (t) => {
+			direct = true; llmProvider = 'anthropic';
+			speechEnabled = false; messages.length = 0; spoken = []; turns.length = 0;
+			const mcp = fixtures.mcpStore as {
+				hasActiveTools: boolean;
+				tools: unknown[];
+				servers: unknown[];
+			};
+			mcp.hasActiveTools = true;
+			mcp.tools = [{
+				serverId: 'ha', serverName: 'Home Assistant', name: 'get_state',
+				description: 'Read an entity state', inputSchema: { type: 'object' }
+			}];
+			mcp.servers = [{ id: 'ha', name: 'Home Assistant', transport: 'http', url: 'http://ha.local/api/mcp', enabled: true }];
+
+			t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => {
+				const body = JSON.parse(String(init.body));
+				assert.equal(body.tools, undefined, 'MCP tools are not sent on the Anthropic path');
+				return new Response(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { text: 'Hello there.' } })}\n\n`);
+			});
+
+			await sendCompanionMessage('Hello', [], hooks);
+			assert.equal(chatStore.error, null);
+			mcp.hasActiveTools = false; mcp.tools = []; mcp.servers = [];
+		});
 	} finally {
 		buffer?.reset();
 		await server.close();

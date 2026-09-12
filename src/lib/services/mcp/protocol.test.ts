@@ -107,6 +107,10 @@ test('parseSseResult throws without a data line and on JSON-RPC errors', () => {
 	assert.throws(() => parseSseResult('data: {"error":{"message":"nope"}}\n'), /nope/);
 });
 
+test('parseSseResult reports malformed JSON in a data line', () => {
+	assert.throws(() => parseSseResult('data: {not json}\n\n'), /invalid JSON in SSE response/);
+});
+
 test('parseToolsList maps tools and tolerates missing fields', () => {
 	const tools = parseToolsList({
 		tools: [
