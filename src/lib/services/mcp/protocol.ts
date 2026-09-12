@@ -37,11 +37,6 @@ export function mcpUrlCandidates(raw: string): string[] {
 	return [trimmed, `${trimmed}/`];
 }
 
-/** Trailing-slash variant of a URL (used for the fire-and-forget notification). */
-export function normalizeMcpUrl(url: string): string {
-	return url.replace(/\/?$/, '/');
-}
-
 /**
  * Only `http:`/`https:` endpoints may be contacted. Blocks `file:`, `data:`,
  * `ftp:` and similar schemes before any request is made (server proxy and
@@ -246,13 +241,24 @@ export function parseToolNameList(raw: string | undefined | null): string[] {
 export function isBlockedMcpHost(rawHostname: string): boolean {
 	const host = rawHostname.trim().toLowerCase().replace(/^\[|\]$/g, '');
 	if (!host) return false;
-	if (host === 'metadata.google.internal' || host === 'metadata.goog') return true;
+	// Cloud metadata hostnames (GCP, AWS, Azure, generic aliases).
+	if (
+		host === 'metadata' ||
+		host === 'instance-data' ||
+		host === 'metadata.google.internal' ||
+		host === 'metadata.goog'
+	) {
+		return true;
+	}
 	// IPv4-mapped IPv6 (::ffff:169.254.x.x)
 	const mapped = host.startsWith('::ffff:') ? host.slice(7) : host;
 	const v4 = mapped.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-	if (v4) return Number(v4[1]) === 169 && Number(v4[2]) === 254;
-	// IPv6 link-local fe80::/10 (fe80–febf)
-	return /^fe[89ab][0-9a-f]:/.test(host);
+	if (v4) {
+		// AWS/Azure/GCP IMDS link-local range and Alibaba Cloud's metadata IP.
+		return (Number(v4[1]) === 169 && Number(v4[2]) === 254) || mapped === '100.100.100.200';
+	}
+	// IPv6 link-local fe80::/10 (fe80–febf) and AWS IMDSv2 (fd00:ec2::254).
+	return /^fe[89ab][0-9a-f]:/.test(host) || /^fd00:ec2:/.test(host);
 }
 
 /**
@@ -281,6 +287,48 @@ export function stdioDenyReason(
 }
 
 /**
+ * Environment a spawned stdio server inherits from the app process. Everything
+ * else — database URLs, API keys, provider tokens — stays inside the app; the
+ * per-server `env` config adds only what a server actually needs (e.g.
+ * BRAVE_API_KEY). Matched case-insensitively for Windows (`Path`).
+ */
+const STDIO_ENV_ALLOWLIST = new Set(
+	[
+		'PATH',
+		'HOME',
+		'USER',
+		'LOGNAME',
+		'SHELL',
+		'LANG',
+		'LC_ALL',
+		'LC_CTYPE',
+		'TZ',
+		'TMPDIR',
+		'TMP',
+		'TEMP',
+		'SystemRoot',
+		'ComSpec',
+		'PATHEXT',
+		'APPDATA',
+		'LOCALAPPDATA',
+		'NODE_EXTRA_CA_CERTS',
+		'SSL_CERT_FILE',
+		'SSL_CERT_DIR'
+	].map((key) => key.toLowerCase())
+);
+
+/** Pick only the safe subset of a base environment for stdio servers. */
+export function pickStdioEnv(base: Record<string, string | undefined>): Record<string, string> {
+	const picked: Record<string, string> = {};
+	for (const [key, value] of Object.entries(base)) {
+		if (value === undefined) continue;
+		if (!STDIO_ENV_ALLOWLIST.has(key.toLowerCase())) continue;
+		picked[key] = value;
+	}
+	return picked;
+}
+
+/**
  * Environment variables that must never be overridden by per-server config:
  * they change how a spawned process resolves binaries or loads code.
  */
@@ -295,7 +343,7 @@ const STDIO_ENV_DENYLIST = new Set([
 	'DYLD_LIBRARY_PATH'
 ]);
 
-/** Merge per-server env vars over the base env, blocking critical keys. */
+/** Merge per-server env vars over the (already filtered) base env, blocking critical keys. */
 export function mergeStdioEnv(
 	base: Record<string, string | undefined>,
 	extra: Record<string, string> | undefined | null

@@ -12,13 +12,13 @@ import {
 	isStdioCommandAllowed,
 	mergeStdioEnv,
 	mcpUrlCandidates,
-	normalizeMcpUrl,
 	parseEnvLines,
 	parseJsonRpcResult,
 	parseQuotedArgs,
 	parseSseResult,
 	parseToolNameList,
 	parseToolsList,
+	pickStdioEnv,
 	singleFlight,
 	stdioDenyReason,
 	stringifyToolResult
@@ -59,12 +59,6 @@ test('mcpUrlCandidates normalizes trailing slashes and whitespace', () => {
 test('mcpUrlCandidates returns no candidates for empty input', () => {
 	assert.deepEqual(mcpUrlCandidates(''), []);
 	assert.deepEqual(mcpUrlCandidates('   '), []);
-});
-
-test('normalizeMcpUrl adds a trailing slash exactly once', () => {
-	assert.equal(normalizeMcpUrl('http://ha.local:8123/api/mcp'), 'http://ha.local:8123/api/mcp/');
-	assert.equal(normalizeMcpUrl('http://ha.local:8123/api/mcp/'), 'http://ha.local:8123/api/mcp/');
-	assert.equal(normalizeMcpUrl(''), '/');
 });
 
 test('buildAuthHeaders: bearer with token adds the Authorization header', () => {
@@ -206,6 +200,15 @@ test('isBlockedMcpHost blocks link-local and metadata hosts', () => {
 	assert.equal(isBlockedMcpHost('metadata.google.internal'), true);
 });
 
+test('isBlockedMcpHost covers cloud metadata aliases and IPv6 endpoints', () => {
+	assert.equal(isBlockedMcpHost('metadata'), true);
+	assert.equal(isBlockedMcpHost('instance-data'), true);
+	assert.equal(isBlockedMcpHost('metadata.goog'), true);
+	assert.equal(isBlockedMcpHost('100.100.100.200'), true);
+	assert.equal(isBlockedMcpHost('fd00:ec2::254'), true);
+	assert.equal(isBlockedMcpHost('[fd00:ec2::254]'), true);
+});
+
 test('isBlockedMcpHost keeps loopback, RFC1918 and public hosts reachable', () => {
 	assert.equal(isBlockedMcpHost('127.0.0.1'), false);
 	assert.equal(isBlockedMcpHost('192.168.10.3'), false);
@@ -230,6 +233,27 @@ test('stdioDenyReason explains disabled vs not-allowed', () => {
 	assert.equal(stdioDenyReason('npx', ['npx']), null);
 	assert.match(stdioDenyReason('npx', []) ?? '', /disabled/);
 	assert.match(stdioDenyReason('rm', ['npx']) ?? '', /not allowed/);
+});
+
+test('pickStdioEnv keeps only the safe environment subset', () => {
+	const picked = pickStdioEnv({
+		PATH: '/usr/bin',
+		HOME: '/home/u',
+		LANG: 'en_US.UTF-8',
+		DATABASE_URL: 'postgres://secret',
+		OPENAI_API_KEY: 'sk-secret',
+		BRAVE_API_KEY: 'brave-secret',
+		EMPTY: undefined
+	});
+	assert.deepEqual(picked, { PATH: '/usr/bin', HOME: '/home/u', LANG: 'en_US.UTF-8' });
+});
+
+test('pickStdioEnv matches Windows-style casing and per-server env adds secrets', () => {
+	const base = pickStdioEnv({ Path: 'C:\\Windows', TEMP: 'C:\\Temp', SECRET: 'x' });
+	assert.deepEqual(base, { Path: 'C:\\Windows', TEMP: 'C:\\Temp' });
+	const merged = mergeStdioEnv(base, { BRAVE_API_KEY: 'brave-secret' });
+	assert.equal(merged.BRAVE_API_KEY, 'brave-secret');
+	assert.equal(merged.SECRET, undefined);
 });
 
 test('mergeStdioEnv blocks critical variables from the server config', () => {

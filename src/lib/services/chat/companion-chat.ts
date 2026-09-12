@@ -624,7 +624,7 @@ classTemperature: (displaySpeechSettings.classTemperature as number) ?? undefine
 			// Feed the results back and let the model continue. Every call gets
 			// a result — the OpenAI protocol requires it — including speech
 			// tools, which get a small ack instead of an execution.
-			messages.push(buildAssistantToolMessage(roundText, roundCalls));
+			messages.push(buildAssistantToolMessage(stripFromStateFence(roundText), roundCalls));
 			// Bound the work one round may trigger: excess calls are answered
 			// with an error instead of spawning dozens of processes/requests.
 			const { run, skipped } = splitToolCalls(roundCalls);

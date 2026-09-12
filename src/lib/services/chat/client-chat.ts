@@ -12,6 +12,7 @@ import {
 	sanitizeProviderError
 } from '$lib/services/providers/provider-errors';
 import { type MessageContent, toOpenAIContent, toAnthropicContent } from './content';
+import { emitToolCalls, type ToolCallBuffer } from './tool-call-buffers';
 
 interface ChatToolCall {
 	id: string;
@@ -170,7 +171,7 @@ export async function streamChatDirect(
 		// Collect tool-call deltas across chunks (OpenAI-compatible only).
 		// Each delta contains one index/fragment; we aggregate by index and
 		// fire the callback when the function name + arguments are complete.
-		const toolCallBuffers: Map<number, { id: string; name: string; args: string }> = new Map();
+		const toolCallBuffers: Map<number, ToolCallBuffer> = new Map();
 
 		while (true) {
 			const { done, value } = await reader.read();
@@ -190,17 +191,7 @@ export async function streamChatDirect(
 		processStreamLine(buffer, onChunk, onToolCall, toolCallBuffers);
 
 		// Fire onToolCall for each collected tool call after the stream ends
-		if (onToolCall && toolCallBuffers.size > 0) {
-			for (const [index, buf] of toolCallBuffers) {
-				if (buf.name && buf.args) {
-					try {
-						onToolCall(buf.name, JSON.parse(buf.args), buf.id || `call_${index}`);
-					} catch {
-						// Skip malformed tool call arguments
-					}
-				}
-			}
-		}
+		emitToolCalls(toolCallBuffers, onToolCall);
 
 		onDone();
 	} catch (err) {
@@ -216,7 +207,7 @@ function processStreamLine(
 	line: string,
 	onChunk: (text: string) => void,
 	onToolCall?: (name: string, args: Record<string, unknown>, id: string) => void,
-	toolCallBuffers?: Map<number, { id: string; name: string; args: string }>
+	toolCallBuffers?: Map<number, ToolCallBuffer>
 ): void {
 	const trimmed = line.trim();
 	if (!trimmed || trimmed === 'data: [DONE]') return;

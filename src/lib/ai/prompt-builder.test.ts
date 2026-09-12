@@ -11,6 +11,7 @@ import {
 	type PromptContext
 } from './prompt-builder.ts';
 import { shouldUseSpeechTools } from '../services/tts/tool-definitions.ts';
+import { ensureToolPairs } from '../services/mcp/loop.ts';
 import type { CharacterState } from '$lib/types/character';
 import type { RelevantContext } from '$lib/types/memory';
 import { getMemoryBudget } from '../types/memory.ts';
@@ -491,6 +492,29 @@ test('truncateChatHistory counts extra tool context against the budget', () => {
 	const withTools = truncateChatHistory(messages, systemPrompt, 900, 'y'.repeat(1200));
 	assert.ok(withTools.length < withoutTools.length, 'tool schemas shrink the history budget');
 	assert.equal(withTools[withTools.length - 1].content, 'newest message');
+});
+
+test('a cut between an assistant tool call and its result is repaired by ensureToolPairs', () => {
+	const toolCalls = [
+		{ id: 'call_1', type: 'function', function: { name: 'get_state', arguments: '{}' } }
+	];
+	const messages = [
+		{ role: 'user', content: 'old '.repeat(400) },
+		{ role: 'assistant', content: 'a'.repeat(1600), tool_calls: toolCalls },
+		{ role: 'tool', tool_call_id: 'call_1', content: 'r'.repeat(2000) },
+		{ role: 'user', content: 'newest message' }
+	];
+	const systemPrompt = 'x'.repeat(400);
+
+	// Budget forces the cut exactly between the assistant tool call and its
+	// result, leaving the tool message as the oldest kept entry.
+	const truncated = truncateChatHistory(messages, systemPrompt, 1500);
+	assert.equal(truncated[0].role, 'tool');
+
+	const repaired = ensureToolPairs(messages, truncated);
+	assert.equal(repaired[0].role, 'assistant');
+	assert.deepEqual(repaired[0].tool_calls, toolCalls);
+	assert.equal(repaired[repaired.length - 1].content, 'newest message');
 });
 
 test('truncateChatHistory handles image content placeholders', () => {

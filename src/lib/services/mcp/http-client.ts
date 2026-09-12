@@ -9,6 +9,7 @@ import {
 	buildInitializedNotification,
 	buildRpcRequest,
 	isAllowedMcpHttpUrl,
+	isBlockedMcpHost,
 	mcpUrlCandidates,
 	nextRpcId,
 	parseJsonRpcResult,
@@ -18,6 +19,69 @@ import {
 } from './protocol.ts';
 
 export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
+
+/** Tauri's HTTP plugin takes redirect handling through its own client option. */
+type RedirectCapableInit = RequestInit & { maxRedirections?: number };
+
+const MAX_REDIRECTS = 3;
+
+function isRedirectStatus(status: number): boolean {
+	return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+/**
+ * Reject non-http(s) schemes and link-local/metadata hosts. Runs for the
+ * configured URL and every redirect target — on the server the DNS-based check
+ * in client.server.ts adds hostnames that resolve to blocked addresses.
+ */
+function assertSafeMcpUrl(rawUrl: string): void {
+	if (!isAllowedMcpHttpUrl(rawUrl)) {
+		throw new Error('MCP HTTP URL must use http: or https:');
+	}
+	let hostname: string;
+	try {
+		hostname = new URL(rawUrl).hostname;
+	} catch {
+		return;
+	}
+	if (isBlockedMcpHost(hostname)) {
+		throw new Error(`MCP HTTP host "${hostname}" is blocked (link-local/metadata)`);
+	}
+}
+
+/**
+ * Follow redirects manually so every hop is re-validated: Node fetch follows
+ * redirects by default, which would let a 307 bypass the SSRF guard and land
+ * on a metadata address. `redirect: 'manual'` covers Node, `maxRedirections: 0`
+ * the Tauri HTTP plugin (reqwest Policy::none()). Only 307/308 are followed —
+ * they preserve method and body; 301/302/303 would silently turn the JSON-RPC
+ * POST into a GET and are reported as errors instead.
+ */
+function guardRedirects(fetchImpl: FetchLike): FetchLike {
+	return async (input, init) => {
+		let url = String(input);
+		const requestInit: RedirectCapableInit = {
+			...init,
+			redirect: 'manual',
+			maxRedirections: 0
+		};
+		for (let hop = 0; ; hop++) {
+			assertSafeMcpUrl(url);
+			const res = await fetchImpl(url, requestInit);
+			if (!isRedirectStatus(res.status)) return res;
+			const location = res.headers.get('location');
+			if (!location) return res;
+			await res.text().catch(() => '');
+			if (res.status !== 307 && res.status !== 308) {
+				throw new Error(
+					`MCP HTTP redirect (${res.status}) is not followed (JSON-RPC requires POST)`
+				);
+			}
+			if (hop >= MAX_REDIRECTS) throw new Error('MCP HTTP too many redirects');
+			url = new URL(location, url).toString();
+		}
+	};
+}
 
 export interface HttpMcpClient {
 	listTools(config: McpServerConfig): Promise<McpTool[]>;
@@ -33,6 +97,7 @@ export function createHttpMcpClient(
 	options: { timeoutMs?: number } = {}
 ): HttpMcpClient {
 	const timeoutMs = options.timeoutMs ?? 15_000;
+	const safeFetch = guardRedirects(fetchImpl);
 	/** Session ids returned by Streamable HTTP initialize responses, per server+URL. */
 	const sessionIds = new Map<string, string>();
 	/** Working URL variant per configured URL (some servers 404 on a trailing slash). */
@@ -63,7 +128,7 @@ export function createHttpMcpClient(
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), timeoutMs);
 		try {
-			return await fetchImpl(url, { ...init, signal: controller.signal });
+			return await safeFetch(url, { ...init, signal: controller.signal });
 		} catch (err) {
 			if (controller.signal.aborted) {
 				throw new Error(`MCP HTTP timeout after ${timeoutMs}ms`);

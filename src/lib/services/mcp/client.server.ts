@@ -13,6 +13,7 @@ import {
 	mergeStdioEnv,
 	nextRpcId,
 	parseToolsList,
+	pickStdioEnv,
 	stringifyToolResult
 } from './protocol.ts';
 
@@ -86,17 +87,31 @@ interface StdioSession {
 	close(): void;
 }
 
-async function createStdioSession(config: McpServerConfig): Promise<StdioSession> {
+export interface StdioSessionOptions {
+	timeoutMs?: number;
+}
+
+export async function createStdioSession(
+	config: McpServerConfig,
+	options: StdioSessionOptions = {}
+): Promise<StdioSession> {
 	const { spawn } = await import('node:child_process');
+	const timeoutMs = options.timeoutMs ?? STDIO_REQUEST_TIMEOUT_MS;
 
 	if (!config.command) throw new Error('MCP stdio server has no command configured');
 
 	const proc = spawn(config.command, config.args ?? [], {
-		env: mergeStdioEnv(process.env, config.env),
+		// Only a minimal, allowlisted slice of the app environment reaches a
+		// third-party stdio server; its own secrets come from config.env.
+		env: mergeStdioEnv(pickStdioEnv(process.env), config.env),
 		stdio: ['pipe', 'pipe', 'inherit']
 	});
 
 	const pending = new Map<number, { resolve: (value: unknown) => void; reject: (err: Error) => void }>();
+
+	// A server may exit while a request is being written; EPIPE on stdin must
+	// surface through the pending promise, not as an uncaught stream error.
+	proc.stdin.on('error', () => {});
 
 	let buffer = '';
 	proc.stdout.on('data', (chunk: Buffer) => {
@@ -140,22 +155,10 @@ async function createStdioSession(config: McpServerConfig): Promise<StdioSession
 		}
 	});
 
-	function request(method: string, params: Record<string, unknown>): Promise<unknown> {
-		const id = nextRpcId();
-		return new Promise((resolve, reject) => {
-			pending.set(id, { resolve, reject });
-			proc.stdin.write(JSON.stringify(buildRpcRequest(id, method, params)) + '\n');
-			setTimeout(() => {
-				const entry = pending.get(id);
-				if (entry) {
-					pending.delete(id);
-					entry.reject(new Error(`MCP stdio timeout for ${method}`));
-				}
-			}, STDIO_REQUEST_TIMEOUT_MS);
-		});
-	}
-
+	let closed = false;
 	function close() {
+		if (closed) return;
+		closed = true;
 		proc.stdin.end();
 		// A server that ignores stdin EOF must not leak: SIGTERM after a short
 		// grace, SIGKILL if it still does not exit. unref() keeps the timers
@@ -182,20 +185,68 @@ async function createStdioSession(config: McpServerConfig): Promise<StdioSession
 		termTimer.unref?.();
 	}
 
-	// Initialize handshake before the session is usable.
-	const initId = nextRpcId();
-	await new Promise<void>((resolve, reject) => {
-		pending.set(initId, { resolve: () => resolve(), reject });
-		proc.stdin.write(JSON.stringify(buildInitializeRequest(initId)) + '\n');
-		setTimeout(() => {
-			const entry = pending.get(initId);
-			if (entry) {
-				pending.delete(initId);
-				entry.reject(new Error('MCP stdio initialize timeout'));
+	function request(method: string, params: Record<string, unknown>): Promise<unknown> {
+		const id = nextRpcId();
+		return new Promise((resolve, reject) => {
+			const timer = setTimeout(() => {
+				const entry = pending.get(id);
+				if (entry) {
+					pending.delete(id);
+					entry.reject(new Error(`MCP stdio timeout for ${method}`));
+				}
+			}, timeoutMs);
+			timer.unref?.();
+			const settle = {
+				resolve: (value: unknown) => {
+					clearTimeout(timer);
+					resolve(value);
+				},
+				reject: (err: Error) => {
+					clearTimeout(timer);
+					reject(err);
+				}
+			};
+			pending.set(id, settle);
+			try {
+				proc.stdin.write(JSON.stringify(buildRpcRequest(id, method, params)) + '\n');
+			} catch (err) {
+				pending.delete(id);
+				settle.reject(err instanceof Error ? err : new Error(String(err)));
 			}
-		}, STDIO_REQUEST_TIMEOUT_MS);
-	});
-	proc.stdin.write(JSON.stringify(buildInitializedNotification()) + '\n');
+		});
+	}
+
+	// Initialize handshake before the session is usable. A failed handshake
+	// must terminate the child: the caller never receives a session and
+	// therefore cannot close it (process leak).
+	try {
+		const initId = nextRpcId();
+		await new Promise<void>((resolve, reject) => {
+			const timer = setTimeout(() => {
+				const entry = pending.get(initId);
+				if (entry) {
+					pending.delete(initId);
+					entry.reject(new Error('MCP stdio initialize timeout'));
+				}
+			}, timeoutMs);
+			timer.unref?.();
+			pending.set(initId, {
+				resolve: () => {
+					clearTimeout(timer);
+					resolve();
+				},
+				reject: (err) => {
+					clearTimeout(timer);
+					reject(err);
+				}
+			});
+			proc.stdin.write(JSON.stringify(buildInitializeRequest(initId)) + '\n');
+		});
+		proc.stdin.write(JSON.stringify(buildInitializedNotification()) + '\n');
+	} catch (err) {
+		close();
+		throw err;
+	}
 
 	return { request, close };
 }
