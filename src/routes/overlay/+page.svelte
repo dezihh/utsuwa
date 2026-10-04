@@ -15,7 +15,7 @@
 	import CameraSettingsPanel from '$lib/components/ui/CameraSettingsPanel.svelte';
 	import FloatingStatIndicators from '$lib/components/ui/FloatingStatIndicators.svelte';
 	import { EventScene } from '$lib/components/events';
-	import { Icon } from '$lib/components/ui';
+	import { Icon, ImageSearchModal } from '$lib/components/ui';
 	import Toasts from '$lib/components/ui/Toasts.svelte';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
 	import { chatStore } from '$lib/stores/chat.svelte';
@@ -298,6 +298,9 @@
 
 	{#if windowError}<div class="window-error" role="alert"><span>{windowError}</span><button class="btn btn-ghost btn-sm" aria-label="Dismiss window error" onclick={() => windowError = ''}><Icon name="x" size={14} /></button></div>{/if}
 	<Toasts placement="bottom" />
+
+	<!-- Companion-triggered image search results (overlay is its own window) -->
+	<ImageSearchModal />
 
 	<!-- Event Scene Overlay -->
 	{#if events.activeEvent?.scene}
