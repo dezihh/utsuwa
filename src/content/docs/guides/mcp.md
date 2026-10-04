@@ -114,6 +114,22 @@ Any MCP server that speaks stdio can be spawned by the server build. Example wit
 
 stdio servers are spawned per request with a 15-second timeout and run with a minimal slice of the server's environment plus the variables you configure here. Only enable MCP on a deployment you control, and allowlist the command line with `MCP_STDIO_ALLOWED_COMMANDS=npx -y mcp-searxng` and the variable with `MCP_STDIO_ENV_ALLOWLIST=SEARXNG_URL` (stdio is fail-closed).
 
+Like Brave, the first `npx` start downloads the package and can exceed the 15-second timeout; if that happens, press **Refresh** in the tool list once and it stays warm afterwards.
+
+### File fetcher (HTTP)
+
+When the companion shows pictures from a SearXNG image search, Utsuwa can load a picture's bytes itself through a file-fetch MCP tool. That keeps a hotlink-protected or CORS-blocked source working, and gives a vision model the actual bytes later. Any enabled server that exposes a **`fetch_file_from_url`** tool is used; the reference server is the self-hosted `filefetcher`:
+
+- **Name**: `Filefetcher`
+- **Transport**: `HTTP`
+- **URL**: `http://your-filefetcher-host:8000/mcp`
+- **Auth**: `none`
+- **Tool**: `fetch_file_from_url` with `{ "url": "<image url>", "max_dimension": 1280 }`
+
+The tool must return the picture as an MCP **image content block** — `{"type":"image","data":"<base64>","mimeType":"image/png"}` — and not as base64 embedded in a text block. Utsuwa keeps image blocks structured so the UI can show them; text blocks only reach the model. `max_dimension` caps the longest edge (the server never upscales), so the request stays small. When a vision model is configured, the picture you have selected in the popup is also described to the companion, so she can talk about what she is showing. Without a `fetch_file_from_url` tool, the popup still opens and thumbnails load straight from their source URLs.
+
+> Image search itself needs a SearXNG instance and the app-side switch: set `SEARXNG_URL` and `PUBLIC_IMAGE_SEARCH_ENABLED=true` on the Utsuwa server. See the `.env.example` comments.
+
 ## Desktop builds (Tauri)
 
 The desktop app is the MCP host itself: there is no backend to gate, so no `MCP_ENABLED` variable exists there. **HTTP** servers connect directly through the Tauri HTTP plugin (CORS-free) and work exactly as on web; **stdio** servers are not available (the app cannot spawn local MCP processes yet, so stdio entries show a per-server error in the tool list). The MCP page says so in a **Desktop mode** notice.
@@ -141,6 +157,7 @@ Known limitations:
 - The **Anthropic** provider path does not receive MCP tool definitions; use an OpenAI-compatible provider for MCP.
 - Tools from all servers share one flat namespace. If two servers expose the same tool name, the first server in the list wins, so keep names unique.
 - Authentication supports `none` and `bearer` only. Servers that need custom headers (for example `X-Api-Key`) are not supported yet.
+- stdio servers are spawned per request. A server started via `npx` downloads its package on first use; if that cold start exceeds the 15-second timeout, press **Refresh** in the tool list again (the package cache is warm afterwards).
 
 ## Hardening
 

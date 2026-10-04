@@ -30,6 +30,7 @@ Cloud chat providers, model lists, and Fish Audio go through the app's own serve
 
 - `ALLOW_LOCAL_PROVIDER_HOSTS=true` lets the server reach providers on private addresses. It also lets it relay speech to a local TTS engine that blocks the browser. See [Voice Providers](/docs/guides/voice-providers#local-tts-and-omnivoice).
 - `MCP_ENABLED=server` turns on MCP tools. See [MCP Servers](/docs/guides/mcp).
+- `SEARXNG_URL=http://your-searxng-host:8081` together with `PUBLIC_IMAGE_SEARCH_ENABLED=true` turns on the companion's image search popup, which shows pictures from your own SearXNG instance. See [MCP Servers](/docs/guides/mcp#file-fetcher-http).
 
 ## First-run setup
 

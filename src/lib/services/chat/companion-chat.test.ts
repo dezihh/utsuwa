@@ -90,6 +90,21 @@ test('companion chat preserves native speech across direct and hosted state bloc
 		},
 		publicEnv: {} as Record<string, string>,
 		privateEnv: {} as Record<string, string>,
+		imageSearchStore: {
+			isOpen: false,
+			isLoading: false,
+			error: null as string | null,
+			currentQuery: '',
+			currentDescription: null as string | null,
+			focusedIndex: 0,
+			results: [] as unknown[],
+			setLoading: () => {},
+			openModal: () => {},
+			closeModal: () => {},
+			setError: () => {},
+			setDescription: () => {},
+			setFocus: () => {}
+		},
 		isTauri: () => direct,
 		processCompanionTurn: async ({ companionResponse }: { companionResponse: string }) => {
 			const parsed = parseResponse(companionResponse);
@@ -112,7 +127,8 @@ test('companion chat preserves native speech across direct and hosted state bloc
 	};
 	for (const [path, name] of Object.entries({
 		chat: 'chatStore', character: 'characterStore', persona: 'personaStore', settings: 'settingsStore',
-		modules: 'modulesStore', vrm: 'vrmStore', 'animation-library': 'animationLibraryStore', reminders: 'reminderStore', tts: 'ttsStore', mcp: 'mcpStore', 'chat-hint': 'chatHintStore', 'chat-draft': 'chatDraftStore'
+		modules: 'modulesStore', vrm: 'vrmStore', 'animation-library': 'animationLibraryStore', reminders: 'reminderStore', tts: 'ttsStore', mcp: 'mcpStore', 'chat-hint': 'chatHintStore', 'chat-draft': 'chatDraftStore',
+		'image-search': 'imageSearchStore'
 	})) replacements[`src/lib/stores/${path}.svelte`] = `export const ${name} = globalThis.__utsuwaChatIntegration.${name};`;
 	const server = await createServer({
 		root, configFile: false, server: { middlewareMode: true }, appType: 'custom',

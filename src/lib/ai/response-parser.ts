@@ -5,6 +5,10 @@ import { stripThinkingBlocks } from './thinking-blocks.ts';
 export interface ParsedResponse {
 	dialogue: string;
 	stateUpdates: Partial<StateUpdates> | null;
+	/** Search query for pictures the companion wants to show this turn. */
+	imageSearch?: string;
+	/** True when the companion is closing the image popup this turn. */
+	closeImages?: boolean;
 	parseError?: string;
 }
 
@@ -24,6 +28,8 @@ interface LLMStateOutput {
 	triggered_event?: string | null;
 	action?: string | null;
 	expression?: string | null;
+	image_search?: string | null;
+	close_images?: boolean | null;
 }
 
 // Animation ids the model may name in "action"; the library checks it exists
@@ -124,7 +130,7 @@ function cutHallucinatedTurn(text: string, companionName?: string): string {
 
 // JSON objects we care about carry at least one of these keys.
 const STATE_KEY_RE =
-	/"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|new_memory)"/;
+	/"(?:mood_change|affection_delta|trust_delta|intimacy_delta|comfort_delta|respect_delta|new_memory|image_search|close_images)"/;
 
 // Reasoning models (R1-style) emit a scratchpad before the answer. Strip it so
 // the trace never reaches the chat bubble or the JSON parser. Handles the
@@ -199,6 +205,7 @@ export function parseResponse(rawResponse: string, companionName?: string): Pars
 	const raw = stripReasoning(rawResponse);
 	let dialogue = raw.trim();
 	let stateUpdates: Partial<StateUpdates> | null = null;
+	let llmOutput: LLMStateOutput | null = null;
 	let parseError: string | undefined;
 
 	// Prefer a fenced ```json block; otherwise grab the first bare JSON object
@@ -207,6 +214,7 @@ export function parseResponse(rawResponse: string, companionName?: string): Pars
 	if (fenced) {
 		const parsed = tryParseJson(fenced[1]);
 		if (parsed) {
+			llmOutput = parsed;
 			stateUpdates = convertLLMOutput(parsed);
 		} else {
 			parseError = 'Failed to parse JSON state block';
@@ -224,6 +232,7 @@ export function parseResponse(rawResponse: string, companionName?: string): Pars
 		if (obj) {
 			const parsed = tryParseJson(obj);
 			if (parsed) {
+				llmOutput = parsed;
 				stateUpdates = convertLLMOutput(parsed);
 				dialogue = raw.replace(obj, '').trim();
 			}
@@ -231,7 +240,18 @@ export function parseResponse(rawResponse: string, companionName?: string): Pars
 	}
 
 	dialogue = cleanDialogue(dialogue, companionName);
-	return { dialogue, stateUpdates, parseError };
+	return { dialogue, stateUpdates, ...extractImageIntent(llmOutput), parseError };
+}
+
+// Image intent rides in the state JSON so it works language-agnostically and
+// benefits from the forced-JSON extraction fallback. `close_images` is only a
+// close when truthy; `image_search` needs a usable, non-empty query.
+function extractImageIntent(output: LLMStateOutput | null): Pick<ParsedResponse, 'imageSearch' | 'closeImages'> {
+	const query = typeof output?.image_search === 'string' ? output.image_search.trim() : '';
+	return {
+		imageSearch: query || undefined,
+		closeImages: output?.close_images === true ? true : undefined
+	};
 }
 
 // Convert LLM output format to our StateUpdates format

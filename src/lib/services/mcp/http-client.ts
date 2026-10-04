@@ -15,6 +15,7 @@ import {
 	parseJsonRpcResult,
 	parseSseResult,
 	parseToolsList,
+	extractToolResultImages,
 	stringifyToolResult
 } from './protocol.ts';
 
@@ -269,7 +270,13 @@ export function createHttpMcpClient(
 		try {
 			await initialize(config);
 			const result = await rpc(config, 'tools/call', { name: toolName, arguments: args });
-			return { toolName, content: stringifyToolResult(result), isError: false };
+			const images = extractToolResultImages(result);
+			return {
+				toolName,
+				content: stringifyToolResult(result),
+				isError: false,
+				...(images.length ? { images } : {})
+			};
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			console.error(`[MCP] callTool failed for "${config.name}/${toolName}":`, message);

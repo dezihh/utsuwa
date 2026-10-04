@@ -6,6 +6,7 @@ import {
 	buildInitializeRequest,
 	buildRpcRequest,
 	combineServerResults,
+	extractToolResultImages,
 	isMcpHardeningEnabled,
 	isServerMcpEnabled,
 	isAllowedMcpHttpUrl,
@@ -154,9 +155,63 @@ test('stringifyToolResult joins text parts and falls back to JSON', () => {
 	);
 	assert.equal(
 		stringifyToolResult({ content: [{ type: 'image', data: 'x' }] }),
-		JSON.stringify({ content: [{ type: 'image', data: 'x' }] })
+		'[image: unknown]'
 	);
 	assert.equal(stringifyToolResult(null), '');
+});
+
+test('stringifyToolResult replaces image parts with a placeholder, keeping text', () => {
+	assert.equal(
+		stringifyToolResult({
+			content: [
+				{ type: 'text', text: 'Optimized to JPEG' },
+				{ type: 'image', data: 'AAAA', mimeType: 'image/jpeg' }
+			]
+		}),
+		'Optimized to JPEG\n[image: image/jpeg]'
+	);
+});
+
+test('stringifyToolResult falls back to JSON for content without text or images', () => {
+	const resource = { content: [{ type: 'resource', uri: 'file:///x' }] };
+	assert.equal(stringifyToolResult(resource), JSON.stringify(resource));
+});
+
+test('extractToolResultImages returns base64 image blocks with their MIME type', () => {
+	assert.deepEqual(
+		extractToolResultImages({
+			content: [
+				{ type: 'text', text: 'meta' },
+				{ type: 'image', data: 'AAAA', mimeType: 'image/png' },
+				{ type: 'image', data: 'BBBB', mimeType: 'image/webp' }
+			]
+		}),
+		[
+			{ mimeType: 'image/png', data: 'AAAA' },
+			{ mimeType: 'image/webp', data: 'BBBB' }
+		]
+	);
+});
+
+test('extractToolResultImages defaults the MIME type and skips malformed blocks', () => {
+	assert.deepEqual(
+		extractToolResultImages({
+			content: [
+				{ type: 'image', data: 'AAAA' },
+				{ type: 'image' },
+				{ type: 'image', data: '' },
+				{ type: 'image', data: 42 },
+				{ type: 'text', text: 'x' }
+			]
+		}),
+		[{ mimeType: 'application/octet-stream', data: 'AAAA' }]
+	);
+});
+
+test('extractToolResultImages returns an empty list without content', () => {
+	assert.deepEqual(extractToolResultImages(undefined), []);
+	assert.deepEqual(extractToolResultImages({}), []);
+	assert.deepEqual(extractToolResultImages({ content: 'nope' }), []);
 });
 
 test('combineServerResults collects fulfilled values in order', () => {

@@ -23,6 +23,9 @@ export interface CompanionTurnInput {
 	// specific side effects like sentiment analysis, baseline stat updates,
 	// streak/interaction counting and fact extraction from the trigger text.
 	systemEvent?: boolean;
+	// True when a self-hosted image search backend is enabled; adds the image
+	// intent fields to the extraction fallback.
+	imageSearchEnabled?: boolean;
 	// DEV-only console logging of the raw/parsed model output.
 	debug?: boolean;
 }
@@ -32,6 +35,10 @@ export interface CompanionTurnResult {
 	dialogue: string;
 	// Memory the model produced this turn, if any (the app attaches it to kept photos).
 	newMemory?: string;
+	// Search query for pictures she wants to show this turn, if any.
+	imageSearch?: string;
+	// True when she is closing the image popup this turn.
+	closeImages?: boolean;
 	// An event that should be shown after this turn, if one triggered.
 	triggeredEvent: EventDefinition | null;
 }
@@ -44,7 +51,7 @@ export interface CompanionTurnResult {
 // extraction fallback). Page-specific side effects — showing the event modal,
 // keeping photos — stay in the pages via the return value.
 export async function processCompanionTurn(input: CompanionTurnInput): Promise<CompanionTurnResult> {
-	const { userMessage, companionResponse, llm, systemEvent = false, debug = false } = input;
+	const { userMessage, companionResponse, llm, systemEvent = false, imageSearchEnabled = false, debug = false } = input;
 
 	const state = characterStore.state;
 	// System events (e.g. fired reminders) must not trigger sentiment heuristics,
@@ -69,6 +76,8 @@ export async function processCompanionTurn(input: CompanionTurnInput): Promise<C
 	const parsed = parseResponse(reminderCleaned, state.name);
 	const dialogue = parsed.dialogue;
 	let llmUpdates = parsed.stateUpdates;
+	let imageSearch = parsed.imageSearch;
+	let closeImages = parsed.closeImages;
 
 	if (debug) {
 		console.log('%c[LLM raw response]', 'color:#00b2ff;font-weight:bold', companionResponse);
@@ -83,14 +92,17 @@ export async function processCompanionTurn(input: CompanionTurnInput): Promise<C
 	if (!llmUpdates) {
 		const extracted = await completeJson({
 			...llm,
-			system: buildExtractionSystemPrompt(llm.hasImages),
+			system: buildExtractionSystemPrompt(llm.hasImages, imageSearchEnabled),
 			user: `User: ${userMessage}\nCompanion: ${dialogue}\n\nReturn the JSON.`,
 			maxTokens: 400
 		});
 		if (extracted) {
 			// parseResponse handles both bare JSON (OpenAI json_object) and a
 			// model-added ```json fence (Anthropic). Don't re-wrap.
-			llmUpdates = parseResponse(extracted).stateUpdates;
+			const fallbackParsed = parseResponse(extracted);
+			llmUpdates = fallbackParsed.stateUpdates;
+			if (fallbackParsed.imageSearch) imageSearch = fallbackParsed.imageSearch;
+			if (fallbackParsed.closeImages) closeImages = true;
 			if (debug) {
 				console.log('%c[extraction fallback]', 'color:#f59e0b;font-weight:bold', extracted, '->', llmUpdates);
 			}
@@ -194,5 +206,11 @@ export async function processCompanionTurn(input: CompanionTurnInput): Promise<C
 		}
 	}
 
-	return { dialogue, newMemory: finalUpdates.newMemory || undefined, triggeredEvent };
+	return {
+		dialogue,
+		newMemory: finalUpdates.newMemory || undefined,
+		imageSearch: imageSearch || undefined,
+		closeImages: closeImages || undefined,
+		triggeredEvent
+	};
 }

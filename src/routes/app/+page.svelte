@@ -2,7 +2,7 @@
 	import WakeLockIndicator from '$lib/components/display/WakeLockIndicator.svelte';
 	import VrmScene from '$lib/components/vrm/VrmScene.svelte';
 	import FloatingStatIndicators from '$lib/components/ui/FloatingStatIndicators.svelte';
-	import { TopRightButtons, TopLeftButtons, InfoModal } from '$lib/components/ui';
+	import { TopRightButtons, TopLeftButtons, InfoModal, ImageSearchModal } from '$lib/components/ui';
 	import Toasts from '$lib/components/ui/Toasts.svelte';
 	import BottomChatBar from '$lib/components/chat/BottomChatBar.svelte';
 	import McpConfirmDialog from '$lib/components/mcp/McpConfirmDialog.svelte';
@@ -311,6 +311,9 @@
 		{/if}
 
 		<Toasts />
+
+		<!-- Companion-triggered image search results -->
+		<ImageSearchModal />
 
 		<!-- Event Scene Overlay (deferred while posing; renders on exit) -->
 		{#if events.activeEvent?.scene && !photomodeStore.active}

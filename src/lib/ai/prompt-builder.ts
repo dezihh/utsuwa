@@ -16,6 +16,16 @@ export interface PromptContext {
 	// True when the user has shown her an image this turn. Adds the
 	// "being shown" reception layer so she receives it like a person.
 	hasImages?: boolean;
+	// True when a self-hosted image search backend is configured. Adds the
+	// proactive image_search / close_images JSON fields and their guidance.
+	imageSearchEnabled?: boolean;
+	// Whether the image popup is currently open, and for which query. Lets her
+	// reference what the user is looking at and close it again.
+	imageModalOpen?: boolean;
+	imageModalQuery?: string;
+	// What the shown picture actually contains (from a separate vision model),
+	// so she can talk about what is on screen.
+	imageModalDescription?: string;
 	// Configured context window size in tokens. Used to scale memory injection
 	// and truncate history. When unset, historical defaults (6 turns, 5 facts)
 	// are preserved.
@@ -97,6 +107,13 @@ function actionField(ctx: PromptContext): string {
 	return ctx.avatarActions?.length ? ',\n  "action": null | "animation_id"' : '';
 }
 
+// Image intent as JSON fields, only offered when a search backend is enabled.
+function imageSearchField(ctx: PromptContext): string {
+	return ctx.imageSearchEnabled
+		? ',\n  "image_search": null | "search query for pictures to show them",\n  "close_images": false'
+		: '';
+}
+
 function buildEventLayer(ctx: PromptContext): string | null {
 	if (!ctx.systemEvent) return null;
 	return `<event>\n${ctx.systemEvent}\n</event>`;
@@ -114,6 +131,7 @@ export function buildSystemPrompt(context: PromptContext): string {
 		buildStateLayer(context),
 		buildMemoryLayer(context),
 		...(context.hasImages ? [buildBeingShownLayer()] : []),
+		buildImageSearchLayer(context),
 		buildEventLayer(context),
 		buildOmniVoiceLayer(context),
 		buildAvatarActionsLayer(context.avatarActions ?? []) || null,
@@ -261,6 +279,9 @@ Energy: ${energyDesc} (${ctx.state.energy}/100)
 
 	if (ctx.hasImages) parts.push(buildBeingShownLayer());
 
+	const imageSearchLayer = buildImageSearchLayer(ctx);
+	if (imageSearchLayer) parts.push(imageSearchLayer);
+
 	const eventLayer = buildEventLayer(ctx);
 	if (eventLayer) parts.push(eventLayer);
 
@@ -277,7 +298,7 @@ After your reply, ALWAYS end with a JSON block, even when little changed:
 \`\`\`json
 {
   "mood_change": { "emotion": "emotion_name", "intensity_delta": number },
-  "new_memory": null | "something specific worth remembering about them"${actionField(ctx)},
+  "new_memory": null | "something specific worth remembering about them"${actionField(ctx)}${imageSearchField(ctx)},
   "expression": null | "emotion_name"
 }
 \`\`\`
@@ -469,11 +490,80 @@ If it is worth keeping, put it in new_memory as your impression in your own word
 </being_shown>`;
 }
 
+// Proactive image search. The intent rides in the reply's JSON state block
+// (`image_search` / `close_images`), so it is language-agnostic and the forced-
+// JSON extraction fallback can recover it when the model skips the block. She
+// never loads an image herself; the application runs the search.
+function buildImageSearchLayer(ctx: PromptContext): string | null {
+	if (!ctx.imageSearchEnabled) return null;
+
+	const parts: string[] = [];
+
+	parts.push(
+		`IMAGE SEARCH\n\n` +
+			`You can show the user pictures from the web. You do not load them yourself — you state your intent in the reply's JSON block and the application searches and shows them in a popup.`
+	);
+
+	parts.push(
+		`HOW TO USE:\n` +
+			`  Set "image_search" in the JSON block to a short search query when you want to show pictures.\n` +
+			`  Keep "image_search": null when you are not showing any.\n` +
+			`  Set "close_images": true when the user asks you to close the picture popup.\n\n` +
+			`  The search runs automatically; you do not need a tool call.`
+	);
+
+	parts.push(
+		`EXAMPLES:\n` +
+			`  User: "Show me some cats"\n` +
+			`  You: "With pleasure! Here are a few sweet cats for you."\n` +
+			`  ... { "image_search": "cute cats", ... }\n\n` +
+			`  User: "Can you close the pictures again?"\n` +
+			`  You: "Sure!"\n` +
+			`  ... { "close_images": true, ... }`
+	);
+
+	parts.push(
+		`WRONG — never answer like this:\n` +
+			`  "I cannot show images" ✗\n` +
+			`  "I am only a text model" ✗\n` +
+			`  "I have no internet access" ✗\n\n` +
+			`Those answers are incorrect: you can show pictures by setting "image_search" in the JSON block.`
+	);
+
+	parts.push(
+		`WHEN TO USE:\n` +
+			`  - The user asks to see images, pictures, photos or visual references\n` +
+			`  - A topic naturally calls for something visual (landscapes, animals, art, food)\n` +
+			`  - You want to surprise them with something beautiful or interesting\n` +
+			`  Whenever you say you are showing a picture, you MUST also set "image_search" in that same reply. A sentence with "image_search": null shows nothing.`
+	);
+
+	if (ctx.imageModalOpen && ctx.imageModalQuery) {
+		const shown = ctx.imageModalDescription
+			? `\nThe picture they have selected (what your own eyes see): ${ctx.imageModalDescription}`
+			: '';
+		parts.push(
+			`CURRENTLY OPEN: A picture popup is showing results for "${ctx.imageModalQuery}".${shown}\n` +
+				`Their question refers to the selected picture. You can refer to it, ask what they think, or close the popup with "close_images": true.`
+		);
+	}
+
+	return `<image_search>\n${parts.join('\n\n')}\n</image_search>`;
+}
+
 // Decoupled extraction: a tight, forced-JSON prompt used as a fallback when the
 // chat model didn't append a usable state block. A separate call derives it.
-export function buildExtractionSystemPrompt(hasImages = false): string {
+export function buildExtractionSystemPrompt(hasImages = false, imageSearchEnabled = false): string {
 	const imageLine = hasImages
 		? " The user showed the companion an image this turn, so new_memory should capture the companion's impression of what they were shown."
+		: '';
+	const imageFields = imageSearchEnabled
+		? ',\n  "image_search": null | "a short search query when the companion is showing pictures to the user",\n  "close_images": false'
+		: '';
+	const imageGuidance = imageSearchEnabled
+		? `
+
+image_search — set a short query (what the pictures are of) ONLY when the companion is showing the user pictures in its reply, for example "Here is a picture of a red panda". Otherwise null. Use the user's request as the query when it names a subject. Set close_images to true only when the companion is closing the picture popup.`
 		: '';
 	return `You read a short exchange between a user and their AI companion and output ONLY a JSON object describing what changed. No prose, no markdown fences, just the JSON object.
 
@@ -484,10 +574,10 @@ Shape:
   "trust_delta": -10 to 10,
   "intimacy_delta": -10 to 10,
   "comfort_delta": -10 to 10,
-  "new_memory": null | "a fact about the user"
+  "new_memory": null | "a fact about the user"${imageFields}
 }
 
-The four *_delta values are small numbers for how this exchange moved the relationship: positive when they open up, share, or warm to the companion; near 0 for neutral chat; negative if it went badly. Usually between -3 and 5.
+The four *_delta values are small numbers for how this exchange moved the relationship: positive when they open up, share, or warm to the companion; near 0 for neutral chat; negative if it went badly. Usually between -3 and 5.${imageGuidance}
 
 new_memory — when to write one:
 - Capture it whenever they reveal something real about themselves or their life: a fact, a preference, a plan, a feeling, their job, or someone in their life (family, friends, pets).${imageLine} When in doubt, capture it.
@@ -540,7 +630,7 @@ After your reply, ALWAYS end with a JSON block, even when little changed:
   "intimacy_delta": number,
   "comfort_delta": number,
   "new_memory": null | "something specific worth remembering about them",
-  "triggered_event": null | "event_id"${actionField(ctx)},
+  "triggered_event": null | "event_id"${actionField(ctx)}${imageSearchField(ctx)},
   "expression": null | "emotion_name"
 }
 \`\`\`

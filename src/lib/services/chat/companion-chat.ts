@@ -26,6 +26,8 @@ import { retrieveRelevantContext } from '$lib/engine/memory';
 import { buildSystemPrompt, buildMcpSecurityInstructions, truncateChatHistory, type PromptContext } from '$lib/ai/prompt-builder';
 import { keepImage, type PreparedImage } from '$lib/services/storage/keepsakes';
 import { extractReminderTags, tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
+import { imageSearchStore } from '$lib/stores/image-search.svelte';
+import { describeFocusedImage, isImageSearchEnabled, searchImages } from '$lib/services/image-search';
 import { reminderStore } from '$lib/stores/reminders.svelte';
 import { getWorkingMemory, ensureSession } from '$lib/engine/memory-session';
 import { buildAdvancedParams, buildMessages, describeImagesRequest, type ChatLoopMessage } from '$lib/services/chat/turn-context';
@@ -92,6 +94,12 @@ async function buildCompanionPrompt(
 		userMessage,
 		systemTime: new Date(),
 		hasImages,
+		imageSearchEnabled: isImageSearchEnabled(),
+		imageModalOpen: imageSearchStore.isOpen,
+		imageModalQuery: imageSearchStore.isOpen ? imageSearchStore.currentQuery : undefined,
+		imageModalDescription: imageSearchStore.isOpen
+			? imageSearchStore.currentDescription ?? undefined
+			: undefined,
 		contextSize,
 		pendingReminders: reminderStore.upcoming.map((r) => ({ triggerAt: r.triggerAt, content: r.content })),
 		sessionStartedAt: workingMemory.sessionStartedAt,
@@ -387,6 +395,7 @@ export async function sendCompanionMessage(
 			companionResponse: cleanedCompanionResponse,
 			llm: { ...llm, hasImages: images.length > 0 },
 			systemEvent,
+			imageSearchEnabled: isImageSearchEnabled(),
 			debug: import.meta.env.DEV
 		}));
 
@@ -399,10 +408,17 @@ export async function sendCompanionMessage(
 		// was stripped of speak()/gesture() syntax before processCompanionTurn.
 		const displayDialogue = turn.dialogue;
 
+		// Image intent rides in the state JSON (image_search / close_images), so
+		// it is recovered even when the model skips the inline block.
+		if (turn.closeImages) imageSearchStore.closeModal();
+		if (turn.imageSearch && isImageSearchEnabled()) {
+			void runImageSearch(turn.imageSearch);
+		}
+
 		chatStore.updateLastMessage(displayDialogue);
 		hooks.setLatestResponse(displayDialogue);
 
-		if (turn.dialogue) {
+		if (displayDialogue) {
 			// During OmniVoice streaming the avatar is driven by ttsStore.isSpeaking
 			// and the real audio analyser, so a text-length estimate would desync.
 			// Only fall back to the estimated talking timer for non-streaming paths.
@@ -411,7 +427,7 @@ export async function sendCompanionMessage(
 			}
 
 			if (speechState?.enabled && !streamingTTS) {
-				ttsStore.speak(turn.dialogue, ttsOptions);
+				ttsStore.speak(displayDialogue, ttsOptions);
 			}
 		}
 
@@ -541,6 +557,34 @@ async function runToolCall(
 	const result = await callTool(server, call.name, call.args);
 	const content = result.isError ? `Error: ${result.content}` : result.content;
 	return { call, content: capToolResult(content), injectAsUser: server.injectResultsAsUser };
+}
+
+// Proactive image popup: search in the background and open the modal with the
+// results. A failed search shows in the modal, it never fails the turn.
+async function runImageSearch(query: string) {
+	if (import.meta.env.DEV) {
+		console.log('%c[ImageSearch] run', 'color:#a855f7;font-weight:bold', { query });
+	}
+	imageSearchStore.setLoading(true);
+	imageSearchStore.openModal([], query);
+	try {
+		const results = await searchImages(query);
+		if (import.meta.env.DEV) {
+			console.log('%c[ImageSearch] results', 'color:#a855f7;font-weight:bold', {
+				query,
+				count: results.length
+			});
+		}
+		imageSearchStore.openModal(results, query);
+		if (results.length > 0) void describeFocusedImage();
+	} catch (err) {
+		if (import.meta.env.DEV) {
+			console.log('%c[ImageSearch] failed', 'color:#ef4444;font-weight:bold', err);
+		}
+		imageSearchStore.setError(err instanceof Error ? err.message : 'Image search failed');
+	} finally {
+		imageSearchStore.setLoading(false);
+	}
 }
 
 // Schedule the direct fallback only when the LLM did not emit any reminder

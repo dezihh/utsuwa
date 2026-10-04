@@ -342,3 +342,37 @@ test('a new_memory that is only tags is dropped', () => {
 	const raw = ['Hi.', '```json', '{ "new_memory": "<>" }', '```'].join('\n');
 	assert.equal(parseResponse(raw).stateUpdates?.newMemory, undefined);
 });
+
+test('reads image_search and close_images from the state block', () => {
+	const raw = [
+		'Here are some cats for you.',
+		'```json',
+		'{ "image_search": "cute cats", "close_images": true }',
+		'```'
+	].join('\n');
+	const parsed = parseResponse(raw);
+	assert.equal(parsed.imageSearch, 'cute cats');
+	assert.equal(parsed.closeImages, true);
+	assert.equal(parsed.dialogue, 'Here are some cats for you.');
+});
+
+test('image_search is trimmed and an empty one is dropped', () => {
+	assert.equal(parseResponse('Hi.\n```json\n{"image_search":"  "}\n```').imageSearch, undefined);
+	assert.equal(parseResponse('Hi.\n```json\n{"image_search":null}\n```').imageSearch, undefined);
+	assert.equal(parseResponse('Hi.\n```json\n{"image_search":"  red pandas "}\n```').imageSearch, 'red pandas');
+});
+
+test('close_images is only true when strictly true; absent means undefined', () => {
+	assert.equal(parseResponse('Hi.\n```json\n{"close_images":false}\n```').closeImages, undefined);
+	assert.equal(parseResponse('Hi.\n```json\n{"close_images":"yes"}\n```').closeImages, undefined);
+	assert.equal(parseResponse('Hi.\n```json\n{"mood_change":{"emotion":"happy"}}\n```').closeImages, undefined);
+	assert.equal(
+		parseResponse('Hi.\n```json\n{"close_images":true}\n```').closeImages,
+		true
+	);
+});
+
+test('image intent is read from a bare (unfenced) state block too', () => {
+	const parsed = parseResponse('Look at this! { "image_search": "aurora borealis" }');
+	assert.equal(parsed.imageSearch, 'aurora borealis');
+});

@@ -707,3 +707,64 @@ test('macros also work in the personality field', () => {
 	assert.ok(prompt.includes('Mika adores the user.'));
 	assert.ok(!prompt.includes('{{char}}'));
 });
+
+test('the image search layer and JSON fields appear only when enabled', () => {
+	const without = buildSystemPrompt(makeContext());
+	assert.ok(!without.includes('<image_search>'));
+	assert.ok(!without.includes('"image_search"'));
+
+	const withSearch = buildSystemPrompt(makeContext({ imageSearchEnabled: true }));
+	assert.ok(withSearch.includes('<image_search>'));
+	assert.ok(withSearch.includes('"image_search": null |'));
+	assert.ok(withSearch.includes('"close_images": false'));
+});
+
+test('an open image popup adds its query to the image search layer', () => {
+	const prompt = buildSystemPrompt(
+		makeContext({ imageSearchEnabled: true, imageModalOpen: true, imageModalQuery: 'red pandas' })
+	);
+	assert.ok(prompt.includes('CURRENTLY OPEN'));
+	assert.ok(prompt.includes('red pandas'));
+});
+
+test('an open popup without a query adds no misleading context', () => {
+	const prompt = buildSystemPrompt(makeContext({ imageSearchEnabled: true, imageModalOpen: true }));
+	assert.ok(prompt.includes('<image_search>'));
+	assert.ok(!prompt.includes('CURRENTLY OPEN'));
+});
+
+test('a vision description is woven into the open-popup context', () => {
+	const withDesc = buildSystemPrompt(
+		makeContext({
+			imageSearchEnabled: true,
+			imageModalOpen: true,
+			imageModalQuery: 'red pandas',
+			imageModalDescription: 'A red panda perched on a mossy branch.'
+		})
+	);
+	assert.ok(withDesc.includes('A red panda perched on a mossy branch.'));
+	assert.ok(withDesc.includes('The picture they have selected'));
+
+	const withoutDesc = buildSystemPrompt(
+		makeContext({ imageSearchEnabled: true, imageModalOpen: true, imageModalQuery: 'red pandas' })
+	);
+	assert.ok(!withoutDesc.includes('The picture they have selected'));
+});
+
+test('companion mode also gets the image search layer when enabled', () => {
+	const ctx = makeContext({
+		state: makeState({ appMode: 'companion' }),
+		imageSearchEnabled: true
+	});
+	assert.ok(buildSystemPrompt(ctx).includes('<image_search>'));
+});
+
+test('the extraction prompt includes image intent fields only when asked', () => {
+	const plain = buildExtractionSystemPrompt(false);
+	assert.ok(!plain.includes('"image_search"'));
+
+	const withImages = buildExtractionSystemPrompt(false, true);
+	assert.ok(withImages.includes('"image_search": null |'));
+	assert.ok(withImages.includes('"close_images": false'));
+	assert.ok(withImages.includes('image_search —'));
+});
