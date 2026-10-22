@@ -23,9 +23,12 @@ export interface CompanionTurnInput {
 	// specific side effects like sentiment analysis, baseline stat updates,
 	// streak/interaction counting and fact extraction from the trigger text.
 	systemEvent?: boolean;
-	// True when a self-hosted image search backend is enabled; adds the image
-	// intent fields to the extraction fallback.
-	imageSearchEnabled?: boolean;
+	// True when MCP tools are available, so she can hand image URLs to the app;
+	// adds the show_images fields to the extraction fallback.
+	showImagesEnabled?: boolean;
+	// Text of this turn's MCP tool results, so a model that forgot to list
+	// show_images can still have the URLs recovered by the fallback call.
+	toolResults?: string[];
 	// DEV-only console logging of the raw/parsed model output.
 	debug?: boolean;
 }
@@ -35,12 +38,36 @@ export interface CompanionTurnResult {
 	dialogue: string;
 	// Memory the model produced this turn, if any (the app attaches it to kept photos).
 	newMemory?: string;
-	// Search query for pictures she wants to show this turn, if any.
+	// Search query for pictures she wants to show this turn (app resolves it).
 	imageSearch?: string;
+	// Direct image URLs she handed over instead (optional shortcut).
+	showImages?: string[];
+	// A replacement spoken line when image_search was recovered from the
+	// extraction fallback (the model had wrongly claimed it cannot show pictures).
+	fallbackDialogue?: string;
 	// True when she is closing the image popup this turn.
 	closeImages?: boolean;
 	// An event that should be shown after this turn, if one triggered.
 	triggeredEvent: EventDefinition | null;
+}
+
+// The extraction fallback's user prompt. Tool results are included so a model
+// that used a search tool but forgot to list show_images can still be asked for
+// the URLs. Capped so a big tool payload cannot blow up the call.
+const MAX_TOOL_RESULT_CHARS_FOR_EXTRACTION = 1500;
+const MAX_TOOL_RESULTS_FOR_EXTRACTION = 6;
+
+function buildExtractionUser(userMessage: string, dialogue: string, toolResults?: string[]): string {
+	const blocks: string[] = [`User: ${userMessage}`, `Companion: ${dialogue}`];
+	if (toolResults?.length) {
+		const joined = toolResults
+			.slice(0, MAX_TOOL_RESULTS_FOR_EXTRACTION)
+			.map((result) => result.slice(0, MAX_TOOL_RESULT_CHARS_FOR_EXTRACTION))
+			.join('\n---\n');
+		blocks.push(`Tool results this turn (use their direct image URLs for show_images):\n${joined}`);
+	}
+	blocks.push('Return the JSON.');
+	return blocks.join('\n\n');
 }
 
 // Runs the full companion turn: parse the model output (with a forced-JSON
@@ -51,7 +78,7 @@ export interface CompanionTurnResult {
 // extraction fallback). Page-specific side effects — showing the event modal,
 // keeping photos — stay in the pages via the return value.
 export async function processCompanionTurn(input: CompanionTurnInput): Promise<CompanionTurnResult> {
-	const { userMessage, companionResponse, llm, systemEvent = false, imageSearchEnabled = false, debug = false } = input;
+	const { userMessage, companionResponse, llm, systemEvent = false, showImagesEnabled = false, toolResults, debug = false } = input;
 
 	const state = characterStore.state;
 	// System events (e.g. fired reminders) must not trigger sentiment heuristics,
@@ -77,31 +104,49 @@ export async function processCompanionTurn(input: CompanionTurnInput): Promise<C
 	const dialogue = parsed.dialogue;
 	let llmUpdates = parsed.stateUpdates;
 	let imageSearch = parsed.imageSearch;
+	let showImages = parsed.showImages;
 	let closeImages = parsed.closeImages;
+	// A spoken line the extraction wrote alongside a recovered image_search —
+	// used to replace a reply that wrongly claimed she cannot show pictures.
+	let fallbackDialogue: string | undefined;
 
 	if (debug) {
 		console.log('%c[LLM raw response]', 'color:#00b2ff;font-weight:bold', companionResponse);
 		console.log('%c[LLM parsed]', 'color:#22c55e;font-weight:bold', {
 			stateUpdates: llmUpdates,
-			new_memory: llmUpdates?.newMemory ?? null
+			new_memory: llmUpdates?.newMemory ?? null,
+			imageSearch: parsed.imageSearch ?? null,
+			showImages: parsed.showImages ?? null,
+			closeImages: parsed.closeImages ?? null
 		});
 	}
 
-	// Decoupled fallback: the model skipped the inline JSON, so ask a dedicated
-	// forced-JSON call to extract mood + memory from the exchange.
-	if (!llmUpdates) {
+	// Decoupled fallback. Runs when the model skipped the inline JSON (mood +
+	// memory) or when it used tools but produced no image intent at all. With the
+	// tool results in hand, the forced-JSON call can recover a query or URLs.
+	const wantsImageRecovery =
+		showImagesEnabled && !imageSearch && !showImages?.length && (toolResults?.length ?? 0) > 0;
+	if (!llmUpdates || wantsImageRecovery) {
 		const extracted = await completeJson({
 			...llm,
-			system: buildExtractionSystemPrompt(llm.hasImages, imageSearchEnabled),
-			user: `User: ${userMessage}\nCompanion: ${dialogue}\n\nReturn the JSON.`,
-			maxTokens: 400
+			system: buildExtractionSystemPrompt(llm.hasImages, showImagesEnabled),
+			user: buildExtractionUser(userMessage, dialogue, toolResults),
+			maxTokens: 500
 		});
 		if (extracted) {
 			// parseResponse handles both bare JSON (OpenAI json_object) and a
 			// model-added ```json fence (Anthropic). Don't re-wrap.
 			const fallbackParsed = parseResponse(extracted);
-			llmUpdates = fallbackParsed.stateUpdates;
-			if (fallbackParsed.imageSearch) imageSearch = fallbackParsed.imageSearch;
+			// Only take the state when the inline block was missing; a
+			// recovery run must not double-apply mood/memory.
+			if (!llmUpdates) llmUpdates = fallbackParsed.stateUpdates;
+			if (fallbackParsed.imageSearch) {
+				imageSearch = fallbackParsed.imageSearch;
+				// The model itself failed to express the intent, so its dialogue
+				// is untrusted; use the extraction's line when it wrote one.
+				fallbackDialogue = fallbackParsed.say;
+			}
+			if (fallbackParsed.showImages?.length) showImages = fallbackParsed.showImages;
 			if (fallbackParsed.closeImages) closeImages = true;
 			if (debug) {
 				console.log('%c[extraction fallback]', 'color:#f59e0b;font-weight:bold', extracted, '->', llmUpdates);
@@ -210,6 +255,8 @@ export async function processCompanionTurn(input: CompanionTurnInput): Promise<C
 		dialogue,
 		newMemory: finalUpdates.newMemory || undefined,
 		imageSearch: imageSearch || undefined,
+		showImages: showImages?.length ? showImages : undefined,
+		fallbackDialogue: fallbackDialogue || undefined,
 		closeImages: closeImages || undefined,
 		triggeredEvent
 	};

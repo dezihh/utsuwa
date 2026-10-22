@@ -79,6 +79,8 @@ test('companion chat preserves native speech across direct and hosted state bloc
 		mcpStore: {
 			ensureTools: async () => {},
 			hasActiveTools: false,
+			serverEnabled: false,
+			enabledServers: [],
 			tools: [],
 			servers: [],
 			confirmations: [] as Array<{ serverName: string; toolName: string; args: Record<string, unknown> }>,

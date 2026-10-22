@@ -27,7 +27,7 @@ import { buildSystemPrompt, buildMcpSecurityInstructions, truncateChatHistory, t
 import { keepImage, type PreparedImage } from '$lib/services/storage/keepsakes';
 import { extractReminderTags, tryExtractReminderFromUserMessage } from '$lib/utils/reminders';
 import { imageSearchStore } from '$lib/stores/image-search.svelte';
-import { describeFocusedImage, isImageSearchEnabled, searchImages } from '$lib/services/image-search';
+import { isShowImagesEnabled, showImages, showImagesForQuery } from '$lib/services/image-search';
 import { reminderStore } from '$lib/stores/reminders.svelte';
 import { getWorkingMemory, ensureSession } from '$lib/engine/memory-session';
 import { buildAdvancedParams, buildMessages, describeImagesRequest, type ChatLoopMessage } from '$lib/services/chat/turn-context';
@@ -94,7 +94,7 @@ async function buildCompanionPrompt(
 		userMessage,
 		systemTime: new Date(),
 		hasImages,
-		imageSearchEnabled: isImageSearchEnabled(),
+		showImagesEnabled: isShowImagesEnabled(),
 		imageModalOpen: imageSearchStore.isOpen,
 		imageModalQuery: imageSearchStore.isOpen ? imageSearchStore.currentQuery : undefined,
 		imageModalDescription: imageSearchStore.isOpen
@@ -298,6 +298,10 @@ export async function sendCompanionMessage(
 		);
 
 		const maxRounds = useMcpLoop ? MCP_MAX_ROUNDS : 1;
+		// Text of every MCP tool result this turn, so the extraction fallback can
+		// recover show_images URLs when the model used a search tool but forgot
+		// to list them.
+		const turnToolResults: string[] = [];
 
 		for (let round = 0; round < maxRounds; round++) {
 			stream.startRound();
@@ -316,6 +320,9 @@ export async function sendCompanionMessage(
 			const onToolCall = (name: string, args: Record<string, unknown>, id?: string) => {
 				if (signal.aborted) return;
 				bumpStall();
+				if (import.meta.env.DEV) {
+					console.log('%c[MCP tool call]', 'color:#14b8a6;font-weight:bold', name, args);
+				}
 				roundCalls.push({ id: id ?? `call_${round}_${roundCalls.length}`, name, args });
 				// An MCP tool that happens to be named like a speech tool must not
 				// be treated as one.
@@ -362,7 +369,19 @@ export async function sendCompanionMessage(
 			const settled = await untilAborted(Promise.allSettled(
 				run.map((call) => runToolCall(call, mcpTools, mcpToolNames, confirmToolNames))
 			));
-			messages.push(...buildToolResultMessages(collectToolResults(settled, run, skipped)));
+			const toolEntries = collectToolResults(settled, run, skipped);
+			for (const entry of toolEntries) {
+				turnToolResults.push(entry.content);
+				if (import.meta.env.DEV) {
+					console.log(
+						'%c[MCP tool result]',
+						'color:#14b8a6;font-weight:bold',
+						entry.call.name,
+						entry.content.slice(0, 400)
+					);
+				}
+			}
+			messages.push(...buildToolResultMessages(toolEntries));
 		}
 
 		// Native dialogue is kept in the saved response here, not replayed
@@ -395,7 +414,8 @@ export async function sendCompanionMessage(
 			companionResponse: cleanedCompanionResponse,
 			llm: { ...llm, hasImages: images.length > 0 },
 			systemEvent,
-			imageSearchEnabled: isImageSearchEnabled(),
+			showImagesEnabled: isShowImagesEnabled(),
+			toolResults: turnToolResults,
 			debug: import.meta.env.DEV
 		}));
 
@@ -404,15 +424,24 @@ export async function sendCompanionMessage(
 		hooks.onNewMemory?.(turn.newMemory);
 		if (turn.triggeredEvent) hooks.setActiveEvent(turn.triggeredEvent);
 
-		// turn.dialogue is already clean for OmniVoice because companionResponse
-		// was stripped of speak()/gesture() syntax before processCompanionTurn.
-		const displayDialogue = turn.dialogue;
+		// If the image intent came from the extraction fallback, the model's own
+		// line is untrusted (it may wrongly claim it cannot show pictures); use
+		// the extraction's replacement line instead.
+		const displayDialogue = turn.fallbackDialogue ?? turn.dialogue;
 
-		// Image intent rides in the state JSON (image_search / close_images), so
-		// it is recovered even when the model skips the inline block.
+		// The model hands image intent over in the state JSON. Prefer direct URLs
+		// (show_images); otherwise resolve the query through an MCP search tool,
+		// so a model that cannot run tools itself still shows pictures.
 		if (turn.closeImages) imageSearchStore.closeModal();
-		if (turn.imageSearch && isImageSearchEnabled()) {
-			void runImageSearch(turn.imageSearch);
+		if (turn.showImages?.length) {
+			// Trust-binding: only show URLs that actually appeared in this turn's
+			// tool results, never model-invented targets.
+			const urls = turn.showImages.filter((url) =>
+				turnToolResults.some((result) => result.includes(url))
+			);
+			if (urls.length) showImages(urls);
+		} else if (turn.imageSearch && isShowImagesEnabled()) {
+			void showImagesForQuery(turn.imageSearch);
 		}
 
 		chatStore.updateLastMessage(displayDialogue);
@@ -557,34 +586,6 @@ async function runToolCall(
 	const result = await callTool(server, call.name, call.args);
 	const content = result.isError ? `Error: ${result.content}` : result.content;
 	return { call, content: capToolResult(content), injectAsUser: server.injectResultsAsUser };
-}
-
-// Proactive image popup: search in the background and open the modal with the
-// results. A failed search shows in the modal, it never fails the turn.
-async function runImageSearch(query: string) {
-	if (import.meta.env.DEV) {
-		console.log('%c[ImageSearch] run', 'color:#a855f7;font-weight:bold', { query });
-	}
-	imageSearchStore.setLoading(true);
-	imageSearchStore.openModal([], query);
-	try {
-		const results = await searchImages(query);
-		if (import.meta.env.DEV) {
-			console.log('%c[ImageSearch] results', 'color:#a855f7;font-weight:bold', {
-				query,
-				count: results.length
-			});
-		}
-		imageSearchStore.openModal(results, query);
-		if (results.length > 0) void describeFocusedImage();
-	} catch (err) {
-		if (import.meta.env.DEV) {
-			console.log('%c[ImageSearch] failed', 'color:#ef4444;font-weight:bold', err);
-		}
-		imageSearchStore.setError(err instanceof Error ? err.message : 'Image search failed');
-	} finally {
-		imageSearchStore.setLoading(false);
-	}
 }
 
 // Schedule the direct fallback only when the LLM did not emit any reminder

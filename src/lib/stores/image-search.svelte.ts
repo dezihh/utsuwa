@@ -3,8 +3,6 @@ import type { ImageSearchResult } from '$lib/utils/image-search';
 let results = $state<ImageSearchResult[]>([]);
 let isOpen = $state(false);
 let currentQuery = $state('');
-let isLoading = $state(false);
-let error = $state<string | null>(null);
 // Which result is focused. The first is focused automatically; a click moves
 // it. The vision description and her "what is on screen" refer to this one.
 let focusedIndex = $state(0);
@@ -16,7 +14,6 @@ export function openModal(newResults: ImageSearchResult[], query: string) {
 	results = newResults;
 	currentQuery = query;
 	isOpen = true;
-	error = null;
 	focusedIndex = 0;
 	currentDescription = null;
 }
@@ -24,14 +21,6 @@ export function openModal(newResults: ImageSearchResult[], query: string) {
 export function closeModal() {
 	isOpen = false;
 	currentDescription = null;
-}
-
-export function setLoading(loading: boolean) {
-	isLoading = loading;
-}
-
-export function setError(err: string | null) {
-	error = err;
 }
 
 export function setDescription(description: string | null) {
@@ -55,12 +44,6 @@ export const imageSearchStore = {
 	get currentQuery() {
 		return currentQuery;
 	},
-	get isLoading() {
-		return isLoading;
-	},
-	get error() {
-		return error;
-	},
 	get focusedIndex() {
 		return focusedIndex;
 	},
@@ -69,8 +52,6 @@ export const imageSearchStore = {
 	},
 	openModal,
 	closeModal,
-	setLoading,
-	setError,
 	setDescription,
 	setFocus
 };

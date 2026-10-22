@@ -29,8 +29,6 @@
 		void describeFocusedImage()
 	}
 
-	const skeletonCount = 12
-
 	// Compute dynamic CSS variables for sidebar offsets
 	const leftVar = $derived(leftOffset > 0 ? `${leftOffset}px` : '1rem')
 	const rightVar = $derived(rightOffset > 0 ? `${rightOffset}px` : '1rem')
@@ -61,8 +59,10 @@
 			<div class="modal-header">
 				<div class="modal-title">
 					<Icon name="image" size={18} />
-					<h2 id="image-search-title">Image Search</h2>
-					<span class="query-label">{imageSearchStore.currentQuery}</span>
+					<h2 id="image-search-title">Pictures</h2>
+					{#if imageSearchStore.currentQuery}
+						<span class="query-label">{imageSearchStore.currentQuery}</span>
+					{/if}
 				</div>
 				<button class="close-btn" onclick={() => imageSearchStore.closeModal()} aria-label="Close">
 					<Icon name="x" size={14} />
@@ -71,22 +71,7 @@
 
 			<!-- Content -->
 			<div class="modal-content">
-				{#if imageSearchStore.isLoading}
-					<div class="image-grid">
-						{#each Array(skeletonCount) as _, i}
-							<div class="image-card skeleton" style="animation-delay: {i * 50}ms">
-								<div class="skeleton-thumb"></div>
-								<div class="skeleton-text"></div>
-								<div class="skeleton-text short"></div>
-							</div>
-						{/each}
-					</div>
-				{:else if imageSearchStore.error}
-					<div class="error-state">
-						<Icon name="alert-circle" size={32} />
-						<p>{imageSearchStore.error}</p>
-					</div>
-				{:else if imageSearchStore.results.length === 0}
+				{#if imageSearchStore.results.length === 0}
 					<div class="empty-state">
 						<Icon name="image-off" size={32} />
 						<p>No images found</p>
@@ -511,40 +496,8 @@
 		text-overflow: ellipsis;
 	}
 
-	/* Skeleton */
-	.skeleton {
-		pointer-events: none;
-	}
-
-	.skeleton-thumb {
-		aspect-ratio: 1;
-		background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
-		background-size: 200% 100%;
-		animation: shimmer 1.5s infinite;
-	}
-
-	.skeleton-text {
-		height: 0.625rem;
-		margin: 0.5rem 0.625rem 0.25rem;
-		border-radius: 4px;
-		background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
-		background-size: 200% 100%;
-		animation: shimmer 1.5s infinite;
-	}
-
-	.skeleton-text.short {
-		width: 50%;
-		margin-bottom: 0.625rem;
-	}
-
-	@keyframes shimmer {
-		0% { background-position: 200% 0; }
-		100% { background-position: -200% 0; }
-	}
-
-	/* Empty / Error states */
-	.empty-state,
-	.error-state {
+	/* Empty state */
+	.empty-state {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -554,12 +507,7 @@
 		color: var(--text-tertiary);
 	}
 
-	.error-state {
-		color: var(--color-error);
-	}
-
-	.empty-state p,
-	.error-state p {
+	.empty-state p {
 		margin: 0;
 		font-size: 0.875rem;
 	}

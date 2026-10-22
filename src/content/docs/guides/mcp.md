@@ -116,9 +116,11 @@ stdio servers are spawned per request with a 15-second timeout and run with a mi
 
 Like Brave, the first `npx` start downloads the package and can exceed the 15-second timeout; if that happens, press **Refresh** in the tool list once and it stays warm afterwards.
 
-### File fetcher (HTTP)
+### Showing pictures
 
-When the companion shows pictures from a SearXNG image search, Utsuwa can load a picture's bytes itself through a file-fetch MCP tool. That keeps a hotlink-protected or CORS-blocked source working, and gives a vision model the actual bytes later. Any enabled server that exposes a **`fetch_file_from_url`** tool is used; the reference server is the self-hosted `filefetcher`:
+The companion can show you pictures. She asks for a topic in her reply (`image_search`), and Utsuwa resolves it through an **enabled MCP search server** (it picks one whose name mentions "search"/"image" and passes the subject as the query), then shows the results in a popup. This works even when the model cannot run tools itself, and it is provider-agnostic — SearXNG, Brave, or any other search MCP works, because the app only reads the image URLs out of the result. No environment variable is needed.
+
+To load a picture's bytes (so a hotlink-protected or CORS-blocked source still displays, and a vision model can look at it), Utsuwa uses a file-fetch MCP tool when one is enabled. Any enabled server that exposes a **`fetch_file_from_url`** tool is used; the reference server is the self-hosted `filefetcher`:
 
 - **Name**: `Filefetcher`
 - **Transport**: `HTTP`
@@ -128,7 +130,9 @@ When the companion shows pictures from a SearXNG image search, Utsuwa can load a
 
 The tool must return the picture as an MCP **image content block** — `{"type":"image","data":"<base64>","mimeType":"image/png"}` — and not as base64 embedded in a text block. Utsuwa keeps image blocks structured so the UI can show them; text blocks only reach the model. `max_dimension` caps the longest edge (the server never upscales), so the request stays small. When a vision model is configured, the picture you have selected in the popup is also described to the companion, so she can talk about what she is showing. Without a `fetch_file_from_url` tool, the popup still opens and thumbnails load straight from their source URLs.
 
-> Image search itself needs a SearXNG instance and the app-side switch: set `SEARXNG_URL` and `PUBLIC_IMAGE_SEARCH_ENABLED=true` on the Utsuwa server. See the `.env.example` comments.
+> The URL fetched comes from the model, so on the web server Utsuwa SSRF-guards it: only `http(s)` is allowed, and metadata/link-local/private hosts are blocked unless `ALLOW_LOCAL_PROVIDER_HOSTS=true` (the same opt-in as the provider proxy). The guard also resolves DNS and follows no redirects. On the desktop app there is no server relay, so this guard does not apply there.
+
+> Utsuwa searches on her behalf, so this does **not** trigger the per-tool confirmation prompt (the model is not calling the tool). The search server must return image URLs — an `img_src`/thumbnail field, or links ending in an image extension. A server that only returns page URLs (a "compact"/snippet-only mode) will not produce pictures.
 
 ## Desktop builds (Tauri)
 

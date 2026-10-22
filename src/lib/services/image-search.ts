@@ -1,13 +1,12 @@
 /**
- * Image search orchestration for the companion-driven popup.
+ * Companion picture display (hand-off).
  *
- * Search runs through the server route (SearXNG, `SEARXNG_URL`). Fetching an
- * individual picture runs through a configured MCP file-fetch tool so the app
- * can show it even when the source blocks hotlinking — the same tool also
- * yields the bytes a future vision pass would need. Both steps degrade
- * gracefully: no backend, no file-fetch tool, no picture.
+ * The model finds images with its own MCP search tools and lists the direct
+ * image URLs in its reply (`show_images`); this module turns that list into the
+ * popup. Fetching a picture's bytes runs through a configured MCP file-fetch
+ * tool (`fetch_file_from_url`) so a hotlink-protected source still displays and
+ * a vision model can look at it. Every step degrades gracefully.
  */
-import { env as publicEnv } from '$env/dynamic/public';
 import { mcpStore } from '$lib/stores/mcp.svelte';
 import { imageSearchStore } from '$lib/stores/image-search.svelte';
 import { callTool } from '$lib/services/mcp/capability';
@@ -15,8 +14,8 @@ import { resolveVisionLLM, visionModelEnabled } from '$lib/services/llm/active-l
 import { streamChat } from '$lib/services/llm/transport';
 import { describeImagesRequest } from '$lib/services/chat/turn-context';
 import { stripThinkingBlocks } from '$lib/services/tts/chat-text';
-import type { McpToolImage } from '$lib/types/mcp';
-import { toDataUrl, type ImageSearchResult } from '$lib/utils/image-search';
+import type { McpTool, McpToolImage } from '$lib/types/mcp';
+import { extractHostname, extractImageUrls, pickSearchTool, queryArgKey, toDataUrl, type ImageSearchResult } from '$lib/utils/image-search';
 
 /** MCP tool name used to fetch a single image (the filefetcher server). */
 export const IMAGE_FETCH_TOOL = 'fetch_file_from_url';
@@ -24,22 +23,75 @@ export const IMAGE_FETCH_TOOL = 'fetch_file_from_url';
 /** Largest edge requested from the file-fetch tool. */
 const IMAGE_FETCH_MAX_DIMENSION = 1280;
 
-/** True when a self-hosted image search backend is available to the app. */
-export function isImageSearchEnabled(): boolean {
-	const raw = (publicEnv.PUBLIC_IMAGE_SEARCH_ENABLED ?? '').trim().toLowerCase();
-	return raw === 'true' || raw === '1' || raw === 'yes';
+/** True when MCP is available, so the companion can find and show pictures. */
+export function isShowImagesEnabled(): boolean {
+	return mcpStore.serverEnabled && mcpStore.enabledServers.length > 0;
 }
 
-/** Run a SearXNG image search through the server proxy. Throws on failure. */
-export async function searchImages(query: string): Promise<ImageSearchResult[]> {
-	const res = await fetch(`/api/search/images?q=${encodeURIComponent(query)}`);
-	const data = (await res.json().catch(() => null)) as
-		| { results?: ImageSearchResult[]; error?: string }
-		| null;
-	if (!res.ok) {
-		throw new Error(data?.error || `Image search failed (${res.status})`);
+/** Build popup results from the direct image URLs the model handed over. */
+export function showImages(urls: string[]): void {
+	const results: ImageSearchResult[] = urls.map((url) => ({
+		title: extractHostname(url),
+		url,
+		thumbnail: url,
+		source: extractHostname(url)
+	}));
+	imageSearchStore.openModal(results, '');
+	if (results.length > 0) void describeFocusedImage();
+}
+
+// ── App-driven fallback: resolve a query through an enabled MCP search tool ──
+// Used when the model only gave a query (image_search) instead of direct URLs.
+// Any query-taking search MCP works; the tool's declared parameters decide how.
+
+function buildSearchArgs(tool: McpTool, query: string): Record<string, unknown> {
+	const props = tool.inputSchema?.properties ?? {};
+	const args: Record<string, unknown> = {};
+	args[queryArgKey(tool) ?? 'query'] = query;
+	if ('categories' in props) args.categories = 'images';
+	if ('result_detail' in props) args.result_detail = 'full';
+	if ('format' in props && !('result_detail' in props)) args.format = 'json';
+	return args;
+}
+
+/** Resolve a query through an enabled MCP search tool. Returns image URLs. */
+export async function resolveImages(query: string): Promise<string[]> {
+	if (!query) return [];
+	try {
+		await mcpStore.ensureTools();
+	} catch {
+		// Discovery failure must not throw; fall through to no tool.
 	}
-	return data?.results ?? [];
+	const tool = pickSearchTool(mcpStore.tools);
+	if (!tool) return [];
+	const server = mcpStore.servers.find((entry) => entry.id === tool.serverId && entry.enabled);
+	if (!server) return [];
+	const args = buildSearchArgs(tool, query);
+	if (import.meta.env.DEV) {
+		console.log('%c[ImageSearch] search via tool', 'color:#a855f7;font-weight:bold', tool.name, args);
+	}
+	try {
+		const result = await callTool(server, tool.name, args);
+		const urls = extractImageUrls(result.content);
+		if (import.meta.env.DEV) {
+			console.log(
+				'%c[ImageSearch] tool result',
+				'color:#a855f7;font-weight:bold',
+				`${urls.length} image urls`,
+				result.content.slice(0, 200)
+			);
+		}
+		return urls;
+	} catch (err) {
+		console.debug('[ImageSearch] search tool failed:', err);
+		return [];
+	}
+}
+
+/** Fallback path: resolve the query and show whatever pictures come back. */
+export async function showImagesForQuery(query: string): Promise<void> {
+	const urls = await resolveImages(query);
+	if (urls.length) showImages(urls);
 }
 
 /**
@@ -104,7 +156,6 @@ let describeSeq = 0;
  */
 export async function describeFocusedImage(): Promise<void> {
 	if (!visionModelEnabled()) return;
-	const query = imageSearchStore.currentQuery;
 	const index = imageSearchStore.focusedIndex;
 	const result = imageSearchStore.results[index];
 	if (!result) return;
@@ -112,10 +163,10 @@ export async function describeFocusedImage(): Promise<void> {
 	if (!vision) return;
 
 	const seq = ++describeSeq;
-	const image = await fetchImage(result.thumbnail);
+	const image = await fetchImage(result.url);
 	if (!image || seq !== describeSeq) return;
 	try {
-		const request = describeImagesRequest(query, [{ mimeType: image.mimeType, base64: image.data }]);
+		const request = describeImagesRequest('', [{ mimeType: image.mimeType, base64: image.data }]);
 		const description = await streamChat(
 			{
 				...vision,
@@ -127,13 +178,13 @@ export async function describeFocusedImage(): Promise<void> {
 			() => {}
 		);
 		const clean = stripThinkingBlocks(description).trim();
-		// Only apply when this is still the focused picture of the same search.
+		// Only apply when this is still the focused picture of the same show.
 		if (
 			seq !== describeSeq ||
 			!clean ||
 			!imageSearchStore.isOpen ||
-			imageSearchStore.currentQuery !== query ||
-			imageSearchStore.focusedIndex !== index
+			imageSearchStore.focusedIndex !== index ||
+			imageSearchStore.results[index]?.url !== result.url
 		) {
 			return;
 		}

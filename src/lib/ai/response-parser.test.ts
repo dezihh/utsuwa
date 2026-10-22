@@ -343,23 +343,35 @@ test('a new_memory that is only tags is dropped', () => {
 	assert.equal(parseResponse(raw).stateUpdates?.newMemory, undefined);
 });
 
-test('reads image_search and close_images from the state block', () => {
+test('reads show_images and close_images from the state block', () => {
 	const raw = [
 		'Here are some cats for you.',
 		'```json',
-		'{ "image_search": "cute cats", "close_images": true }',
+		'{ "show_images": ["https://cdn.example.com/cat1.jpg", "https://cdn.example.com/cat2.png"], "close_images": true }',
 		'```'
 	].join('\n');
 	const parsed = parseResponse(raw);
-	assert.equal(parsed.imageSearch, 'cute cats');
+	assert.deepEqual(parsed.showImages, [
+		'https://cdn.example.com/cat1.jpg',
+		'https://cdn.example.com/cat2.png'
+	]);
 	assert.equal(parsed.closeImages, true);
 	assert.equal(parsed.dialogue, 'Here are some cats for you.');
 });
 
-test('image_search is trimmed and an empty one is dropped', () => {
-	assert.equal(parseResponse('Hi.\n```json\n{"image_search":"  "}\n```').imageSearch, undefined);
-	assert.equal(parseResponse('Hi.\n```json\n{"image_search":null}\n```').imageSearch, undefined);
-	assert.equal(parseResponse('Hi.\n```json\n{"image_search":"  red pandas "}\n```').imageSearch, 'red pandas');
+test('show_images keeps only http(s) strings, de-dupes and caps the list', () => {
+	assert.equal(parseResponse('Hi.\n```json\n{"show_images":[]}\n```').showImages, undefined);
+	assert.equal(parseResponse('Hi.\n```json\n{"show_images":null}\n```').showImages, undefined);
+	assert.deepEqual(
+		parseResponse('Hi.\n```json\n{"show_images":["ftp://x/a.png","not a url","https://x/a.png","https://x/a.png"]}\n```').showImages,
+		['https://x/a.png']
+	);
+	const many = { show_images: Array.from({ length: 20 }, (_, i) => `https://x/${i}.png`) };
+	assert.equal(parseResponse(`Hi.\n\`\`\`json\n${JSON.stringify(many)}\n\`\`\``).showImages?.length, 12);
+});
+
+test('show_images ignores a non-array value', () => {
+	assert.equal(parseResponse('Hi.\n```json\n{"show_images":"https://x/a.png"}\n```').showImages, undefined);
 });
 
 test('close_images is only true when strictly true; absent means undefined', () => {
@@ -372,7 +384,25 @@ test('close_images is only true when strictly true; absent means undefined', () 
 	);
 });
 
-test('image intent is read from a bare (unfenced) state block too', () => {
-	const parsed = parseResponse('Look at this! { "image_search": "aurora borealis" }');
-	assert.equal(parsed.imageSearch, 'aurora borealis');
+test('image hand-off is read from a bare (unfenced) state block too', () => {
+	const parsed = parseResponse('Look at this! { "show_images": ["https://x/a.png"] }');
+	assert.deepEqual(parsed.showImages, ['https://x/a.png']);
+});
+
+test('reads image_search (a query) from the state block', () => {
+	const parsed = parseResponse('Here you go.\n```json\n{"image_search":"cute cats"}\n```');
+	assert.equal(parsed.imageSearch, 'cute cats');
+	assert.equal(parsed.showImages, undefined);
+});
+
+test('image_search is trimmed and an empty value is dropped', () => {
+	assert.equal(parseResponse('Hi.\n```json\n{"image_search":"  "}\n```').imageSearch, undefined);
+	assert.equal(parseResponse('Hi.\n```json\n{"image_search":null}\n```').imageSearch, undefined);
+	assert.equal(parseResponse('Hi.\n```json\n{"image_search":"  red pandas "}\n```').imageSearch, 'red pandas');
+});
+
+test('reads say (the fallback spoken line), trimming and dropping empties', () => {
+	assert.equal(parseResponse('Hi.\n```json\n{"say":"Here are some pictures."}\n```').say, 'Here are some pictures.');
+	assert.equal(parseResponse('Hi.\n```json\n{"say":"  "}\n```').say, undefined);
+	assert.equal(parseResponse('Hi.\n```json\n{"say":null}\n```').say, undefined);
 });

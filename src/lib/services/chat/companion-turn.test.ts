@@ -25,6 +25,7 @@ test('processCompanionTurn surfaces image intent from inline JSON and the extrac
 
 	let extractionResponses: string[] = [];
 	const extractionSysPrompts: string[] = [];
+	const extractionUserPrompts: string[] = [];
 	const appliedUpdates: unknown[] = [];
 
 	const fixtures = {
@@ -55,6 +56,7 @@ test('processCompanionTurn surfaces image intent from inline JSON and the extrac
 		checkAndApplyStageTransition: () => ({ transitioned: false }),
 		completeJson: async (opts: { system: string; user: string }) => {
 			extractionSysPrompts.push(opts.system);
+			extractionUserPrompts.push(opts.user);
 			return extractionResponses.shift() ?? null;
 		}
 	};
@@ -110,41 +112,60 @@ test('processCompanionTurn surfaces image intent from inline JSON and the extrac
 	try {
 		const { processCompanionTurn } = await server.ssrLoadModule('/src/lib/services/chat/companion-turn.ts');
 
-		await t.test('reads image_search from an inline state block without an extraction call', async () => {
+		await t.test('reads show_images from an inline state block without an extraction call', async () => {
 			extractionResponses = [];
 			extractionSysPrompts.length = 0;
-			const raw = 'With pleasure! Here are a few sweet cats.\n```json\n{"mood_change":{"emotion":"happy"},"image_search":"cute cats"}\n```';
-			const result = await processCompanionTurn({ userMessage: 'show me cats', companionResponse: raw, llm, imageSearchEnabled: true });
-			assert.equal(result.imageSearch, 'cute cats');
+			const raw = 'With pleasure! Here are a few sweet cats.\n```json\n{"mood_change":{"emotion":"happy"},"show_images":["https://x/cat1.jpg","https://x/cat2.png"]}\n```';
+			const result = await processCompanionTurn({ userMessage: 'show me cats', companionResponse: raw, llm, showImagesEnabled: true });
+			assert.deepEqual(result.showImages, ['https://x/cat1.jpg', 'https://x/cat2.png']);
 			assert.equal(result.closeImages, undefined);
 			assert.equal(extractionSysPrompts.length, 0, 'no extraction call when the inline block parses');
 		});
 
-		await t.test('recovers image intent from the extraction fallback when the model skips the block (regression)', async () => {
-			extractionResponses = ['{"mood_change":{"emotion":"neutral","intensity_delta":0},"new_memory":null,"image_search":"cute cats"}'];
+		await t.test('recovers image URLs from the extraction fallback when the model skips the block (regression)', async () => {
+			extractionResponses = ['{"mood_change":{"emotion":"neutral","intensity_delta":0},"new_memory":null,"image_search":"cute cats","say":"Here are a few sweet cats."}'];
 			extractionSysPrompts.length = 0;
+			extractionUserPrompts.length = 0;
 			// Exactly the failing shape: a promised picture, no state block.
 			const result = await processCompanionTurn({
 				userMessage: 'zeig mir ein Bild von Katzen',
 				companionResponse: 'Hier ist ein süßes Katzenbild für dich.',
 				llm,
-				imageSearchEnabled: true
+				showImagesEnabled: true,
+				toolResults: ['searxng: https://x/cat1.jpg (a cat)']
 			});
 			assert.equal(extractionSysPrompts.length, 1, 'extraction fallback ran');
 			assert.equal(result.imageSearch, 'cute cats');
+			// The fallback line replaces the untrusted model reply.
+			assert.equal(result.fallbackDialogue, 'Here are a few sweet cats.');
+			// The tool results were handed to the extraction so it can copy URLs.
+			assert.ok(extractionUserPrompts[0].includes('https://x/cat1.jpg'));
 		});
 
-		await t.test('the extraction prompt offers image fields only when enabled', async () => {
+		await t.test('recovers URLs even when the model emitted a state block without show_images', async () => {
+			extractionResponses = ['{"show_images":["https://x/cat1.jpg"]}'];
+			extractionSysPrompts.length = 0;
+			const result = await processCompanionTurn({
+				userMessage: 'show me cats',
+				companionResponse: 'Here you go!\n```json\n{"mood_change":{"emotion":"happy"}}\n```',
+				llm,
+				showImagesEnabled: true,
+				toolResults: ['result: https://x/cat1.jpg']
+			});
+			assert.deepEqual(result.showImages, ['https://x/cat1.jpg']);
+		});
+
+		await t.test('the extraction prompt offers hand-off fields only when enabled', async () => {
 			extractionResponses = ['{"mood_change":{"emotion":"neutral"}}'];
 			extractionSysPrompts.length = 0;
-			await processCompanionTurn({ userMessage: 'hi', companionResponse: 'Hey!', llm, imageSearchEnabled: false });
+			await processCompanionTurn({ userMessage: 'hi', companionResponse: 'Hey!', llm, showImagesEnabled: false });
 			assert.equal(extractionSysPrompts.length, 1);
-			assert.ok(!extractionSysPrompts[0].includes('"image_search"'));
+			assert.ok(!extractionSysPrompts[0].includes('"show_images"'));
 
 			extractionResponses = ['{"mood_change":{"emotion":"neutral"}}'];
 			extractionSysPrompts.length = 0;
-			await processCompanionTurn({ userMessage: 'hi', companionResponse: 'Hey!', llm, imageSearchEnabled: true });
-			assert.ok(extractionSysPrompts[0].includes('"image_search"'));
+			await processCompanionTurn({ userMessage: 'hi', companionResponse: 'Hey!', llm, showImagesEnabled: true });
+			assert.ok(extractionSysPrompts[0].includes('"show_images"'));
 		});
 
 		await t.test('close_images flows through, and a turn with no intent stays undefined', async () => {
@@ -152,18 +173,18 @@ test('processCompanionTurn surfaces image intent from inline JSON and the extrac
 				userMessage: 'close the pictures',
 				companionResponse: 'Sure!\n```json\n{"close_images":true}\n```',
 				llm,
-				imageSearchEnabled: true
+				showImagesEnabled: true
 			});
 			assert.equal(closing.closeImages, true);
-			assert.equal(closing.imageSearch, undefined);
+			assert.equal(closing.showImages, undefined);
 
 			const plain = await processCompanionTurn({
 				userMessage: 'how was your day?',
 				companionResponse: 'It was calm.\n```json\n{"mood_change":{"emotion":"content"}}\n```',
 				llm,
-				imageSearchEnabled: true
+				showImagesEnabled: true
 			});
-			assert.equal(plain.imageSearch, undefined);
+			assert.equal(plain.showImages, undefined);
 			assert.equal(plain.closeImages, undefined);
 		});
 	} finally {
